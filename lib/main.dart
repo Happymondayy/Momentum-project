@@ -1,48 +1,23 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'login_page.dart'; // LoginPage를 import
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(MyApp());
+void main() {
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  // Firestore 데이터 추가 및 가져오기
-  Future<void> _testFirestore() async {
-    try {
-      // 데이터 추가
-      await _firestore.collection('testCollection').add({
-        'message': 'Hello, Firebase!',
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      // 데이터 가져오기
-      var snapshot = await _firestore.collection('testCollection').get();
-      snapshot.docs.forEach((doc) {
-        print('문서 ID: ${doc.id}, 데이터: ${doc.data()}');
-      });
-    } catch (e) {
-      print('Firestore 오류: $e');
-    }
-  }
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Firebase 연동 테스트',
-      home: Scaffold(
-        appBar: AppBar(title: Text('Firestore 데이터 테스트')),
-        body: Center(
-          child: ElevatedButton(
-            onPressed: _testFirestore,  // 버튼 클릭 시 Firestore 테스트 실행
-            child: Text('Firestore 테스트'),
-          ),
-        ),
+      title: 'FocusMate', // 앱 제목
+      theme: ThemeData(
+        primarySwatch: Colors.blue, // 기본 테마 색상
+        fontFamily: 'NotoSansKR', // 폰트 설정
       ),
+      home: const LoginPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+      debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
     );
   }
 }
