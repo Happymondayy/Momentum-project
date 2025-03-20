@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:momentum_planner/Survey/survey_page(sample).dart';
 import 'Login/login_page.dart'; // LoginPage를 import
 import 'package:momentum_planner/Survey/survey_screen.dart';
 
 void main() {
   //runApp(const MyApp());
-  runApp(const SurveyApp());
+  runApp(const MyApp());
 }
 
-/*
+
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -25,7 +24,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-*/
+
 class SurveyApp extends StatelessWidget {
   const SurveyApp({Key? key}) : super(key: key);
 
