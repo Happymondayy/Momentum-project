@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:momentum_planner/Survey/survey_page(sample).dart';
 import 'Login/login_page.dart'; // LoginPage를 import
+import 'package:momentum_planner/Survey/survey_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  //runApp(const MyApp());
+  runApp(const SurveyApp());
 }
 
+/*
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -18,6 +22,22 @@ class MyApp extends StatelessWidget {
       ),
       home: const LoginPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
+    );
+  }
+}
+*/
+class SurveyApp extends StatelessWidget {
+  const SurveyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.white,
+      ),
+      home: const SurveyScreen(),
     );
   }
 }
