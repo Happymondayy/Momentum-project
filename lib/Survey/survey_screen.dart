@@ -18,6 +18,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
   late Animation<double> _animation;
 
   late List<QuestionModel> questions;
+  bool allAnswered = false; // 모든 질문에 답변이 완료되었는지 확인하는 변수
 
   @override
   void initState() {
@@ -63,6 +64,13 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
+  // 모든 질문이 답변되었는지 확인하고 상태 업데이트
+  void _updateAllAnsweredState() {
+    setState(() {
+      allAnswered = questions.every((q) => q.state);
+    });
+  }
+
   void _activateNextQuestion() {
     if (activeQuestionIndex < questions.length - 1) {
       setState(() {
@@ -77,26 +85,32 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
         _animationController.reset();
         _animationController.forward();
       });
+
+      // 질문 상태 갱신
+      _updateAllAnsweredState();
     } else {
-      // Last question completed
+      // 마지막 질문 완료
       setState(() {
         questions[activeQuestionIndex].state = true;
       });
+
+      // 최종 상태 갱신
+      _updateAllAnsweredState();
     }
   }
 
   void _activateQuestion(int index) {
     if (index <= activeQuestionIndex) {
       setState(() {
-        // Set the clicked question as active
+        // 선택된 질문을 활성화
         activeQuestionIndex = index;
 
-        // Make all questions active up to the current index
+        // 선택된 질문까지 모든 질문 활성화
         for (int i = 0; i < questions.length; i++) {
           questions[i].isActive = i <= index;
         }
 
-        // Start the animation
+        // 애니메이션 시작
         _animationController.reset();
         _animationController.forward();
       });
@@ -111,20 +125,17 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             children: [
-              // Main content area with centered questions
+              // 메인 콘텐츠 영역 - 질문들 중앙 배치
               Expanded(
                 child: AnimatedBuilder(
                   animation: _animation,
                   builder: (context, child) {
                     return Column(
                       children: [
-                        // 상단 여백 (질문들을 화면 중앙에 배치하기 위함)
-                        Expanded(
-                          flex: 1,
-                          child: Container(),
-                        ),
+                        // 상단 여백
+                        Expanded(flex: 1, child: Container()),
 
-                        // 헤더와 질문 그룹을 함께 움직이도록 같은 Column 안에 배치
+                        // 헤더 및 질문 그룹
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -132,7 +143,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                             SurveyHeader(),
                             const SizedBox(height: 16),
 
-                            // 진행 상태 점 표시 (헤더와 첫 번째 질문 사이)
+                            // 진행 상태 점
                             ProgressDots(
                               totalQuestions: questions.length,
                               currentQuestionIndex: activeQuestionIndex,
@@ -152,7 +163,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                               itemBuilder: (context, index) {
                                 final question = questions[index];
 
-                                // 활성화된 질문 이후의 질문들은 보이지 않게 처리
+                                // 활성화된 질문 이후의 질문은 숨김 처리
                                 if (index > activeQuestionIndex) {
                                   return const SizedBox.shrink();
                                 }
@@ -161,13 +172,12 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                                 double translateY = 0;
                                 double opacity = 1.0;
 
-                                // 모든 질문에 대한 애니메이션 효과 적용
                                 if (index == activeQuestionIndex && index > 0) {
-                                  // 새로 활성화된 질문은 아래에서 부드럽게 올라옴
+                                  // 새로 활성화된 질문
                                   opacity = _animation.value;
-                                  translateY = 40.0 * (1.0 - _animation.value); // 더 큰 이동 거리
+                                  translateY = 40.0 * (1.0 - _animation.value);
                                 } else if (index < activeQuestionIndex) {
-                                  // 이전 질문들은 위로 약간 이동
+                                  // 이전 질문들
                                   translateY = -10.0 * _animation.value;
                                 }
 
@@ -194,6 +204,9 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                                               question.state = true;
                                             });
 
+                                            // 질문 상태 업데이트
+                                            _updateAllAnsweredState();
+
                                             if (index == activeQuestionIndex) {
                                               _activateNextQuestion();
                                             }
@@ -208,11 +221,8 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                           ],
                         ),
 
-                        // 하단 여백 (질문들을 화면 중앙에 배치하기 위함)
-                        Expanded(
-                          flex: 1,
-                          child: Container(),
-                        ),
+                        // 하단 여백
+                        Expanded(flex: 1, child: Container()),
                       ],
                     );
                   },
@@ -224,10 +234,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // 모든 질문이 답변되었는지 확인
-                    bool allAnswered = questions.every((q) => q.state);
                     if (allAnswered) {
-                      // 저장 기능 구현
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('저장되었습니다!')),
                       );
@@ -239,8 +246,12 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.grey[200],
-                    foregroundColor: Colors.black,
+                    backgroundColor: allAnswered
+                        ? const Color(0xFFCFCFFF) // 활성화 색상
+                        : Colors.grey[200],      // 비활성화 색상
+                    foregroundColor: allAnswered
+                        ? Colors.white // 활성화 색상
+                        : Colors.black,      // 비활성화 색상
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
