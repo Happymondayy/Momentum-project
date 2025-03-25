@@ -17,7 +17,10 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -25,9 +28,15 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -41,47 +50,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCRMrJo8GT-yO-N2E19pPte7H0DOoi-yWc',
-    appId: '1:132445943973:android:73f04236f9899a7802754c',
-    messagingSenderId: '132445943973',
-    projectId: 'momentum-planner-fa649',
-    storageBucket: 'momentum-planner-fa649.firebasestorage.app',
+    apiKey: 'AIzaSyAXbe02V_ooeDDD-BRD8B1LQOncGYJiw5w',
+    appId: '1:291736505414:android:34c67505ffbf5f5f858e47',
+    messagingSenderId: '291736505414',
+    projectId: 'events-e7911',
+    storageBucket: 'events-e7911.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAJrSs2j96JCX1TY82yPuyg1S6edjFzre4',
-    appId: '1:132445943973:ios:52a6119feec9877002754c',
-    messagingSenderId: '132445943973',
-    projectId: 'momentum-planner-fa649',
-    storageBucket: 'momentum-planner-fa649.firebasestorage.app',
+    apiKey: 'AIzaSyCwvxIw_XWqMICR4MrfgGi8EuqInscFGGQ',
+    appId: '1:291736505414:ios:24a7fefa3e4d7098858e47',
+    messagingSenderId: '291736505414',
+    projectId: 'events-e7911',
+    storageBucket: 'events-e7911.firebasestorage.app',
     iosBundleId: 'com.example.momentumPlanner',
   );
-
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBx0nrYx79g7vohKgP7JUlS3lAyN8TEZGY',
-    appId: '1:132445943973:web:030b3876023f30dc02754c',
-    messagingSenderId: '132445943973',
-    projectId: 'momentum-planner-fa649',
-    authDomain: 'momentum-planner-fa649.firebaseapp.com',
-    storageBucket: 'momentum-planner-fa649.firebasestorage.app',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAJrSs2j96JCX1TY82yPuyg1S6edjFzre4',
-    appId: '1:132445943973:ios:52a6119feec9877002754c',
-    messagingSenderId: '132445943973',
-    projectId: 'momentum-planner-fa649',
-    storageBucket: 'momentum-planner-fa649.firebasestorage.app',
-    iosBundleId: 'com.example.momentumPlanner',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBx0nrYx79g7vohKgP7JUlS3lAyN8TEZGY',
-    appId: '1:132445943973:web:22d4e2b8824cfe7a02754c',
-    messagingSenderId: '132445943973',
-    projectId: 'momentum-planner-fa649',
-    authDomain: 'momentum-planner-fa649.firebaseapp.com',
-    storageBucket: 'momentum-planner-fa649.firebasestorage.app',
-  );
-
 }
