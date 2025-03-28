@@ -65,10 +65,10 @@ class SignupPage extends StatefulWidget {
     super.dispose();
   }
 
-  void navigateToSurvey() {
+  void navigateToSurvey(String param1_, String param2_) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => const SurveyScreen(),
+        builder: (context) => SurveyScreen(param1: param1_, param2: param2_),
       ),
     );
   }
@@ -97,7 +97,7 @@ class SignupPage extends StatefulWidget {
       Navigator.pop(context);
 
       // 설문조사 화면으로 이동
-      navigateToSurvey();
+      navigateToSurvey(emailController.text.trim(), passwordController.text.trim());
     });
   }
 
@@ -159,7 +159,7 @@ class SignupPage extends StatefulWidget {
                   onSubmitted: (_) {
                     FocusScope.of(context).unfocus();
                     if (isOver14 && emailController.text.isNotEmpty && passwordController.text.isNotEmpty) {
-                      navigateToSurvey();
+                      navigateToSurvey(emailController.text.trim(), passwordController.text.trim());
                     }
                   },
                   decoration: InputDecoration(
@@ -245,7 +245,7 @@ class SignupPage extends StatefulWidget {
 
                   Future.delayed(const Duration(seconds: 1), () {
                     Navigator.pop(context);
-                    navigateToSurvey();
+                    navigateToSurvey(emailController.text.trim(), passwordController.text.trim());
                   });
                 } : null,
                 style: ElevatedButton.styleFrom(

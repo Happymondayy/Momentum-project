@@ -50,7 +50,7 @@ class SurveyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const SurveyScreen(),
+      home: SurveyScreen(),
     );
   }
 }
