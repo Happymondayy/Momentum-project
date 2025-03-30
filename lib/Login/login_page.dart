@@ -1,48 +1,85 @@
 import 'package:flutter/material.dart';
-import 'signup_page.dart'; // SignupPage를 import
+import 'signup_page.dart';
 import 'find_ID_page.dart';
 import 'find_password_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatelessWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  LoginPage({Key? key}) : super(key: key);
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  // Firestore에서 이메일과 비밀번호 확인하는 함수
+  Future<void> _loginUser(BuildContext context) async {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showDialog(context, "로그인 실패", "이메일과 비밀번호를 입력하세요.");
+      return;
+    }
+
+    try {
+      // Firestore에서 해당 이메일을 가진 유저 검색
+      var querySnapshot = await _firestore
+          .collection('user') // ⚠️ 'users' 컬렉션에서 검색해야 함
+          .where('email', isEqualTo: email)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        _showDialog(context, "로그인 실패", "등록되지 않은 이메일입니다.");
+        return;
+      }
+
+      var userData = querySnapshot.docs.first.data();
+      if (userData['password'] == password) {
+        _showDialog(context, "로그인 성공", "환영합니다! 😊");
+      } else {
+        _showDialog(context, "로그인 실패", "비밀번호가 일치하지 않습니다.");
+      }
+    } catch (e) {
+      _showDialog(context, "로그인 오류", "로그인 중 오류가 발생했습니다: $e");
+    }
+  }
+
+  // 다이얼로그 창 띄우기
+  void _showDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("확인"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),//좌우로만 여백을 설정하는 방법
-          child: Column(//세로 방향 정렬 (위 -> 아래)
-            crossAxisAlignment: CrossAxisAlignment.stretch,//모든 자식 위젯이 가로 방향으로 가능한 최대 크기를 가지도록 설정
-            children: [//로고 택스트 맨 상단 "FocusMate"
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               const SizedBox(height: 100),
               const Text(
                 'FocusMate',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,//중앙 정렬
+                style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
-              //이메일 입력 필드
               const SizedBox(height: 80),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],//배경색 연한회식색
-                  borderRadius: BorderRadius.circular(10),//입력필드 둥글게
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),//여백 추가
-                  child: TextField(//입력 필드
-                    decoration: InputDecoration(
-                      hintText: '이메일을 입력하세요',//입력전 표시되는 문구
-                      border: InputBorder.none,//기본 밑줄을 없앰
-                      hintStyle: TextStyle(color: Colors.grey[600]),//힌트 텍스트 색상을 회색으로 지정
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),//위쪽 여백
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
@@ -51,7 +88,26 @@ class LoginPage extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: TextField(
-                    obscureText: true,//입력된 텍스트를 가려서 비밀번호처럼 보이도록 설정함.
+                    controller: emailController,
+                    decoration: InputDecoration(
+                      hintText: '이메일을 입력하세요',
+                      border: InputBorder.none,
+                      hintStyle: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: TextField(
+                    controller: passwordController,
+                    obscureText: true,
                     decoration: InputDecoration(
                       hintText: '비밀번호를 입력하세요',
                       border: InputBorder.none,
@@ -60,28 +116,26 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),//위쪽에 24픽셀의 공간을 추가해서 레이아웃 정리
+              const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () {}, //로그인 기능에 사용
-                style: ElevatedButton.styleFrom(//위젯버튼
-                  backgroundColor: const Color(0xFFCFCFFF),//버튼의 배경색을 보라색으로 설정
+                onPressed: () {
+                  _loginUser(context); // 로그인 기능 실행
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFCFCFFF),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
                 child: const Text(
-                  '로그인',//버튼 안에 "로그인"이라는 글자가 들어있음
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  '로그인',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
               ),
               const SizedBox(height: 24),
-              Row(//버튼을 가로로 배치
-                mainAxisAlignment: MainAxisAlignment.center,//중앙
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   TextButton(
                     onPressed: () {
@@ -92,10 +146,7 @@ class LoginPage extends StatelessWidget {
                     },
                     child: Text(
                       '아이디 찾기',
-                      style: TextStyle(
-                        color: Colors.grey[800],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -108,27 +159,20 @@ class LoginPage extends StatelessWidget {
                     },
                     child: Text(
                       '비밀번호 찾기',
-                      style: TextStyle(
-                        color: Colors.grey[800],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
                     ),
                   ),
                   const SizedBox(width: 16),
                   TextButton(
                     onPressed: () {
-                      // 회원가입 페이지로 네비게이션
-                      Navigator.push(//한 화면에서 다른 화면으로 이동(login -> signup)
-                        context,//현재 위젯의 위치 정보를 전달
-                        MaterialPageRoute(builder: (context) => const SignupPage()),//"회원가입" 버튼을 클릭하면 SignupPage()로 이동
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => SignupPage()),
                       );
                     },
                     child: Text(
                       '회원가입',
-                      style: TextStyle(
-                        color: Colors.grey[800],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
                     ),
                   ),
                 ],

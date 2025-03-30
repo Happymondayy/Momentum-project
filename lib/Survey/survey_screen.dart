@@ -3,15 +3,57 @@ import 'package:momentum_planner/Survey/components/dropdown_menu.dart';
 import 'package:momentum_planner/Survey/components/survey_header.dart';
 import 'package:momentum_planner/Survey/components/progress_dots.dart';
 import 'package:momentum_planner/Survey/models/question_model.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 class SurveyScreen extends StatefulWidget {
-  const SurveyScreen({Key? key}) : super(key: key);
+  final String? param1;
+  final String? param2;
+  SurveyScreen({Key? key, this.param1, this.param2}) : super(key: key);
+
+
 
   @override
   _SurveyScreenState createState() => _SurveyScreenState();
 }
 
 class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderStateMixin {
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  Future<void> _saveUserData_() async {
+    String email = widget.param1!;
+    String password = widget.param2!;
+
+    if (email.isEmpty || password.isEmpty) {
+      print("이메일 또는 비밀번호를 입력하세요.");
+      return;
+    }
+
+    try {
+      // Firestore에 저장할 사용자 데이터를 만들기
+      Map<String, dynamic> userData = {
+        'email': email,
+        'password': password, // 보안상 실제 앱에서는 비밀번호를 해싱해서 저장해야 함!
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+
+      // 각 질문에 대한 선택지를 Firestore에 추가
+      for (int i = 0; i < questions.length; i++) {
+        String questionKey = 'question_${i + 1}'; // 질문의 고유 키 생성
+        userData[questionKey] = questions[i].value; // 선택된 값 저장
+      }
+
+      // Firestore에 데이터 추가
+      await _firestore.collection('user').add(userData);
+
+      print("사용자 데이터 저장 완료: 이메일 - $email");
+    } catch (e) {
+      print('Firestore 오류: $e');
+    }
+  }
+
+
   int activeQuestionIndex = 0;
   late ScrollController _scrollController;
   late AnimationController _animationController;
@@ -236,7 +278,10 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                     if (allAnswered) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('저장되었습니다!')),
+
                       );
+                      _saveUserData_();
+
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('모든 질문에 답변해주세요.')),
