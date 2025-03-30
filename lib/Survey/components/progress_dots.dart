@@ -25,12 +25,12 @@ class ProgressDots extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(totalQuestions, (index) {
+      children: List.generate(totalQuestions, (index) { // totalQuestions 만큼 리스트 생성
         final bool isActive = index <= currentQuestionIndex;
         final bool isCurrent = index == currentQuestionIndex;
 
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: spacing / 2),
+          padding: EdgeInsets.symmetric(horizontal: spacing / 2), // 양옆에 적용한 패딩
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             width: isCurrent ? activeDotSize : inactiveDotSize,
