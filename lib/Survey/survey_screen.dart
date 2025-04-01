@@ -5,7 +5,7 @@ import 'package:momentum_planner/Survey/components/progress_dots.dart';
 import 'package:momentum_planner/Survey/models/question_model.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
   final String? param1;
@@ -282,6 +282,12 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                       );
                       _saveUserData_();
 
+                      Navigator.push( // 캘린더 화면으로 이동
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => CalendarScreen(),
+                        )
+                      );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('모든 질문에 답변해주세요.')),

@@ -4,7 +4,7 @@ import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // Firebase 설정 파일 import
-
+import 'Calendar/screens/calendar_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,3 +54,20 @@ class SurveyApp extends StatelessWidget {
     );
   }
 }
+
+/* // 캘린더 화면 확인용
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Calendar App',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        scaffoldBackgroundColor: Colors.white,
+        fontFamily: 'Roboto',
+      ),
+      home: CalendarScreen(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}*/
