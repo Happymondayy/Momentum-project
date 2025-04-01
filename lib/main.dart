@@ -4,16 +4,22 @@ import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // Firebase 설정 파일 import
-import 'Calendar/screens/calendar_screen.dart';
+import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform, // 명시적으로 options 추가
-    );
-    print("🔥 Firebase 초기화 성공!");
+    // Firebase가 이미 초기화되지 않았다면 초기화
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform, // 명시적으로 options 추가
+      );
+      print("🔥 Firebase 초기화 성공!");
+    } else {
+      print("⚡ Firebase가 이미 초기화되었습니다.");
+    }
   } catch (e) {
     print("❌ Firebase 초기화 실패: $e");
   }
@@ -54,20 +60,3 @@ class SurveyApp extends StatelessWidget {
     );
   }
 }
-
-/* // 캘린더 화면 확인용
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Calendar App',
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        scaffoldBackgroundColor: Colors.white,
-        fontFamily: 'Roboto',
-      ),
-      home: CalendarScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}*/
