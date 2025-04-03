@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-class CalendarSection extends StatefulWidget {
-  const CalendarSection({Key? key}) : super(key: key);
+class CalendarScreen extends StatefulWidget {
+  const CalendarScreen({Key? key}) : super(key: key);
 
   @override
   _CalendarSectionState createState() => _CalendarSectionState();
 }
 
-class _CalendarSectionState extends State<CalendarSection> {
+class _CalendarSectionState extends State<CalendarScreen> {
   List<String> months = [
     '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'
   ];
