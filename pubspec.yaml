@@ -59,8 +59,8 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
-    - assets/svgs/caret-left-svgrepo-com.svg
-    - assets/svgs/caret-right-svgrepo-com.svg
+    - assets/svgs/arrow-left-svgrepo-com.svg
+    - assets/svgs/arrow-right-svgrepo-com.svg
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

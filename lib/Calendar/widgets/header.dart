@@ -21,13 +21,7 @@ class Header extends StatelessWidget {
             icon: Icon(Icons.menu),
             onPressed: onMenuPressed,
           ),
-          CircleAvatar(
-            backgroundColor: Colors.deepPurple.shade50,
-            child: Icon(
-              Icons.person,
-              color: Colors.deepPurple,
-            ),
-          ),
+
         ],
       ),
     );

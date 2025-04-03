@@ -114,27 +114,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return _todoItems[key] ?? [];
   }
 
-  void _addEvent(String title, DateTime date, TimeOfDay? startTime,
-      TimeOfDay? endTime, String memo, bool isRepeating, bool isAllDay) async {
+  // In CalendarScreen class
+  void _addEvent(
+      String title,
+      String description,
+      DateTime startDate,
+      DateTime endDate,
+      TimeOfDay? startTime,
+      TimeOfDay? endTime,
+      String memo,
+      String location,
+      bool isRepeating,
+      String? repeatOption,
+      List<int>? repeatDays,
+      int? repeatCustomDays,
+      bool isAllDay,
+      String? reminder) async {
     if (title.isEmpty) return;
 
-    final startTimeMap = startTime != null ? {
+    final startTimeMap = !isAllDay && startTime != null ? {
       'hour': startTime.hour,
       'minute': startTime.minute,
     } : null;
 
-    final endTimeMap = endTime != null ? {
+    final endTimeMap = !isAllDay && endTime != null ? {
       'hour': endTime.hour,
       'minute': endTime.minute,
     } : null;
 
     await FirebaseFirestore.instance.collection('events').add({
       'title': title,
-      'date': date.toIso8601String(),
-      'startTime': isAllDay ? null : startTimeMap,
-      'endTime': isAllDay ? null : endTimeMap,
+      'description': description,
+      'startDate': startDate.toIso8601String(),
+      'endDate': endDate.toIso8601String(),
+      'startTime': startTimeMap,
+      'endTime': endTimeMap,
       'memo': memo,
+      'location': location,
       'isRepeating': isRepeating,
+      'repeatOption': repeatOption,
+      'repeatDays': repeatDays,
+      'repeatCustomDays': repeatCustomDays,
+      'isAllDay': isAllDay,
+      'reminder': reminder,
     });
   }
 
@@ -225,10 +247,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [ // 커스텀 헤더
           IconButton(
             icon: SvgPicture.asset(
-              '- assets/svgs/caret-left-svgrepo-com.svg', // 얇은 왼쪽 화살표 SVG 파일
-              width: 15.0,
-              height: 40.0,
-              color: Colors.red,
+              'assets/svgs/arrow-left-svgrepo-com.svg', // 얇은 왼쪽 화살표 SVG 파일
+              width: 12.0,
+              height: 27.0,
             ),
             onPressed: () {
               setState(() {
@@ -240,7 +261,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
              });
             },
           ),
-          SizedBox(width: 13,),
+          SizedBox(width: 18,),
           Text(
             DateFormat('M').format(_focusedDay), // 현재 월 표시
             style: TextStyle(
@@ -249,12 +270,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
             fontFamily: 'OpenSansBold',
             ),
           ),
-          SizedBox(width: 13,),
+          SizedBox(width: 18,),
           IconButton(
             icon: SvgPicture.asset(
-              '- assets/svgs/caret-right-svgrepo-com.svg', // 얇은 오른쪽 화살표 SVG 파일
-              width: 15.0,
-              height: 40.0,
+              'assets/svgs/arrow-right-svgrepo-com.svg', // 얇은 오른쪽 화살표 SVG 파일
+              width: 12.0,
+              height: 27.0,
             ),
             onPressed: () {
               setState(() {
@@ -268,6 +289,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ],
       ),
+    SizedBox(height: 15,),
     TableCalendar(
       firstDay: DateTime.utc(2020, 1, 1),
       lastDay: DateTime.utc(2030, 12, 31),
@@ -306,35 +328,61 @@ class _CalendarScreenState extends State<CalendarScreen> {
           color: Colors.deepPurple.shade200,
           shape: BoxShape.circle,
         ),
-        weekendTextStyle: TextStyle(color: Colors.red),
-        outsideTextStyle: TextStyle(color: Colors.grey),
+
+        outsideDaysVisible: false,
+        markersMaxCount: 1,
+        markersAnchor: 0.7,
       ),
+      daysOfWeekHeight: 36.0,
+      rowHeight: 48.0,
 
       daysOfWeekStyle: DaysOfWeekStyle(
         weekdayStyle: TextStyle(color: Colors.black),
-        weekendStyle: TextStyle(color: Colors.red),
+        weekendStyle: TextStyle(color: Colors.black),
       ),
       calendarBuilders: CalendarBuilders(
         dowBuilder: (context, day) {
-          final text = DateFormat.E().format(day)[0];
+          // 요일 텍스트를 한 글자로 표시
+          String text;
           if (day.weekday == DateTime.sunday || day.weekday == DateTime.saturday) {
-            Color color = day.weekday == DateTime.sunday ? Colors.red : Colors.blue;
-            return Center(
-              child: Text(
-                text,
-                style: TextStyle(color: color),
-              ),
-            );
+            text = "S"; // 일요일과 토요일은 "S"
+          } else {
+            text = DateFormat.E().format(day)[0]; // 나머지 요일은 첫 글자만
           }
-          return null;
+
+          // 요일 색상 설정
+          Color color;
+          if (day.weekday == DateTime.sunday) {
+            color = Colors.red; // 일요일 빨간색
+          } else if (day.weekday == DateTime.saturday) {
+            color = Colors.blue; // 토요일 파란색
+          } else {
+            color = Colors.black; // 나머지 요일 검은색
+          }
+
+          return Center(
+            child: Text(
+              text,
+              style: TextStyle(color: color),
+            ),
+          );
+        },
+        defaultBuilder: (context, day, focusedDay) {
+          // 현재 달의 날짜 스타일
+          return Center(
+            child: Text(
+              '${day.day}',
+              style: TextStyle(color: Colors.black),
+            ),
+          );
         },
         markerBuilder: (context, date, events) {
           if (events.isNotEmpty) {
             return Positioned(
               bottom: 1,
               child: Container(
-                width: 6,
-                height: 6,
+                width: 7,
+                height: 7,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.deepPurple.shade300,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'Login/login_page.dart'; // LoginPage를 import
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,10 +25,11 @@ void main() async {
     print("❌ Firebase 초기화 실패: $e");
   }
 
-  runApp(MyApp());
+  /*runApp(MyApp());*/
+  runApp(SurveyApp());
 }
 
-
+/*
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -43,7 +45,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
     );
   }
-}
+}*/
 
 class SurveyApp extends StatelessWidget {
   const SurveyApp({Key? key}) : super(key: key);
@@ -56,7 +58,7 @@ class SurveyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: SurveyScreen(),
+      home: CalendarScreen(),
     );
   }
 }
