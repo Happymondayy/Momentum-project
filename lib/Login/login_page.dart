@@ -3,6 +3,7 @@ import 'signup_page.dart';
 import 'find_ID_page.dart';
 import 'find_password_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
 class LoginPage extends StatelessWidget {
   LoginPage({Key? key}) : super(key: key);
@@ -37,6 +38,11 @@ class LoginPage extends StatelessWidget {
       var userData = querySnapshot.docs.first.data();
       if (userData['password'] == password) {
         _showDialog(context, "로그인 성공", "환영합니다! 😊");
+        // 로그인 성공 시 calendar_screen.dart로 이동
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CalendarScreen()), // CalendarScreen으로 이동
+        );
       } else {
         _showDialog(context, "로그인 실패", "비밀번호가 일치하지 않습니다.");
       }

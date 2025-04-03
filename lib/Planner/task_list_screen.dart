@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 
-class TaskListSection extends StatelessWidget {
-  const TaskListSection({Key? key}) : super(key: key);
+class TaskListScreen extends StatelessWidget {
+  const TaskListScreen({Key? key}) : super(key: key);
 
   // 파스텔 톤 색상 리스트를 const로 선언
   static const List<Color> pastelColors = [
-    Color(0xFFB3E5FC), // 파스텔 블루
-    Color(0xFFFFE6C2), // 파스텔 오렌지
-    Color(0xFFDCFFD4), // 파스텔 그린
-    Color(0xFFFFF9C4), // 파스텔 옐로우
-    Color(0xFFF2E7F7), // 파스텔 퍼플
-    Color(0xFFD4FCFF), // 파스텔 옐로우 그린
+    const Color(0xFFFFE6E6), // 밝은 분홍색
+    const Color(0xFFFFEDCC), // 밝은 복숭아색
+    const Color(0xFFFFFFCC), // 밝은 노란색
+    const Color(0xFFE6FFCC), // 밝은 연두색
+    const Color(0xFFCCFFE1), // 밝은 민트색
+    const Color(0xFFCCFFFF), // 밝은 하늘색
+    const Color(0xFFCCE6FF), // 밝은 파란색
+    const Color(0xFFE6CCFF), // 밝은 라벤더색
+    const Color(0xFFFDD5DF), // 밝은 핑크색
+    const Color(0xFFFFDAB9), // 밝은 살구색
+    const Color(0xFFE0F7FA), // 밝은 청록색
+    const Color(0xFFF1F8E9), // 밝은 라임색
+    const Color(0xFFFCE4EC), // 밝은 로즈색
+    const Color(0xFFF3E5F5), // 밝은 퍼플색
+    const Color(0xFFE8F5E9), // 밝은 그린색
   ];
 
   // 랜덤으로 색상 선택
