@@ -39,7 +39,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        final date = DateTime.parse(data['date']);
+        final startDate = DateTime.parse(data['startDate']);
+        final endDate = DateTime.parse(data['endDate']);
+
         final startTime = data['startTime'] != null
             ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
             : null;
@@ -50,13 +52,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final event = Event(
           id: doc.id,
           title: data['title'],
+          description: data['description'] ?? '',
+          startDate: startDate,
+          endDate: endDate,
           startTime: startTime,
           endTime: endTime,
-          memo: data['memo'],
+          memo: data['memo'] ?? '',
+          location: data['location'] ?? '',
           isRepeating: data['isRepeating'] ?? false,
+          repeatOption: data['repeatOption'],
+          repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+          repeatCustomDays: data['repeatCustomDays'],
+          isAllDay: data['isAllDay'] ?? false,
+          reminder: data['reminder'],
         );
 
-        final key = DateTime(date.year, date.month, date.day);
+        // Use startDate for organizing events instead of a 'date' field
+        final key = DateTime(startDate.year, startDate.month, startDate.day);
         if (events[key] != null) {
           events[key]!.add(event);
         } else {
@@ -115,66 +127,48 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   // In CalendarScreen class
-  void _addEvent(
-      String title,
-      String description,
-      DateTime startDate,
-      DateTime endDate,
-      TimeOfDay? startTime,
-      TimeOfDay? endTime,
-      String memo,
-      String location,
-      bool isRepeating,
-      String? repeatOption,
-      List<int>? repeatDays,
-      int? repeatCustomDays,
-      bool isAllDay,
-      String? reminder) async {
-    if (title.isEmpty) return;
-
-    final startTimeMap = !isAllDay && startTime != null ? {
-      'hour': startTime.hour,
-      'minute': startTime.minute,
+  void _addEvent(Event event) async {
+    final startTimeMap = !event.isAllDay && event.startTime != null ? {
+      'hour': event.startTime!.hour,
+      'minute': event.startTime!.minute,
     } : null;
 
-    final endTimeMap = !isAllDay && endTime != null ? {
-      'hour': endTime.hour,
-      'minute': endTime.minute,
+    final endTimeMap = !event.isAllDay && event.endTime != null ? {
+      'hour': event.endTime!.hour,
+      'minute': event.endTime!.minute,
     } : null;
 
     await FirebaseFirestore.instance.collection('events').add({
-      'title': title,
-      'description': description,
-      'startDate': startDate.toIso8601String(),
-      'endDate': endDate.toIso8601String(),
+      'title': event.title,
+      'description': event.description,
+      'startDate': event.startDate.toIso8601String(),
+      'endDate': event.endDate.toIso8601String(),
       'startTime': startTimeMap,
       'endTime': endTimeMap,
-      'memo': memo,
-      'location': location,
-      'isRepeating': isRepeating,
-      'repeatOption': repeatOption,
-      'repeatDays': repeatDays,
-      'repeatCustomDays': repeatCustomDays,
-      'isAllDay': isAllDay,
-      'reminder': reminder,
+      'memo': event.memo,
+      'location': event.location,
+      'isRepeating': event.isRepeating,
+      'repeatOption': event.repeatOption,
+      'repeatDays': event.repeatDays,
+      'repeatCustomDays': event.repeatCustomDays,
+      'isAllDay': event.isAllDay,
+      'reminder': event.reminder,
     });
   }
 
-  void _addTodo(String title, DateTime date, TimeOfDay time, String memo, bool isRepeating) async {
-    if (title.isEmpty) return;
-
-    final timeMap = {
-      'hour': time.hour,
-      'minute': time.minute,
-    };
+  void _addTodo(TodoItem todoitem) async {
 
     await FirebaseFirestore.instance.collection('todos').add({
-      'title': title,
-      'date': date.toIso8601String(),
-      'time': timeMap,
-      'memo': memo,
-      'isRepeating': isRepeating,
-      'isCompleted': false,
+      'title': todoitem.title,
+      'dateTime': todoitem.date,
+      'time': todoitem.time,
+      'memo': todoitem.memo,
+      'location': todoitem.location,
+      'isRepeating': todoitem.isRepeating,
+      'repeatOption': todoitem.repeatOption,
+      'repeatDays': todoitem.repeatDays,
+      'repeatCustomDays': todoitem.repeatCustomDays,
+      'reminder': todoitem.reminder,
     });
   }
 
@@ -469,3 +463,4 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 }
+

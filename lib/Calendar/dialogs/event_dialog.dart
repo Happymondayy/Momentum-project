@@ -1,23 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:momentum_planner/Calendar/models/event.dart';
 
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
-  final Function(
-      String title,
-      String description,
-      DateTime startDate,
-      DateTime endDate,
-      TimeOfDay? startTime,
-      TimeOfDay? endTime,
-      String memo,
-      String location,
-      bool isRepeating,
-      String? repeatOption,
-      List<int>? repeatDays,
-      int? repeatCustomDays,
-      bool isAllDay,
-      String? reminder) onSave;
+  final Function(Event event) onSave;
 
   const EventDialog({
     Key? key,
@@ -65,6 +52,46 @@ class _EventDialogState extends State<EventDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(FocusNode());
     });
+  }
+
+  // Remove the second _validateAndSave() method completely
+// Keep only this one:
+  void _validateAndSave() {
+    if (_titleController.text.trim().isEmpty) {
+      setState(() {
+        _titleError = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('필수 항목칸을 채워주세요.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final event = Event(
+      id: DateTime.now().millisecondsSinceEpoch.toString(), // Generate a unique ID
+      title: _titleController.text,
+      description: _descriptionController.text,
+      startDate: _startDate,
+      endDate: _endDate,
+      startTime: _isAllDay ? null : _startTime,
+      endTime: _isAllDay ? null : _endTime,
+      memo: _memoController.text,
+      location: _locationController.text,
+      isRepeating: _isRepeating,
+      repeatOption: _isRepeating ? _repeatOption : null,
+      repeatDays: _isRepeating && _repeatOption == '매요일' ? _repeatDays : null,
+      repeatCustomDays: _isRepeating && _repeatOption == '기타' ? _repeatCustomDays : null,
+      isAllDay: _isAllDay,
+      reminder: _getReminderValue(),
+    );
+
+    // Call the onSave callback with the event object
+    widget.onSave(event);
+
+    Navigator.pop(context);
   }
 
   String _getFormattedTimeWithAmPm(TimeOfDay time) {
@@ -466,68 +493,68 @@ class _EventDialogState extends State<EventDialog> {
     );
   }
 
-  void _validateAndSave() {
-    if (_titleController.text.trim().isEmpty) {
-      setState(() {
-        _titleError = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('필수 항목칸을 채워주세요.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      FocusScope.of(context).requestFocus(FocusNode());
-      return;
+  String? _getReminderValue() {
+    if (!_hasReminder) return null;
+    if (_reminderOption == '기타' && _customReminderMinutes != null) {
+      return '$_customReminderMinutes분 전';
     }
-
-    widget.onSave(
-      _titleController.text,
-      _descriptionController.text,
-      _startDate,
-      _endDate,
-      _isAllDay ? null : _startTime,
-      _isAllDay ? null : _endTime,
-      _memoController.text,
-      _locationController.text,
-      _isRepeating,
-      _isRepeating ? _repeatOption : null,
-      _isRepeating && _repeatOption == '매요일' ? _repeatDays : null,
-      _isRepeating && _repeatOption == '기타' ? _repeatCustomDays : null,
-      _isAllDay,
-      _hasReminder ? _reminderOption : null,
-    );
-    Navigator.pop(context);
+    return _reminderOption;
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+      insetPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      elevation: 5, // Add shadow
+      elevation: 5,
       child: Container(
         width: double.infinity,
-        child: Stack(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 20),
+            // Fixed app bar with close button
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(15),
+                  topRight: Radius.circular(15),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey[700]),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Text(
+                    '새 일정 추가',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // Empty container for balanced spacing
+                  Container(width: 48),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: Colors.grey[300]),
+
+            // Scrollable content
+            Flexible(
+              child: SingleChildScrollView(
+                child: Container(
+                  padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: 10), // Space for X button
-                      Text(
-                        '새 일정 추가',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 20),
                       // Title field
                       TextField(
                         controller: _titleController,
@@ -621,17 +648,13 @@ class _EventDialogState extends State<EventDialog> {
                         child: ElevatedButton(
                           onPressed: _validateAndSave,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isFormValid
-                                ? Colors.deepPurple[300]
-                                : Colors.grey[300],
-                            foregroundColor: _isFormValid
-                                ? Colors.white
-                                : Colors.black,
+                            backgroundColor: Colors.deepPurple[300],
+                            foregroundColor: Colors.white,
                             padding: EdgeInsets.symmetric(horizontal: 50, vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(30),
                             ),
-                            elevation: _isFormValid ? 2 : 0,
+                            elevation: 2,
                           ),
                           child: Text(
                             '저장',
@@ -642,19 +665,9 @@ class _EventDialogState extends State<EventDialog> {
                           ),
                         ),
                       ),
-                      SizedBox(height: 10),
                     ],
                   ),
                 ),
-              ],
-            ),
-            // Close button
-            Positioned(
-              top: 10,
-              left: 10,
-              child: IconButton(
-                icon: Icon(Icons.close, color: Colors.grey[700]),
-                onPressed: () => Navigator.pop(context),
               ),
             ),
           ],
