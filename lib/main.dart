@@ -25,11 +25,9 @@ void main() async {
     print("❌ Firebase 초기화 실패: $e");
   }
 
-  /*runApp(MyApp());*/
-  runApp(SurveyApp());
+  runApp(MyApp());
 }
 
-/*
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -41,24 +39,8 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue, // 기본 테마 색상
         fontFamily: 'NotoSansKR', // 폰트 설정
       ),
-      home: DailyPlannerPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+      home: CalendarScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
-    );
-  }
-}*/
-
-class SurveyApp extends StatelessWidget {
-  const SurveyApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
-      ),
-      home: CalendarScreen(),
     );
   }
 }
