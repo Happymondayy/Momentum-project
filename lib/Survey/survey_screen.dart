@@ -5,7 +5,7 @@ import 'package:momentum_planner/Survey/components/progress_dots.dart';
 import 'package:momentum_planner/Survey/models/question_model.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
   final String? param1;
@@ -70,12 +70,12 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
     // 애니메이션 컨트롤러 초기화 - 더 부드러운 애니메이션을 위해 시간 증가
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1000),
     );
 
     // 부드러운 곡선 사용
     _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),// Curves.easeOutCubic: 애니메이션이 천천히 시작하고 빠르게 진행
     );
 
     // 질문 초기화
@@ -114,7 +114,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
   }
 
   void _activateNextQuestion() {
-    if (activeQuestionIndex < questions.length - 1) {
+    if (activeQuestionIndex < questions.length - 1) { //마지막 질문이 아니라면
       setState(() {
         // 현재 질문 완료 표시
         questions[activeQuestionIndex].state = true;
@@ -124,20 +124,19 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
         questions[activeQuestionIndex].isActive = true;
 
         // Start the animation
-        _animationController.reset();
-        _animationController.forward();
+        _animationController.reset(); //animationCotroller를 초기화
+        _animationController.forward(); //animationCotroller를 다시 실행
       });
 
-      // 질문 상태 갱신
-      _updateAllAnsweredState();
-    } else {
-      // 마지막 질문 완료
+
+      _updateAllAnsweredState(); // 질문 상태 갱신
+    } else { // 마지막 질문이라면
       setState(() {
         questions[activeQuestionIndex].state = true;
       });
 
-      // 최종 상태 갱신
-      _updateAllAnsweredState();
+
+      _updateAllAnsweredState(); // 최종 상태 갱신
     }
   }
 
@@ -283,6 +282,12 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                       );
                       _saveUserData_();
 
+                      Navigator.push( // 캘린더 화면으로 이동
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => CalendarScreen(),
+                        )
+                      );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('모든 질문에 답변해주세요.')),
