@@ -96,7 +96,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final todo = TodoItem(
           id: doc.id,
           title: data['title'],
-          time: time,
+          date: date, // date 속성 추가
+          time: time, // time을 선택적 인자로 전달
           memo: data['memo'],
           isRepeating: data['isRepeating'] ?? false,
           isCompleted: data['isCompleted'] ?? false,
