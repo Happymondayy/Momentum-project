@@ -1,20 +1,21 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
-class Task {
+// Todo_Task 모델 클래스
+class Todo_Task {
   final String title;
   final String? description;
   final String? time;
   final DateTime date;
-  final bool isImportant; // 알림 설정
-  final bool isUrgent;    // 반복 일정
+  final bool isImportant;
+  final bool isUrgent;
   final String? memo;
   final String? location;
-  final int importance;   // 중요도 (1-3)
-  final int urgency;      // 마감일 임박도 (1-3)
-  bool isCompleted;       // 일정 완료 여부
+  final int importance;
+  final int urgency;
+  bool isCompleted;
 
-  Task({
+  Todo_Task({
     required this.title,
     this.description,
     this.time,
@@ -29,8 +30,9 @@ class Task {
   });
 }
 
+// 진행률 화면 위젯
 class ProgressScreen extends StatelessWidget {
-  final List<Task> tasks;
+  final List<Todo_Task> tasks;
   final double progressPercentage;
 
   const ProgressScreen({
@@ -109,6 +111,7 @@ class ProgressScreen extends StatelessWidget {
   }
 }
 
+// 월 선택기 위젯
 class MonthSelector extends StatelessWidget {
   final DateTime selectedDate;
   final Function(DateTime) onMonthChanged;
@@ -164,6 +167,7 @@ class MonthSelector extends StatelessWidget {
   }
 }
 
+// 주간 캘린더 위젯
 class WeeklyCalendar extends StatelessWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
@@ -174,6 +178,28 @@ class WeeklyCalendar extends StatelessWidget {
     required this.onDateSelected,
   }) : super(key: key);
 
+  // 요일 반환 함수 추가
+  String _getWeekdayString(int weekday) {
+    switch (weekday) {
+      case 1:
+        return '월';
+      case 2:
+        return '화';
+      case 3:
+        return '수';
+      case 4:
+        return '목';
+      case 5:
+        return '금';
+      case 6:
+        return '토';
+      case 7:
+        return '일';
+      default:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final DateTime weekStart = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
@@ -182,6 +208,30 @@ class WeeklyCalendar extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
+          // 요일 표시 행 추가
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(7, (index) {
+              final currentDate = weekStart.add(Duration(days: index));
+              return Container(
+                width: 40,
+                child: Center(
+                  child: Text(
+                    _getWeekdayString(currentDate.weekday),
+                    style: TextStyle(
+                      color: currentDate.weekday >= 6
+                          ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                          : Colors.black87,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8), // 요일과 날짜 사이 간격
+          // 날짜 표시 행
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(7, (index) {
@@ -205,7 +255,11 @@ class WeeklyCalendar extends StatelessWidget {
                     child: Text(
                       '${currentDate.day}',
                       style: TextStyle(
-                        color: isSelected ? Colors.purple : Colors.black87,
+                        color: isSelected
+                            ? Colors.purple
+                            : (currentDate.weekday >= 6
+                            ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                            : Colors.black87),
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
@@ -220,8 +274,11 @@ class WeeklyCalendar extends StatelessWidget {
   }
 }
 
+// TodoList 화면 위젯
 class TodoListScreen extends StatefulWidget {
-  final DateTime? initialDate; // 초기 선택 날짜 추가
+  final DateTime? initialDate;
+  final bool isEmbedded;
+  final Function(TodoListScreenState)? onStateCreated;
 
   const TodoListScreen({
     Key? key,
@@ -230,15 +287,12 @@ class TodoListScreen extends StatefulWidget {
     this.onStateCreated,
   }) : super(key: key);
 
-  final bool isEmbedded;
-  final Function(TodoListScreenState)? onStateCreated;
-
   @override
-  State<TodoListScreen> createState() => TodoListScreenState();
+  TodoListScreenState createState() => TodoListScreenState();
 }
 
 class TodoListScreenState extends State<TodoListScreen> {
-  Map<String, List<Task>> tasksByDate = {};
+  Map<String, List<Todo_Task>> tasksByDate = {};
   DateTime selectedDate = DateTime.now();
   double progressPercentage = 0.0;
 
@@ -257,7 +311,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  List<Task> getTasksForSelectedDate() {
+  List<Todo_Task> getTasksForSelectedDate() {
     final dateKey = _dateToKey(selectedDate);
     return tasksByDate[dateKey] ?? [];
   }
@@ -284,6 +338,34 @@ class TodoListScreenState extends State<TodoListScreen> {
     });
   }
 
+  // 날짜 선택 헤더 위젯
+  Widget _buildDateHeader() {
+    return Column(
+      children: [
+        MonthSelector(
+          selectedDate: selectedDate,
+          onMonthChanged: (newDate) {
+            setState(() {
+              selectedDate = newDate;
+            });
+          },
+        ),
+        WeeklyCalendar(
+          selectedDate: selectedDate,
+          onDateSelected: changeSelectedDate,
+        ),
+      ],
+    );
+  }
+
+  // 진행률 섹션 위젯
+  Widget _buildProgressSection(List<Todo_Task> tasks) {
+    return ProgressScreen(
+      tasks: tasks,
+      progressPercentage: progressPercentage,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tasksForSelectedDate = getTasksForSelectedDate();
@@ -300,22 +382,8 @@ class TodoListScreenState extends State<TodoListScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              MonthSelector(
-                selectedDate: selectedDate,
-                onMonthChanged: (newDate) {
-                  setState(() {
-                    selectedDate = newDate;
-                  });
-                },
-              ),
-              WeeklyCalendar(
-                selectedDate: selectedDate,
-                onDateSelected: changeSelectedDate,
-              ),
-              ProgressScreen(
-                tasks: tasksForSelectedDate,
-                progressPercentage: progressPercentage,
-              ),
+              _buildDateHeader(),
+              _buildProgressSection(tasksForSelectedDate),
               const SizedBox(height: 10),
               _buildTodoSectionHeader(
                   isSameDay(selectedDate, DateTime.now())
@@ -349,7 +417,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  Widget _buildTodoList(BuildContext context, {required List<Task> tasks}) {
+  Widget _buildTodoList(BuildContext context, {required List<Todo_Task> tasks}) {
     if (tasks.isEmpty) {
       return _buildEmptyState('오늘 할 일이 없습니다');
     }
@@ -361,7 +429,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  Widget _buildTaskItem(Task task) {
+  Widget _buildTaskItem(Todo_Task task) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -898,7 +966,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         return;
                                       }
 
-                                      final newTask = Task(
+                                      final newTask = Todo_Task(
                                         title: titleController.text,
                                         date: taskDate,
                                         time: '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
@@ -965,6 +1033,7 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 }
 
+// 랜덤한 밝은 파스텔 색상 생성
 Color getBrightPastelColor() {
   final Random random = Random();
   final List<Color> brightPastelColors = [
