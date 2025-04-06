@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
 class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({Key? key}) : super(key: key);
+  final Function(DateTime) onDateSelected; // 날짜 선택 콜백 추가
+
+  const CalendarScreen({
+    Key? key,
+    required this.onDateSelected,
+  }) : super(key: key);
 
   @override
   _CalendarSectionState createState() => _CalendarSectionState();
@@ -103,6 +108,9 @@ class _CalendarSectionState extends State<CalendarScreen> {
                           onTap: () {
                             setState(() {
                               selectedDay = day;
+                              // 선택된 날짜를 DateTime 객체로 변환하여 콜백 호출
+                              final selectedDate = DateTime(2025, currentMonthIndex + 1, day);
+                              widget.onDateSelected(selectedDate);
                             });
                           },
                           child: Container(

@@ -4,7 +4,7 @@ import 'package:momentum_planner/Planner/task_list_screen.dart';
 import 'calendar_screen.dart';
 import 'progress_screen.dart';
 import 'task_list_screen.dart';
-import 'package:momentum_planner/Todolist/todo_list_screen.dart';
+import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 
 class DailyPlannerPage extends StatefulWidget {
   const DailyPlannerPage({Key? key}) : super(key: key);
@@ -15,6 +15,7 @@ class DailyPlannerPage extends StatefulWidget {
 
 class _DailyPlannerPageState extends State<DailyPlannerPage> {
   bool isPlannerView = true; // true for planner, false for todo list
+  TodoListScreenState? todoListScreenState; // Reference to TodoListScreen state
 
   @override
   Widget build(BuildContext context) {
@@ -22,13 +23,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       body: SafeArea(
         child: Column(
           children: [
-            CalendarScreen(),
-            ProgressScreen(),
+            //CalendarScreen(),
+            //ProgressScreen(),
             _buildHeaderWithToggle(),
             Expanded(
               child: isPlannerView
                   ? const TaskListScreen()
-                  : const TodoListScreen(),
+                  : TodoListScreen(
+                isEmbedded: true,
+                onStateCreated: (state) {
+                  todoListScreenState = state;
+                },
+              ),
             ),
           ],
         ),
@@ -64,8 +70,19 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   Widget _buildFloatingActionButton() {
     return FloatingActionButton(
       onPressed: () {
-        // Show dialog to add new task/todo depending on current view
-        _showAddItemDialog(context);
+        // Show task creation UI depending on current view
+        if (isPlannerView) {
+          // Show simple planner task creation dialog (implementation not shown here)
+          // For now, just a placeholder
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Planner task creation not implemented yet')),
+          );
+        } else {
+          // Show the full todo task creation dialog from TodoListScreen
+          if (todoListScreenState != null) {
+            todoListScreenState!.showAddTaskDialog(context);
+          }
+        }
       },
       backgroundColor: const Color(0xFF9D8CFF),
       child: const Icon(Icons.add, color: Colors.white, size: 30),
@@ -83,54 +100,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         BottomNavigationBarItem(icon: Icon(Icons.article_outlined), label: ''),
         BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: ''),
       ],
-    );
-  }
-
-  Future<void> _showAddItemDialog(BuildContext context) async {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-
-    return showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isPlannerView ? 'Add New Task' : 'Add New Todo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  hintText: 'Title',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  hintText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                // Add task/todo logic here
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
     );
   }
 }
