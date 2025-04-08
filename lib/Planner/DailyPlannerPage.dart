@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'task_list_screen.dart';
 import 'empty_state_widget.dart';
+import 'package:momentum_planner/bottom_nav.dart';
 
 // Task 클래스 정의
 class Task {
@@ -401,7 +402,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      bottomNavigationBar: BottomNav(),
     );
   }
 
@@ -500,19 +501,5 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     // 진행률 계산
     calculateProgress();
-  }
-
-  Widget _buildBottomNavigationBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFF9D8CFF),
-      unselectedItemColor: Colors.grey.shade400,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
-        BottomNavigationBarItem(icon: Icon(Icons.view_list), label: 'Tasks'),
-        BottomNavigationBarItem(icon: Icon(Icons.article_outlined), label: 'Articles'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
-      ],
-    );
   }
 }
