@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:momentum_planner/bottom_nav.dart';
 
 import '../models/event.dart';
 import '../models/todo_item.dart';
@@ -12,7 +13,7 @@ import '../widgets/header.dart';
 import '../widgets/section_header.dart';
 import '../widgets/event_card.dart';
 import '../widgets/todo_card.dart';
-import '../widgets/footer.dart';
+
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -158,7 +159,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _addTodo(TodoItem todoitem) async {
-
     await FirebaseFirestore.instance.collection('todos').add({
       'title': todoitem.title,
       'dateTime': todoitem.date,
@@ -224,12 +224,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       // 푸터는 하단에 고정
-      bottomNavigationBar: Footer(
-        onCalendarPressed: () {},
-        onListPressed: () {},
-        onEditPressed: () {},
-        onChatPressed: () {},
-      ),
+      bottomNavigationBar: BottomNav(),
     );
   }
 
