@@ -178,7 +178,7 @@ class WeeklyCalendar extends StatelessWidget {
     required this.onDateSelected,
   }) : super(key: key);
 
-  // 요일 반환 함수 추가
+  // 요일 반환 함수
   String _getWeekdayString(int weekday) {
     switch (weekday) {
       case 1:
@@ -279,12 +279,16 @@ class TodoListScreen extends StatefulWidget {
   final DateTime? initialDate;
   final bool isEmbedded;
   final Function(TodoListScreenState)? onStateCreated;
+  final Function()? onTaskStatusChanged;
+  final dynamic taskDataService;
 
   const TodoListScreen({
     Key? key,
     this.initialDate,
     this.isEmbedded = false,
     this.onStateCreated,
+    this.onTaskStatusChanged,
+    this.taskDataService,
   }) : super(key: key);
 
   @override
@@ -292,28 +296,25 @@ class TodoListScreen extends StatefulWidget {
 }
 
 class TodoListScreenState extends State<TodoListScreen> {
-  Map<String, List<Todo_Task>> tasksByDate = {};
-  DateTime selectedDate = DateTime.now();
+  late DateTime selectedDate;
   double progressPercentage = 0.0;
+  late dynamic _taskDataService;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialDate != null) {
-      selectedDate = widget.initialDate!;
-    }
+    selectedDate = widget.initialDate ?? DateTime.now();
+    _taskDataService = widget.taskDataService;
+
     if (widget.onStateCreated != null) {
       widget.onStateCreated!(this);
     }
-  }
 
-  String _dateToKey(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    calculateProgress();
   }
 
   List<Todo_Task> getTasksForSelectedDate() {
-    final dateKey = _dateToKey(selectedDate);
-    return tasksByDate[dateKey] ?? [];
+    return _taskDataService.getTasksForDate(selectedDate);
   }
 
   void changeSelectedDate(DateTime date) {
@@ -324,17 +325,8 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   void calculateProgress() {
-    final tasks = getTasksForSelectedDate();
-    if (tasks.isEmpty) {
-      setState(() {
-        progressPercentage = 0.0;
-      });
-      return;
-    }
-
-    int completedTasks = tasks.where((task) => task.isCompleted).length;
     setState(() {
-      progressPercentage = (completedTasks / tasks.length) * 100;
+      progressPercentage = _taskDataService.calculateProgressForDate(selectedDate);
     });
   }
 
@@ -347,6 +339,7 @@ class TodoListScreenState extends State<TodoListScreen> {
           onMonthChanged: (newDate) {
             setState(() {
               selectedDate = newDate;
+              calculateProgress();
             });
           },
         ),
@@ -370,38 +363,53 @@ class TodoListScreenState extends State<TodoListScreen> {
   Widget build(BuildContext context) {
     final tasksForSelectedDate = getTasksForSelectedDate();
 
-    return Scaffold(
-      appBar: widget.isEmbedded
-          ? null
-          : AppBar(
-        title: const Text('Todo List'),
-      ),
-      body: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDateHeader(),
-              _buildProgressSection(tasksForSelectedDate),
-              const SizedBox(height: 10),
-              _buildTodoSectionHeader(
-                  isSameDay(selectedDate, DateTime.now())
-                      ? 'My Today Tasks'
-                      : 'Tasks for ${selectedDate.month}/${selectedDate.day}'
-              ),
-              _buildTodoList(context, tasks: tasksForSelectedDate),
-            ],
+    if (widget.isEmbedded) {
+      // DailyPlannerPage에 포함된 경우 날짜 헤더와 진행률을 표시하지 않음
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: tasksForSelectedDate.isEmpty
+            ? _buildEmptyState('오늘 할 일이 없습니다')
+            : ListView.builder(
+          itemCount: tasksForSelectedDate.length,
+          itemBuilder: (context, index) {
+            return _buildTaskItem(tasksForSelectedDate[index]);
+          },
+        ),
+      );
+    } else {
+      // 전체 화면 모드
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Todo List'),
+        ),
+        body: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDateHeader(),
+                _buildProgressSection(tasksForSelectedDate),
+                const SizedBox(height: 10),
+                _buildTodoSectionHeader(
+                    isSameDay(selectedDate, DateTime.now())
+                        ? 'My Today Tasks'
+                        : 'Tasks for ${selectedDate.month}/${selectedDate.day}'
+                ),
+                _buildTodoList(context, tasks: tasksForSelectedDate),
+              ],
+            ),
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showAddTaskDialog(context);
-        },
-        child: const Icon(Icons.add),
-      ),
-    );
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            showAddTaskDialog(context);
+          },
+          backgroundColor: const Color(0xFF9D8CFF),
+          child: const Icon(Icons.add),
+        ),
+      );
+    }
   }
 
   Widget _buildTodoSectionHeader(String title) {
@@ -496,6 +504,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                   setState(() {
                     task.isCompleted = value ?? false;
                     calculateProgress();
+
+                    if (widget.onTaskStatusChanged != null) {
+                      widget.onTaskStatusChanged!();
+                    }
                   });
                 },
               ),
@@ -981,10 +993,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       final dateKey = _dateToKey(taskDate);
 
                                       setState(() {
-                                        if (this.tasksByDate.containsKey(dateKey)) {
-                                          this.tasksByDate[dateKey]!.add(newTask);
+                                        if (this._taskDataService.containsKey(dateKey)) {
+                                          this._taskDataService[dateKey]!.add(newTask);
                                         } else {
-                                          this.tasksByDate[dateKey] = [newTask];
+                                          this._taskDataService[dateKey] = [newTask];
                                         }
                                       });
 
@@ -1026,6 +1038,11 @@ class TodoListScreenState extends State<TodoListScreen> {
     ).then((_) {
       setState(() {});
     });
+  }
+
+  // DateTime을 String 키로 변환하는 메서드 추가
+  String _dateToKey(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
   bool isSameDay(DateTime a, DateTime b) {
