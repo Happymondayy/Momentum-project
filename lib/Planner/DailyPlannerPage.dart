@@ -57,7 +57,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   bool isPlannerView = true; // true for planner, false for todo list
   DateTime selectedDate = DateTime.now();
   TodoListScreenState? todoListScreenState;
-  final TaskDataService _taskDataService = TaskDataService(); // 변경된 클래스 이름
+  final TaskDataService _taskDataService = TaskDataService();
   double progressPercentage = 0.0;
 
   @override
@@ -101,8 +101,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               },
             ),
 
-            // Weekly Calendar
-            WeeklyCalendar(
+            // Weekly Calendar with horizontal scrolling
+            EnhancedWeeklyCalendar(
               selectedDate: selectedDate,
               onDateSelected: changeSelectedDate,
             ),
@@ -134,7 +134,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 onTaskStatusChanged: () {
                   updateProgress();
                 },
-                taskDataService: _taskDataService, // 변경된 클래스 사용
+                taskDataService: _taskDataService,
               ),
             ),
           ],
@@ -355,11 +355,11 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   void _generateAIPlanner() {
-    // Demo data generation
+    // Demo data generation - 현재 선택된 날짜에만 일정 추가
     final generatedTasks = [
       Todo_Task(
         title: "아침 운동",
-        date: selectedDate,
+        date: selectedDate, // 현재 선택된 날짜에만 추가
         time: "07:00",
         importance: 2,
         urgency: 1,
@@ -368,7 +368,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       ),
       Todo_Task(
         title: "팀 미팅",
-        date: selectedDate,
+        date: selectedDate, // 현재 선택된 날짜에만 추가
         time: "10:00",
         importance: 3,
         urgency: 2,
@@ -386,5 +386,177 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     setState(() {
       updateProgress();
     });
+  }
+}
+
+// 개선된 주간 캘린더 위젯 (스크롤 기능 추가)
+class EnhancedWeeklyCalendar extends StatefulWidget {
+  final DateTime selectedDate;
+  final Function(DateTime) onDateSelected;
+
+  const EnhancedWeeklyCalendar({
+    Key? key,
+    required this.selectedDate,
+    required this.onDateSelected,
+  }) : super(key: key);
+
+  @override
+  _EnhancedWeeklyCalendarState createState() => _EnhancedWeeklyCalendarState();
+}
+
+class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
+  late PageController _pageController;
+  late int _currentPage;
+  final int _totalWeeks = 100; // 충분히 많은 주를 표시
+  late DateTime _baseDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _baseDate = DateTime.now().subtract(Duration(days: (_totalWeeks ~/ 2) * 7));
+    _currentPage = _getPageForDate(widget.selectedDate);
+    _pageController = PageController(initialPage: _currentPage);
+  }
+
+  @override
+  void didUpdateWidget(EnhancedWeeklyCalendar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedDate != widget.selectedDate) {
+      final newPage = _getPageForDate(widget.selectedDate);
+      if (newPage != _currentPage) {
+        _currentPage = newPage;
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
+  }
+
+  int _getPageForDate(DateTime date) {
+    final daysSinceBase = date.difference(_baseDate).inDays;
+    return (daysSinceBase / 7).floor() + _totalWeeks ~/ 2;
+  }
+
+  DateTime _getDateForPage(int page) {
+    final weekOffset = page - _totalWeeks ~/ 2;
+    return _baseDate.add(Duration(days: weekOffset * 7));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 80,
+      child: PageView.builder(
+        controller: _pageController,
+        onPageChanged: (int page) {
+          setState(() {
+            _currentPage = page;
+          });
+        },
+        itemBuilder: (context, index) {
+          final weekStart = _getDateForPage(index);
+          return _buildWeek(weekStart);
+        },
+        itemCount: _totalWeeks,
+      ),
+    );
+  }
+
+  Widget _buildWeek(DateTime weekStart) {
+    return Column(
+      children: [
+        // 요일 표시 행
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(7, (index) {
+            final currentDate = weekStart.add(Duration(days: index));
+            return Container(
+              width: 40,
+              child: Center(
+                child: Text(
+                  _getWeekdayString(currentDate.weekday),
+                  style: TextStyle(
+                    color: currentDate.weekday >= 6
+                        ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                        : Colors.black87,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        // 날짜 표시 행
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(7, (index) {
+            final currentDate = weekStart.add(Duration(days: index));
+            final isSelected = _isSameDay(currentDate, widget.selectedDate);
+
+            return GestureDetector(
+              onTap: () => widget.onDateSelected(currentDate),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: isSelected
+                    ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.purple.withOpacity(0.2),
+                )
+                    : null,
+                child: Center(
+                  child: Text(
+                    '${currentDate.day}',
+                    style: TextStyle(
+                      color: isSelected
+                          ? Colors.purple
+                          : (currentDate.weekday >= 6
+                          ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                          : Colors.black87),
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  String _getWeekdayString(int weekday) {
+    switch (weekday) {
+      case 1:
+        return '월';
+      case 2:
+        return '화';
+      case 3:
+        return '수';
+      case 4:
+        return '목';
+      case 5:
+        return '금';
+      case 6:
+        return '토';
+      case 7:
+        return '일';
+      default:
+        return '';
+    }
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 }

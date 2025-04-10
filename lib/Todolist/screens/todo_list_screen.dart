@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../Planner/DailyPlannerPage.dart';
 
 // Todo_Task 모델 클래스
 class Todo_Task {
@@ -43,11 +44,11 @@ class ProgressScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    int totalTasks = tasks.isEmpty ? 0 : tasks.length;
-    int completedTasks = tasks.isEmpty ? 0 : tasks.where((task) => task.isCompleted).length;
+    int totalTasks = tasks.length;
+    int completedTasks = tasks.where((task) => task.isCompleted).length;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 15),
       decoration: BoxDecoration(
         color: const Color(0xFFF0FFE8),
@@ -83,29 +84,25 @@ class ProgressScreen extends StatelessWidget {
                 children: [
                   Container(
                     height: 10,
-                    decoration: BoxDecoration(
-                        color: Colors.white, borderRadius: BorderRadius.circular(5)),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(5)),
                   ),
                   Container(
                     height: 10,
                     width: MediaQuery.of(context).size.width * (progressPercentage / 100) * 0.7,
                     decoration: BoxDecoration(
-                        color: progressPercentage == 100
-                            ? Colors.green
-                            : const Color(0xFFECDBF9),
-                        borderRadius: BorderRadius.circular(5)),
+                      color: progressPercentage == 100 ? Colors.green : const Color(0xFFECDBF9),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 15),
-            Text('${progressPercentage.toStringAsFixed(1)}%',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text('${progressPercentage.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           ],
         ),
         const SizedBox(height: 6),
-        Text('$completedTasks/$totalTasks Task Complete',
-            style: const TextStyle(fontSize: 13, color: Colors.black)),
+        Text('$completedTasks/$totalTasks Task Complete', style: const TextStyle(fontSize: 13, color: Colors.black)),
       ],
     );
   }
@@ -133,11 +130,7 @@ class MonthSelector extends StatelessWidget {
           children: [
             Text(
               '${selectedDate.year}년 ${selectedDate.month}월',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
             const Icon(Icons.arrow_drop_down),
           ],
@@ -168,7 +161,7 @@ class MonthSelector extends StatelessWidget {
 }
 
 // 주간 캘린더 위젯
-class WeeklyCalendar extends StatelessWidget {
+class WeeklyCalendar extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
 
@@ -178,98 +171,171 @@ class WeeklyCalendar extends StatelessWidget {
     required this.onDateSelected,
   }) : super(key: key);
 
-  // 요일 반환 함수
+  @override
+  _WeeklyCalendarState createState() => _WeeklyCalendarState();
+}
+
+class _WeeklyCalendarState extends State<WeeklyCalendar> {
+  late PageController _pageController;
+  late DateTime _displayedWeekStart;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initCalendar();
+  }
+
+  void _initCalendar() {
+    _displayedWeekStart = _findFirstDayOfWeek(widget.selectedDate);
+    _pageController = PageController(initialPage: _currentPage);
+  }
+
+  DateTime _findFirstDayOfWeek(DateTime date) {
+    return date.subtract(Duration(days: date.weekday - 1));
+  }
+
   String _getWeekdayString(int weekday) {
     switch (weekday) {
-      case 1:
-        return '월';
-      case 2:
-        return '화';
-      case 3:
-        return '수';
-      case 4:
-        return '목';
-      case 5:
-        return '금';
-      case 6:
-        return '토';
-      case 7:
-        return '일';
-      default:
-        return '';
+      case 1: return '월';
+      case 2: return '화';
+      case 3: return '수';
+      case 4: return '목';
+      case 5: return '금';
+      case 6: return '토';
+      case 7: return '일';
+      default: return '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final DateTime weekStart = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
-
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      height: 125,
       child: Column(
         children: [
-          // 요일 표시 행 추가
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(7, (index) {
-              final currentDate = weekStart.add(Duration(days: index));
-              return Container(
-                width: 40,
-                child: Center(
-                  child: Text(
-                    _getWeekdayString(currentDate.weekday),
-                    style: TextStyle(
-                      color: currentDate.weekday >= 6
-                          ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
-                          : Colors.black87,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: Icon(Icons.chevron_left),
+                onPressed: () {
+                  _pageController.previousPage(
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+              ),
+              Text('${_displayedWeekStart.month}월', style: TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: Icon(Icons.chevron_right),
+                onPressed: () {
+                  _pageController.nextPage(
+                    duration: Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+              ),
+            ],
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (int page) {
+                setState(() {
+                  _currentPage = page;
+                  _displayedWeekStart = _findFirstDayOfWeek(
+                    widget.selectedDate.add(Duration(days: 7 * (page - _currentPage))),
+                  );
+                });
+              },
+              itemBuilder: (context, pageIndex) {
+                final weekStart = _findFirstDayOfWeek(
+                  widget.selectedDate.add(Duration(days: 7 * (pageIndex - _currentPage))),
+                );
+                return _buildWeek(weekStart);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeek(DateTime weekStart) {
+    final tasksDataService = TaskDataService();
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(7, (index) {
+            final currentDate = weekStart.add(Duration(days: index));
+            return Container(
+              width: 40,
+              child: Center(
+                child: Text(
+                  _getWeekdayString(currentDate.weekday),
+                  style: TextStyle(
+                    color: currentDate.weekday >= 6
+                        ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                        : Colors.black87,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              );
-            }),
-          ),
-          const SizedBox(height: 8), // 요일과 날짜 사이 간격
-          // 날짜 표시 행
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(7, (index) {
-              final currentDate = weekStart.add(Duration(days: index));
-              final isSelected = currentDate.year == selectedDate.year &&
-                  currentDate.month == selectedDate.month &&
-                  currentDate.day == selectedDate.day;
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(7, (index) {
+            final currentDate = weekStart.add(Duration(days: index));
+            final isSelected = currentDate.year == widget.selectedDate.year &&
+                currentDate.month == widget.selectedDate.month &&
+                currentDate.day == widget.selectedDate.day;
 
-              return GestureDetector(
-                onTap: () => onDateSelected(currentDate),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: isSelected
-                      ? BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.purple.withOpacity(0.2),
-                  )
-                      : null,
-                  child: Center(
-                    child: Text(
-                      '${currentDate.day}',
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.purple
-                            : (currentDate.weekday >= 6
-                            ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
-                            : Colors.black87),
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            final hasTasks = tasksDataService.getTasksForDate(currentDate).isNotEmpty;
+
+            return Column(
+              children: [
+                GestureDetector(
+                  onTap: () => widget.onDateSelected(currentDate),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: isSelected
+                        ? BoxDecoration(shape: BoxShape.circle, color: Colors.purple.withOpacity(0.2))
+                        : null,
+                    child: Center(
+                      child: Text(
+                        '${currentDate.day}',
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.purple
+                              : (currentDate.weekday >= 6
+                              ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
+                              : Colors.black87),
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              );
-            }),
-          ),
-        ],
-      ),
+                if (hasTasks)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: EdgeInsets.only(top: 4),
+                    decoration: BoxDecoration(color: Colors.purple, shape: BoxShape.circle),
+                  ),
+              ],
+            );
+          }),
+        ),
+      ],
     );
   }
 }
@@ -304,7 +370,7 @@ class TodoListScreenState extends State<TodoListScreen> {
   void initState() {
     super.initState();
     selectedDate = widget.initialDate ?? DateTime.now();
-    _taskDataService = widget.taskDataService;
+    _taskDataService = widget.taskDataService ?? TaskDataService();
 
     if (widget.onStateCreated != null) {
       widget.onStateCreated!(this);
@@ -364,7 +430,6 @@ class TodoListScreenState extends State<TodoListScreen> {
     final tasksForSelectedDate = getTasksForSelectedDate();
 
     if (widget.isEmbedded) {
-      // DailyPlannerPage에 포함된 경우 날짜 헤더와 진행률을 표시하지 않음
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: tasksForSelectedDate.isEmpty
@@ -377,7 +442,6 @@ class TodoListScreenState extends State<TodoListScreen> {
         ),
       );
     } else {
-      // 전체 화면 모드
       return Scaffold(
         appBar: AppBar(
           title: const Text('Todo List'),
@@ -392,9 +456,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                 _buildProgressSection(tasksForSelectedDate),
                 const SizedBox(height: 10),
                 _buildTodoSectionHeader(
-                    isSameDay(selectedDate, DateTime.now())
-                        ? 'My Today Tasks'
-                        : 'Tasks for ${selectedDate.month}/${selectedDate.day}'
+                  isSameDay(selectedDate, DateTime.now())
+                      ? 'My Today Tasks'
+                      : 'Tasks for ${selectedDate.month}/${selectedDate.day}',
                 ),
                 _buildTodoList(context, tasks: tasksForSelectedDate),
               ],
@@ -417,10 +481,7 @@ class TodoListScreenState extends State<TodoListScreen> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -462,19 +523,13 @@ class TodoListScreenState extends State<TodoListScreen> {
                 children: [
                   Text(
                     task.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   if (task.time != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       task.time!,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                   ],
                   if (task.location != null) ...[
@@ -485,10 +540,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                         const SizedBox(width: 4),
                         Text(
                           task.location!,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
+                          style: TextStyle(color: Colors.grey[600], fontSize: 14),
                         ),
                       ],
                     ),
@@ -529,10 +581,7 @@ class TodoListScreenState extends State<TodoListScreen> {
           const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
           ),
         ],
       ),
@@ -567,9 +616,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: const BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(color: Colors.black12),
-                        ),
+                        border: Border(bottom: BorderSide(color: Colors.black12)),
                       ),
                       child: Row(
                         children: [
@@ -583,10 +630,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                             child: Text(
                               '새 Todolist 추가',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                             ),
                           ),
                           const SizedBox(width: 48),
@@ -603,366 +647,66 @@ class TodoListScreenState extends State<TodoListScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // 제목 입력
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('제목',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      )
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: titleController,
-                                    decoration: const InputDecoration(
-                                      hintText: '제목을 입력하세요 (필수)',
-                                      border: UnderlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                                    ),
-                                  ),
-                                ],
+                              _buildTextField(
+                                titleController,
+                                '제목',
+                                '제목을 입력하세요 (필수)',
+                                    (value) {
+                                  if (value.isEmpty) {
+                                    _showSnackBar(context, '제목을 입력해주세요');
+                                  }
+                                },
                               ),
                               const SizedBox(height: 20),
 
                               // 날짜 선택
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('날짜',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      )
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final DateTime? picked = await showDatePicker(
-                                          context: context,
-                                          initialDate: taskDate,
-                                          firstDate: DateTime(2020),
-                                          lastDate: DateTime(2030),
-                                        );
-                                        if (picked != null) {
-                                          setState(() {
-                                            taskDate = picked;
-                                          });
-                                        }
-                                      },
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '${taskDate.year}-${taskDate.month.toString().padLeft(2, '0')}-${taskDate.day.toString().padLeft(2, '0')}',
-                                              style: const TextStyle(fontSize: 16),
-                                            ),
-                                            const Icon(Icons.calendar_today, size: 20),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildDatePicker(context, taskDate, (pickedDate) {
+                                setState(() {
+                                  taskDate = pickedDate;
+                                });
+                              }),
                               const SizedBox(height: 20),
 
                               // 시간 선택
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('시간',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      )
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final TimeOfDay? picked = await showTimePicker(
-                                          context: context,
-                                          initialTime: selectedTime,
-                                        );
-                                        if (picked != null) {
-                                          setState(() {
-                                            selectedTime = picked;
-                                          });
-                                        }
-                                      },
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                                              style: const TextStyle(fontSize: 16),
-                                            ),
-                                            const Icon(Icons.access_time, size: 20),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildTimePicker(context, selectedTime, (pickedTime) {
+                                setState(() {
+                                  selectedTime = pickedTime;
+                                });
+                              }),
                               const SizedBox(height: 20),
 
                               // 중요도 선택
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('중요도',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('중요도 (필수):'),
-                                        Row(
-                                          children: List.generate(3, (index) {
-                                            return InkWell(
-                                              onTap: () {
-                                                setState(() {
-                                                  importanceLevel = index + 1;
-                                                });
-                                              },
-                                              child: Container(
-                                                margin: const EdgeInsets.symmetric(horizontal: 8),
-                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                                decoration: BoxDecoration(
-                                                  color: importanceLevel == index + 1
-                                                      ? Colors.blue.shade300
-                                                      : Colors.grey.shade200,
-                                                  borderRadius: BorderRadius.circular(20),
-                                                ),
-                                                child: Text('${index + 1}',
-                                                  style: TextStyle(
-                                                    color: importanceLevel == index + 1
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                    fontWeight: importanceLevel == index + 1
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildImportanceSelector(setState, importanceLevel, (level) {
+                                importanceLevel = level;
+                              }),
                               const SizedBox(height: 20),
 
                               // 마감일 임박도 선택
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('마감일 임박도',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('임박도 (필수):'),
-                                        Row(
-                                          children: List.generate(3, (index) {
-                                            return InkWell(
-                                              onTap: () {
-                                                setState(() {
-                                                  urgencyLevel = index + 1;
-                                                });
-                                              },
-                                              child: Container(
-                                                margin: const EdgeInsets.symmetric(horizontal: 8),
-                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                                decoration: BoxDecoration(
-                                                  color: urgencyLevel == index + 1
-                                                      ? Colors.red.shade300
-                                                      : Colors.grey.shade200,
-                                                  borderRadius: BorderRadius.circular(20),
-                                                ),
-                                                child: Text('${index + 1}',
-                                                  style: TextStyle(
-                                                    color: urgencyLevel == index + 1
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                    fontWeight: urgencyLevel == index + 1
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildUrgencySelector(setState, urgencyLevel, (level) {
+                                urgencyLevel = level;
+                              }),
                               const SizedBox(height: 20),
 
                               // 알림 설정
-                              Container(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('알림 설정',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Switch(
-                                        value: isImportant,
-                                        onChanged: (bool value) {
-                                          setState(() {
-                                            isImportant = value;
-                                          });
-                                        },
-                                        activeColor: Colors.purple.shade300,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
+                              _buildSwitchRow('알림 설정', isImportant, (value) {
+                                setState(() {
+                                  isImportant = value;
+                                });
+                              }),
                               // 반복 일정
-                              Container(
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('반복 일정',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Switch(
-                                        value: isUrgent,
-                                        onChanged: (bool value) {
-                                          setState(() {
-                                            isUrgent = value;
-                                          });
-                                        },
-                                        activeColor: Colors.purple.shade300,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              _buildSwitchRow('반복 일정', isUrgent, (value) {
+                                setState(() {
+                                  isUrgent = value;
+                                });
+                              }),
                               const SizedBox(height: 20),
 
                               // 메모 입력
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('메모',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: TextField(
-                                      controller: memoController,
-                                      decoration: const InputDecoration(
-                                        hintText: '메모',
-                                        border: InputBorder.none,
-                                        contentPadding: EdgeInsets.all(16),
-                                      ),
-                                      maxLines: 3,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildTextField(memoController, '메모', '메모', null, maxLines: 3),
                               const SizedBox(height: 20),
 
                               // 위치 입력
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('위치',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: TextField(
-                                      controller: locationController,
-                                      decoration: const InputDecoration(
-                                        hintText: '위치',
-                                        border: InputBorder.none,
-                                        contentPadding: EdgeInsets.all(16),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildTextField(locationController, '위치', '위치', null),
                               const SizedBox(height: 30),
 
                               // 저장 버튼
@@ -972,9 +716,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                   child: ElevatedButton(
                                     onPressed: () {
                                       if (titleController.text.isEmpty) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('제목을 입력해주세요')),
-                                        );
+                                        _showSnackBar(context, '제목을 입력해주세요');
                                         return;
                                       }
 
@@ -990,26 +732,18 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         urgency: urgencyLevel,
                                       );
 
-                                      final dateKey = _dateToKey(taskDate);
-
-                                      setState(() {
-                                        if (this._taskDataService.containsKey(dateKey)) {
-                                          this._taskDataService[dateKey]!.add(newTask);
-                                        } else {
-                                          this._taskDataService[dateKey] = [newTask];
-                                        }
-                                      });
-
+                                      _taskDataService.addTask(newTask);
                                       Navigator.of(context).pop();
-
-                                      this.setState(() {
-                                        this.selectedDate = taskDate;
-                                        this.calculateProgress();
+                                      setState(() {
+                                        selectedDate = taskDate;
+                                        calculateProgress();
                                       });
 
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('일정이 저장되었습니다')),
-                                      );
+                                      if (widget.onTaskStatusChanged != null) {
+                                        widget.onTaskStatusChanged!();
+                                      }
+
+                                      _showSnackBar(context, '일정이 저장되었습니다');
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF9575CD),
@@ -1038,6 +772,221 @@ class TodoListScreenState extends State<TodoListScreen> {
     ).then((_) {
       setState(() {});
     });
+  }
+
+  // TextField 생성 메서드
+  Widget _buildTextField(TextEditingController controller, String label, String hint, Function(String)? validator, {int maxLines = 1}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: hint,
+            border: UnderlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(vertical: 8),
+          ),
+          maxLines: maxLines,
+          onChanged: validator,
+        ),
+      ],
+    );
+  }
+
+  // 날짜 선택기 메서드
+  Widget _buildDatePicker(BuildContext context, DateTime taskDate, Function(DateTime) onDatePicked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('날짜', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: taskDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (picked != null) {
+                onDatePicked(picked);
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('${taskDate.year}-${taskDate.month.toString().padLeft(2, '0')}-${taskDate.day.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 16)),
+                  const Icon(Icons.calendar_today, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 시간 선택기 메서드
+  Widget _buildTimePicker(BuildContext context, TimeOfDay selectedTime, Function(TimeOfDay) onTimePicked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          child: InkWell(
+            onTap: () async {
+              final TimeOfDay? picked = await showTimePicker(
+                context: context,
+                initialTime: selectedTime,
+              );
+              if (picked != null) {
+                onTimePicked(picked);
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 16)),
+                  const Icon(Icons.access_time, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 중요도 선택기 메서드
+  Widget _buildImportanceSelector(StateSetter setState, int importanceLevel, Function(int) onLevelSelected) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('중요도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('중요도 (필수):'),
+              Row(
+                children: List.generate(3, (index) {
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        onLevelSelected(index + 1);
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: importanceLevel == index + 1 ? Colors.blue.shade300 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: importanceLevel == index + 1 ? Colors.white : Colors.black87,
+                          fontWeight: importanceLevel == index + 1 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 마감일 임박도 선택기 메서드
+  Widget _buildUrgencySelector(StateSetter setState, int urgencyLevel, Function(int) onLevelSelected) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('마감일 임박도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('임박도 (필수):'),
+              Row(
+                children: List.generate(3, (index) {
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        onLevelSelected(index + 1);
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: urgencyLevel == index + 1 ? Colors.red.shade300 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: urgencyLevel == index + 1 ? Colors.white : Colors.black87,
+                          fontWeight: urgencyLevel == index + 1 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 스위치 행 생성 메서드
+  Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) {
+    return Container(
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade300))),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: Colors.purple.shade300,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // SnackBar 표시 메서드
+  void _showSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // DateTime을 String 키로 변환하는 메서드 추가
