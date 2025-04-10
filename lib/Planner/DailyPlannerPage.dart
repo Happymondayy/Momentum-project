@@ -141,7 +141,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(),
+      bottomNavigationBar: BottomNav(initialIndex: 1),
     );
   }
 
