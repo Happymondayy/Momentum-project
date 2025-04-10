@@ -39,7 +39,11 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue, // 기본 테마 색상
         fontFamily: 'NotoSansKR', // 폰트 설정
       ),
+<<<<<<< HEAD
+      home: LoginPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+=======
       home: CalendarScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+>>>>>>> dd51211660622b7e6f62f7b71ce6bfc4df788256
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
     );
   }
