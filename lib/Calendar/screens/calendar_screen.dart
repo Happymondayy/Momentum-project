@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:momentum_planner/bottom_nav.dart';
 
 import '../models/event.dart';
 import '../models/todo_item.dart';
@@ -12,7 +13,7 @@ import '../widgets/header.dart';
 import '../widgets/section_header.dart';
 import '../widgets/event_card.dart';
 import '../widgets/todo_card.dart';
-import '../widgets/footer.dart';
+
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -98,8 +99,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
           title: data['title'],
           date: date, // date 속성 추가
           time: time, // time을 선택적 인자로 전달
-          memo: data['memo'],
+          memo: data['memo'] ?? '',
+          location: data['location'] ?? '',
           isRepeating: data['isRepeating'] ?? false,
+          repeatOption: data['repeatOption'],
+          repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+          repeatCustomDays: data['repeatCustomDays'],
+          reminder: data['reminder'],
           isCompleted: data['isCompleted'] ?? false,
         );
 
@@ -123,8 +129,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<TodoItem> _getTodosForDay(DateTime day) {
+    print("선택된 날짜: ${day.toString()}");
+
     final key = DateTime(day.year, day.month, day.day);
-    return _todoItems[key] ?? [];
+    final todos = _todoItems[key] ?? [];
+
+    print("해당 날짜의 할 일 개수: ${todos.length}");
+    return todos;
   }
 
   // In CalendarScreen class
@@ -158,20 +169,41 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _addTodo(TodoItem todoitem) async {
+    try {
+      final timeMap = todoitem.time != null ? {
+        'hour': todoitem.time!.hour,
+        'minute': todoitem.time!.minute,
+      } : null;
 
-    await FirebaseFirestore.instance.collection('todos').add({
-      'title': todoitem.title,
-      'dateTime': todoitem.date,
-      'time': todoitem.time,
-      'memo': todoitem.memo,
-      'location': todoitem.location,
-      'isRepeating': todoitem.isRepeating,
-      'repeatOption': todoitem.repeatOption,
-      'repeatDays': todoitem.repeatDays,
-      'repeatCustomDays': todoitem.repeatCustomDays,
-      'reminder': todoitem.reminder,
-    });
+      await FirebaseFirestore.instance.collection('todos').add({
+        'title': todoitem.title,
+        'date': todoitem.date.toIso8601String(),
+        'time': timeMap,
+        'memo': todoitem.memo,
+        'location': todoitem.location ?? '',
+        'isRepeating': todoitem.isRepeating,
+        'repeatOption': todoitem.repeatOption,
+        'repeatDays': todoitem.repeatDays,
+        'repeatCustomDays': todoitem.repeatCustomDays,
+        'reminder': todoitem.reminder,
+        'isCompleted': false,
+      });
+
+      setState(() {
+        final key = DateTime(
+            todoitem.date.year, todoitem.date.month, todoitem.date.day);
+        if (_todoItems[key] != null) {
+          _todoItems[key]!.add(todoitem);
+        } else {
+          _todoItems[key] = [todoitem];
+        }
+      });
+    } catch (e) {
+      print("Error adding todo: $e");
+    }
   }
+
+
 
   void _showAddEventDialog() {
     showDialog(
@@ -224,12 +256,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       // 푸터는 하단에 고정
-      bottomNavigationBar: Footer(
-        onCalendarPressed: () {},
-        onListPressed: () {},
-        onEditPressed: () {},
-        onChatPressed: () {},
-      ),
+      bottomNavigationBar: BottomNav(),
     );
   }
 
@@ -449,9 +476,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
             final todo = todos[index];
             return TodoCard(
               todo: todo,
-              onStatusChanged: (value) {
+              onStatusChanged: (dynamic value) {
+                bool newStatus;
+
+                if (value is bool) {
+                  newStatus = value;
+                } else {
+                  // value가 bool이 아닌 경우 현재 상태를 반전
+                  newStatus = !todo.isCompleted;
+                }
+
+                // Firestore 업데이트
                 FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
-                  'isCompleted': value,
+                  'isCompleted': newStatus,
+                });
+
+                // 로컬 상태 업데이트
+                setState(() {
+                  todo.isCompleted = newStatus;
                 });
               },
               onMorePressed: () {

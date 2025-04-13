@@ -5,23 +5,16 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey[200]!),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: const [
-          Text('📅', style: TextStyle(fontSize: 24, color: Colors.grey)),
-          Text('📋', style: TextStyle(fontSize: 24, color: Colors.grey)),
-          Text('✏️', style: TextStyle(fontSize: 24, color: Colors.grey)),
-          Text('💬', style: TextStyle(fontSize: 24, color: Colors.grey)),
-        ],
-      ),
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: const Color(0xFF9D8CFF),
+      unselectedItemColor: Colors.grey.shade400,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
+        BottomNavigationBarItem(icon: Icon(Icons.view_list), label: 'Tasks'),
+        BottomNavigationBarItem(icon: Icon(Icons.article_outlined), label: 'Articles'),
+        BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+      ],
     );
   }
 }

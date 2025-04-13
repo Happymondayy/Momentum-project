@@ -19,9 +19,11 @@ class TodoCard extends StatelessWidget {
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       elevation: 1,
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.grey.shade200,
-          child: Icon(Icons.check_circle_outline, color: Colors.grey),
+        leading: Checkbox(
+          value: todo.isCompleted,
+          onChanged: (value) {
+            onStatusChanged(value!);
+          },
         ),
         title: Text(
           todo.title,
@@ -32,18 +34,9 @@ class TodoCard extends StatelessWidget {
         subtitle: todo.time != null
             ? Text('${todo.time!.hour.toString().padLeft(2, '0')}:${todo.time!.minute.toString().padLeft(2, '0')}')
             : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: todo.isCompleted,
-              onChanged: onStatusChanged,
-            ),
-            IconButton(
-              icon: Icon(Icons.more_vert),
-              onPressed: onMorePressed,
-            ),
-          ],
+        trailing: IconButton(
+          icon: Icon(Icons.more_vert),
+          onPressed: onMorePressed,
         ),
       ),
     );

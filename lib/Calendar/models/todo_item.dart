@@ -7,7 +7,7 @@ class TodoItem {
   final DateTime date;
   final TimeOfDay? time; // time을 선택적 인자로 변경
   final String memo;
-  final String location;
+  final String? location;
   final bool isRepeating;
   final String? repeatOption;
   final List<int>? repeatDays;
@@ -21,7 +21,7 @@ class TodoItem {
     required this.date,
     this.time, // 선택적 인자
     this.memo = '',
-    this.location = '',
+    this.location,
     this.isRepeating = false,
     this.repeatOption,
     this.repeatDays,
