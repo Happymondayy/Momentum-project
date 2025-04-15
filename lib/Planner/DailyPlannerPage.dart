@@ -1,9 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
-// Shared data service to manage tasks and their state
 class TaskDataService {
   static final TaskDataService _instance = TaskDataService._internal();
 
@@ -13,10 +14,16 @@ class TaskDataService {
 
   TaskDataService._internal();
 
-  // Using Todo_Task from todo_list_screen.dart for consistency
   final Map<String, List<Todo_Task>> tasksByDate = {};
 
+  // 날짜를 정규화하는 메서드 추가 (시간 정보 제거)
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
   String dateToKey(DateTime date) {
+    // 날짜 정규화 후 키 생성
+    date = _normalizeDate(date);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
@@ -26,6 +33,7 @@ class TaskDataService {
   }
 
   void addTask(Todo_Task task) {
+    // 태스크의 날짜로부터 키 생성
     final dateKey = dateToKey(task.date);
     if (tasksByDate.containsKey(dateKey)) {
       tasksByDate[dateKey]!.add(task);
@@ -91,7 +99,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         child: Column(
           children: [
             // Calendar (Month selector)
-            MonthSelector(
+            ImprovedMonthSelector(
               selectedDate: selectedDate,
               onMonthChanged: (newDate) {
                 setState(() {
@@ -355,11 +363,11 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   void _generateAIPlanner() {
-    // Demo data generation - 현재 선택된 날짜에만 일정 추가
+    // Generate tasks only for the selected date
     final generatedTasks = [
       Todo_Task(
         title: "아침 운동",
-        date: selectedDate, // 현재 선택된 날짜에만 추가
+        date: selectedDate,
         time: "07:00",
         importance: 2,
         urgency: 1,
@@ -368,7 +376,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       ),
       Todo_Task(
         title: "팀 미팅",
-        date: selectedDate, // 현재 선택된 날짜에만 추가
+        date: selectedDate,
         time: "10:00",
         importance: 3,
         urgency: 2,
@@ -389,7 +397,84 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 }
 
-// 개선된 주간 캘린더 위젯 (스크롤 기능 추가)
+// 개선된 월 선택기 위젯 - 화살표로 이전/다음 달 이동
+class ImprovedMonthSelector extends StatelessWidget {
+  final DateTime selectedDate;
+  final Function(DateTime) onMonthChanged;
+
+  const ImprovedMonthSelector({
+    Key? key,
+    required this.selectedDate,
+    required this.onMonthChanged,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Previous month button
+          IconButton(
+            icon: const Icon(Icons.chevron_left, size: 28),
+            onPressed: () {
+              // Go to previous month
+              final newDate = DateTime(selectedDate.year, selectedDate.month - 1, selectedDate.day);
+              onMonthChanged(newDate);
+            },
+          ),
+
+          // Current month and year display
+          GestureDetector(
+            onTap: () => _showMonthYearPicker(context),
+            child: Text(
+              '${selectedDate.year}년 ${selectedDate.month}월',
+              style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87
+              ),
+            ),
+          ),
+
+          // Next month button
+          IconButton(
+            icon: const Icon(Icons.chevron_right, size: 28),
+            onPressed: () {
+              // Go to next month
+              final newDate = DateTime(selectedDate.year, selectedDate.month + 1, selectedDate.day);
+              onMonthChanged(newDate);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMonthYearPicker(BuildContext context) {
+    // Show month-year picker dialog
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          height: 300,
+          child: YearPicker(
+            selectedDate: selectedDate,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2030),
+            onChanged: (DateTime dateTime) {
+              onMonthChanged(dateTime);
+              Navigator.pop(context);
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// 개선된 주간 캘린더 위젯 (스크롤 기능 강화)
 class EnhancedWeeklyCalendar extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
@@ -409,19 +494,22 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   late int _currentPage;
   final int _totalWeeks = 100; // 충분히 많은 주를 표시
   late DateTime _baseDate;
+  late DateTime _currentStartDate;
 
   @override
   void initState() {
     super.initState();
-    _baseDate = DateTime.now().subtract(Duration(days: (_totalWeeks ~/ 2) * 7));
+    // Set base date to first day of current week, 50 weeks ago
+    _baseDate = _findFirstDayOfWeek(DateTime.now().subtract(Duration(days: 50 * 7)));
     _currentPage = _getPageForDate(widget.selectedDate);
     _pageController = PageController(initialPage: _currentPage);
+    _currentStartDate = _getStartDateForPage(_currentPage);
   }
 
   @override
   void didUpdateWidget(EnhancedWeeklyCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedDate != widget.selectedDate) {
+    if (!_isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
       final newPage = _getPageForDate(widget.selectedDate);
       if (newPage != _currentPage) {
         _currentPage = newPage;
@@ -430,18 +518,31 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+        _currentStartDate = _getStartDateForPage(_currentPage);
       }
     }
   }
 
-  int _getPageForDate(DateTime date) {
-    final daysSinceBase = date.difference(_baseDate).inDays;
-    return (daysSinceBase / 7).floor() + _totalWeeks ~/ 2;
+  // Find the first day (Monday) of the week containing the given date
+  DateTime _findFirstDayOfWeek(DateTime date) {
+    // Subtract weekday - 1 days to get to Monday (weekday 1)
+    return date.subtract(Duration(days: date.weekday - 1));
   }
 
-  DateTime _getDateForPage(int page) {
-    final weekOffset = page - _totalWeeks ~/ 2;
-    return _baseDate.add(Duration(days: weekOffset * 7));
+  // Get the page number for a given date
+  int _getPageForDate(DateTime date) {
+    final firstDayOfWeek = _findFirstDayOfWeek(date);
+    final diffDays = firstDayOfWeek.difference(_baseDate).inDays;
+    return (diffDays / 7).round();
+  }
+
+  // Get the start date for a given page
+  DateTime _getStartDateForPage(int page) {
+    return _baseDate.add(Duration(days: page * 7));
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   @override
@@ -453,10 +554,11 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
         onPageChanged: (int page) {
           setState(() {
             _currentPage = page;
+            _currentStartDate = _getStartDateForPage(page);
           });
         },
         itemBuilder: (context, index) {
-          final weekStart = _getDateForPage(index);
+          final weekStart = _getStartDateForPage(index);
           return _buildWeek(weekStart);
         },
         itemCount: _totalWeeks,
@@ -496,6 +598,7 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
           children: List.generate(7, (index) {
             final currentDate = weekStart.add(Duration(days: index));
             final isSelected = _isSameDay(currentDate, widget.selectedDate);
+            final isToday = _isSameDay(currentDate, DateTime.now());
 
             return GestureDetector(
               onTap: () => widget.onDateSelected(currentDate),
@@ -507,6 +610,11 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
                   shape: BoxShape.circle,
                   color: Colors.purple.withOpacity(0.2),
                 )
+                    : isToday
+                    ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.purple, width: 1),
+                )
                     : null,
                 child: Center(
                   child: Text(
@@ -517,7 +625,7 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
                           : (currentDate.weekday >= 6
                           ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
                           : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -531,27 +639,15 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
 
   String _getWeekdayString(int weekday) {
     switch (weekday) {
-      case 1:
-        return '월';
-      case 2:
-        return '화';
-      case 3:
-        return '수';
-      case 4:
-        return '목';
-      case 5:
-        return '금';
-      case 6:
-        return '토';
-      case 7:
-        return '일';
-      default:
-        return '';
+      case 1: return '월';
+      case 2: return '화';
+      case 3: return '수';
+      case 4: return '목';
+      case 5: return '금';
+      case 6: return '토';
+      case 7: return '일';
+      default: return '';
     }
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   @override
@@ -559,4 +655,27 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
     _pageController.dispose();
     super.dispose();
   }
+}
+
+// 랜덤한 밝은 파스텔 색상 생성
+Color getBrightPastelColor() {
+  final Random random = Random();
+  final List<Color> brightPastelColors = [
+    const Color(0xFFFFE6E6),
+    const Color(0xFFFFEDCC),
+    const Color(0xFFFFFFCC),
+    const Color(0xFFE6FFCC),
+    const Color(0xFFCCFFE1),
+    const Color(0xFFCCFFFF),
+    const Color(0xFFCCE6FF),
+    const Color(0xFFE6CCFF),
+    const Color(0xFFFDD5DF),
+    const Color(0xFFFFDAB9),
+    const Color(0xFFE0F7FA),
+    const Color(0xFFF1F8E9),
+    const Color(0xFFFCE4EC),
+    const Color(0xFFF3E5F5),
+    const Color(0xFFE8F5E9),
+  ];
+  return brightPastelColors[random.nextInt(brightPastelColors.length)];
 }

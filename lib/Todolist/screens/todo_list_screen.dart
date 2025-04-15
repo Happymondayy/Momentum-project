@@ -499,72 +499,99 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   Widget _buildTaskItem(Todo_Task task) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: getBrightPastelColor(),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  if (task.time != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      task.time!,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  ],
-                  if (task.location != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          task.location!,
-                          style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+    return GestureDetector(
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('삭제 확인'),
+            content: const Text('이 일정을 삭제하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
               ),
-            ),
-            Transform.scale(
-              scale: 1.2,
-              child: Checkbox(
-                value: task.isCompleted,
-                onChanged: (bool? value) {
+              TextButton(
+                onPressed: () {
                   setState(() {
-                    task.isCompleted = value ?? false;
+                    _taskDataService.removeTask(task);
                     calculateProgress();
-
-                    if (widget.onTaskStatusChanged != null) {
-                      widget.onTaskStatusChanged!();
-                    }
                   });
+                  Navigator.pop(context);
                 },
+                child: const Text('삭제', style: TextStyle(color: Colors.red)),
               ),
+            ],
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: getBrightPastelColor(),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    if (task.time != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        task.time!,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                    if (task.location != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            task.location!,
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Transform.scale(
+                scale: 1.2,
+                child: Checkbox(
+                  value: task.isCompleted,
+                  onChanged: (bool? value) {
+                    setState(() {
+                      task.isCompleted = value ?? false;
+                      calculateProgress();
+
+                      if (widget.onTaskStatusChanged != null) {
+                        widget.onTaskStatusChanged!();
+                      }
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

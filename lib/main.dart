@@ -4,8 +4,10 @@ import 'Login/login_page.dart'; // LoginPage를 import
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'Planner_Todo/Planner_page.dart';
 import 'firebase_options.dart'; // Firebase 설정 파일 import
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
+import 'package:momentum_planner/Planner_Todo/task_todo.dart';
 
 
 void main() async {
