@@ -1,10 +1,11 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
+
+// TaskDataService 클래스
 class TaskDataService {
   static final TaskDataService _instance = TaskDataService._internal();
 
@@ -14,46 +15,88 @@ class TaskDataService {
 
   TaskDataService._internal();
 
-  final Map<String, List<Todo_Task>> tasksByDate = {};
+  // Todo List와 Planner 데이터를 분리하여 저장
+  final Map<String, List<Todo_Task>> todoTasksByDate = {};
+  final Map<String, List<Todo_Task>> plannerTasksByDate = {};
 
-  // 날짜를 정규화하는 메서드 추가 (시간 정보 제거)
   DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
 
   String dateToKey(DateTime date) {
-    // 날짜 정규화 후 키 생성
     date = _normalizeDate(date);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  List<Todo_Task> getTasksForDate(DateTime date) {
+  // Todo List용 메서드
+  List<Todo_Task> getTodoTasksForDate(DateTime date) {
     final dateKey = dateToKey(date);
-    return tasksByDate[dateKey] ?? [];
+    return todoTasksByDate[dateKey] ?? [];
   }
 
-  void addTask(Todo_Task task) {
-    // 태스크의 날짜로부터 키 생성
+  void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
-    if (tasksByDate.containsKey(dateKey)) {
-      tasksByDate[dateKey]!.add(task);
+    if (todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey]!.add(task);
     } else {
-      tasksByDate[dateKey] = [task];
+      todoTasksByDate[dateKey] = [task];
     }
   }
 
-  double calculateProgressForDate(DateTime date) {
-    final tasks = getTasksForDate(date);
-    if (tasks.isEmpty) {
-      return 0.0;
+  // Planner용 메서드
+  List<Todo_Task> getPlannerTasksForDate(DateTime date) {
+    final dateKey = dateToKey(date);
+    return plannerTasksByDate[dateKey] ?? [];
+  }
+
+  void addPlannerTask(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      plannerTasksByDate[dateKey]!.add(task);
+    } else {
+      plannerTasksByDate[dateKey] = [task];
+    }
+  }
+
+  // 진행률 계산 (Todo List와 Planner 각각에 대해)
+  double calculateCombinedProgressForDate(DateTime date) {
+    final todoTasks = getTodoTasksForDate(date);
+    final plannerTasks = getPlannerTasksForDate(date);
+
+    final totalTasks = todoTasks.length + plannerTasks.length;
+    if (totalTasks == 0) return 0.0;
+
+    final completedTasks = todoTasks.where((task) => task.isCompleted).length +
+        plannerTasks.where((task) => task.isCompleted).length;
+
+    return (completedTasks / totalTasks) * 100;
+  }
+
+  // 태스크 상태 변경 시 동기화를 위한 메서드
+  void updateTaskStatus(Todo_Task task, bool isCompleted) {
+    final dateKey = dateToKey(task.date);
+
+    // Todo List에서 해당 태스크 찾아 업데이트
+    if (todoTasksByDate.containsKey(dateKey)) {
+      final todoTask = todoTasksByDate[dateKey]!
+          .firstWhere((t) => t.title == task.title, orElse: () => null);
+      if (todoTask != null) {
+        todoTask.isCompleted = isCompleted;
+      }
     }
 
-    int completedTasks = tasks.where((task) => task.isCompleted).length;
-    return (completedTasks / tasks.length) * 100;
+    // Planner에서 해당 태스크 찾아 업데이트
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      final plannerTask = plannerTasksByDate[dateKey]!
+          .firstWhere((t) => t.title == task.title, orElse: () => null);
+      if (plannerTask != null) {
+        plannerTask.isCompleted = isCompleted;
+      }
+    }
   }
 }
 
-// DailyPlannerPage class definition
+// DailyPlannerPage 클래스
 class DailyPlannerPage extends StatefulWidget {
   const DailyPlannerPage({Key? key}) : super(key: key);
 
@@ -76,7 +119,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   void updateProgress() {
     setState(() {
-      progressPercentage = _taskDataService.calculateProgressForDate(selectedDate);
+      progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
   }
 
@@ -119,7 +162,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ProgressScreen(
-                tasks: _taskDataService.getTasksForDate(selectedDate),
+                tasks: isPlannerView
+                    ? _taskDataService.getPlannerTasksForDate(selectedDate)
+                    : _taskDataService.getTodoTasksForDate(selectedDate),
                 progressPercentage: progressPercentage,
               ),
             ),
@@ -130,7 +175,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             // Content area
             Expanded(
               child: isPlannerView
-                  ? (_taskDataService.getTasksForDate(selectedDate).isEmpty
+                  ? (_taskDataService.getPlannerTasksForDate(selectedDate).isEmpty
                   ? const EmptyStateWidget()
                   : _buildPlannerView())
                   : TodoListScreen(
@@ -188,7 +233,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   Widget _buildPlannerView() {
-    final tasks = _taskDataService.getTasksForDate(selectedDate);
+    final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -251,7 +296,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                                 value: task.isCompleted,
                                 onChanged: (bool? value) {
                                   setState(() {
-                                    task.isCompleted = value ?? false;
+                                    _taskDataService.updateTaskStatus(task, value ?? false);
                                     updateProgress();
                                   });
                                 },
@@ -362,6 +407,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     });
   }
 
+  // Todo_Task 객체 생성 시 필수 매개변수 추가
   void _generateAIPlanner() {
     // Generate tasks only for the selected date
     final generatedTasks = [
@@ -369,25 +415,27 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         title: "아침 운동",
         date: selectedDate,
         time: "07:00",
-        importance: 2,
-        urgency: 1,
-        isImportant: false,
-        isUrgent: false,
+        isCompleted: false,
+        isImportant: true, // 중요도 설정
+        isUrgent: false, // 긴급도 설정
+        importance: 5, // 중요도 레벨 설정
+        urgency: 1, // 긴급도 레벨 설정
       ),
       Todo_Task(
         title: "팀 미팅",
         date: selectedDate,
         time: "10:00",
-        importance: 3,
-        urgency: 2,
+        isCompleted: false,
         isImportant: true,
-        isUrgent: false,
+        isUrgent: true,
+        importance: 4,
+        urgency: 5,
       ),
     ];
 
     // Add generated tasks to data service
     for (var task in generatedTasks) {
-      _taskDataService.addTask(task);
+      _taskDataService.addPlannerTask(task);
     }
 
     // Update UI

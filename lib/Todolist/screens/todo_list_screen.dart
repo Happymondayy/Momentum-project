@@ -297,7 +297,7 @@ class _WeeklyCalendarState extends State<WeeklyCalendar> {
                 currentDate.month == widget.selectedDate.month &&
                 currentDate.day == widget.selectedDate.day;
 
-            final hasTasks = tasksDataService.getTasksForDate(currentDate).isNotEmpty;
+            final hasTasks = tasksDataService.getTodoTasksForDate(currentDate).isNotEmpty;
 
             return Column(
               children: [
