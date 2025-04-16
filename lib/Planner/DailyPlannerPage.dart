@@ -28,18 +28,33 @@ class TaskDataService {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  // Todo List용 메서드
-  List<Todo_Task> getTodoTasksForDate(DateTime date) {
-    final dateKey = dateToKey(date);
-    return todoTasksByDate[dateKey] ?? [];
+  // 날짜 비교 메서드
+  bool isSameDate(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
+// Todo List 조회 메서드
+  List<Todo_Task> getTodoTasksForDate(DateTime date) {
+    final dateKey = dateToKey(date);
+    // dateKey로 찾은 목록에서 날짜가 정확히 일치하는 항목만 필터링
+    return todoTasksByDate[dateKey]?.where((task) =>
+        isSameDate(task.date, date)).toList() ?? [];
+  }
+
+// Todo List 추가 메서드
   void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
-    if (todoTasksByDate.containsKey(dateKey)) {
+    if (!todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey] = [];
+    }
+
+    // 중복 체크 후 추가
+    if (!todoTasksByDate[dateKey]!.any((existingTask) =>
+    isSameDate(existingTask.date, task.date) &&
+        existingTask.title == task.title)) {
       todoTasksByDate[dateKey]!.add(task);
-    } else {
-      todoTasksByDate[dateKey] = [task];
     }
   }
 
@@ -79,7 +94,7 @@ class TaskDataService {
     // Todo List에서 해당 태스크 찾아 업데이트
     if (todoTasksByDate.containsKey(dateKey)) {
       final todoTask = todoTasksByDate[dateKey]!
-          .firstWhere((t) => t.title == task.title, orElse: () => null);
+          .firstWhere((t) => t.title == task.title, orElse: () => null as Todo_Task);
       if (todoTask != null) {
         todoTask.isCompleted = isCompleted;
       }
@@ -88,7 +103,7 @@ class TaskDataService {
     // Planner에서 해당 태스크 찾아 업데이트
     if (plannerTasksByDate.containsKey(dateKey)) {
       final plannerTask = plannerTasksByDate[dateKey]!
-          .firstWhere((t) => t.title == task.title, orElse: () => null);
+          .firstWhere((t) => t.title == task.title, orElse: () => null as Todo_Task);
       if (plannerTask != null) {
         plannerTask.isCompleted = isCompleted;
       }
@@ -172,13 +187,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             // Header with toggle
             _buildHeaderWithToggle(),
 
-            // Content area
             Expanded(
               child: isPlannerView
                   ? (_taskDataService.getPlannerTasksForDate(selectedDate).isEmpty
                   ? const EmptyStateWidget()
                   : _buildPlannerView())
                   : TodoListScreen(
+                key: ValueKey(selectedDate),
                 isEmbedded: true,
                 initialDate: selectedDate,
                 onStateCreated: (state) {

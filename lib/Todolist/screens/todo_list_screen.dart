@@ -380,7 +380,7 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   List<Todo_Task> getTasksForSelectedDate() {
-    return _taskDataService.getTasksForDate(selectedDate);
+    return _taskDataService.getTodoTasksForDate(selectedDate);
   }
 
   void changeSelectedDate(DateTime date) {
@@ -392,7 +392,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
   void calculateProgress() {
     setState(() {
-      progressPercentage = _taskDataService.calculateProgressForDate(selectedDate);
+      progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
   }
 
@@ -747,6 +747,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         return;
                                       }
 
+                                      // timeOfDay를 문자열로 변환
+                                      final String formattedTime = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+
+
                                       final newTask = Todo_Task(
                                         title: titleController.text,
                                         date: taskDate,
@@ -757,9 +761,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         location: locationController.text,
                                         importance: importanceLevel,
                                         urgency: urgencyLevel,
+                                        isCompleted: false,
                                       );
 
-                                      _taskDataService.addTask(newTask);
+                                      _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
                                       setState(() {
                                         selectedDate = taskDate;
@@ -772,6 +777,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                                       _showSnackBar(context, '일정이 저장되었습니다');
                                     },
+
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF9575CD),
                                       foregroundColor: Colors.white,
