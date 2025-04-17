@@ -73,6 +73,21 @@ class TaskDataService {
     }
   }
 
+  void removeTask(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+
+    // Todo에서 제거
+    if (todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
+    }
+
+    // Planner에서 제거 (플래너에서도 삭제될 수 있도록)
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      plannerTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
+    }
+  }
+
+
   // 진행률 계산 (Todo List와 Planner 각각에 대해)
   double calculateCombinedProgressForDate(DateTime date) {
     final todoTasks = getTodoTasksForDate(date);
@@ -87,28 +102,32 @@ class TaskDataService {
     return (completedTasks / totalTasks) * 100;
   }
 
-  // 태스크 상태 변경 시 동기화를 위한 메서드
   void updateTaskStatus(Todo_Task task, bool isCompleted) {
     final dateKey = dateToKey(task.date);
 
     // Todo List에서 해당 태스크 찾아 업데이트
     if (todoTasksByDate.containsKey(dateKey)) {
-      final todoTask = todoTasksByDate[dateKey]!
-          .firstWhere((t) => t.title == task.title, orElse: () => null as Todo_Task);
-      if (todoTask != null) {
+      try {
+        final todoTask = todoTasksByDate[dateKey]!
+            .firstWhere((t) => t.title == task.title);
         todoTask.isCompleted = isCompleted;
+      } catch (e) {
+        // 태스크를 못 찾은 경우 무시
       }
     }
 
     // Planner에서 해당 태스크 찾아 업데이트
     if (plannerTasksByDate.containsKey(dateKey)) {
-      final plannerTask = plannerTasksByDate[dateKey]!
-          .firstWhere((t) => t.title == task.title, orElse: () => null as Todo_Task);
-      if (plannerTask != null) {
+      try {
+        final plannerTask = plannerTasksByDate[dateKey]!
+            .firstWhere((t) => t.title == task.title);
         plannerTask.isCompleted = isCompleted;
+      } catch (e) {
+        // 태스크를 못 찾은 경우 무시
       }
     }
   }
+
 }
 
 // DailyPlannerPage 클래스

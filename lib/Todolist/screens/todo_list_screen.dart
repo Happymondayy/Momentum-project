@@ -499,103 +499,144 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   Widget _buildTaskItem(Todo_Task task) {
-    return GestureDetector(
-      onLongPress: () {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('삭제 확인'),
-            content: const Text('이 일정을 삭제하시겠습니까?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _taskDataService.removeTask(task);
-                    calculateProgress();
-                  });
-                  Navigator.pop(context);
-                },
-                child: const Text('삭제', style: TextStyle(color: Colors.red)),
-              ),
-            ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: getBrightPastelColor(),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: getBrightPastelColor(),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      task.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    if (task.time != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        task.time!,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 제목 + 이모지 + 체크박스 + 삭제 아이콘
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          task.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                      const SizedBox(width: 8),
+                      if (task.isImportant) const Text('🔔'),
+                      if (task.isUrgent) const Text('🔁'),
                     ],
-                    if (task.location != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Text(
-                            task.location!,
-                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ),
+                Transform.scale(
+                  scale: 1.2,
+                  child: Checkbox(
+                    value: task.isCompleted,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        task.isCompleted = value ?? false;
+                        calculateProgress();
+                        if (widget.onTaskStatusChanged != null) {
+                          widget.onTaskStatusChanged!();
+                        }
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('삭제 확인'),
+                        content: const Text('이 일정을 삭제하시겠습니까?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _taskDataService.removeTask(task);
+                                calculateProgress();
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text('삭제', style: TextStyle(color: Colors.red)),
                           ),
                         ],
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              Transform.scale(
-                scale: 1.2,
-                child: Checkbox(
-                  value: task.isCompleted,
-                  onChanged: (bool? value) {
-                    setState(() {
-                      task.isCompleted = value ?? false;
-                      calculateProgress();
-
-                      if (widget.onTaskStatusChanged != null) {
-                        widget.onTaskStatusChanged!();
-                      }
-                    });
+                    );
                   },
+                  child: const Icon(Icons.delete, color: Colors.redAccent, size: 24),
                 ),
+              ],
+            ),
+
+            // 시간
+            if (task.time != null && task.time!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                task.time!,
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
               ),
             ],
-          ),
+
+            // 위치
+            if (task.location != null && task.location!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    task.location!,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+
+            // 메모
+            if (task.memo != null && task.memo!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.notes, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      task.memo!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
+
 
   Widget _buildEmptyState(String message) {
     return Container(
