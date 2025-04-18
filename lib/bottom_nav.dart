@@ -58,8 +58,17 @@ class _BottomNavState extends State<BottomNav> {
         );
         break;
       case 2: // Diary
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('준비 중인 기능입니다'))
+        Navigator.pushReplacementNamed(
+            context,
+            'Diary/main_diary',
+            // 빠른 페이지 전환을 위한 트랜지션 설정
+            arguments: PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => DailyPlannerPage(),
+              transitionDuration: Duration(milliseconds: 150),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+            )
         );
         break;
       case 3: // Community
@@ -73,8 +82,9 @@ class _BottomNavState extends State<BottomNav> {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
+      backgroundColor: Colors.grey.shade100,
       type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFF9D8CFF),
+      selectedItemColor: const Color(0xFF5E4DAE),
       unselectedItemColor: Colors.grey.shade400,
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,
