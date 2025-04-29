@@ -228,6 +228,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+    backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
@@ -256,7 +257,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       // 푸터는 하단에 고정
-      bottomNavigationBar: BottomNav(),
+      bottomNavigationBar: BottomNav(initialIndex: 0),
     );
   }
 
