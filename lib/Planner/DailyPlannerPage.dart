@@ -1,9 +1,12 @@
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
-// Shared data service to manage tasks and their state
+
+// TaskDataService 클래스
 class TaskDataService {
   static final TaskDataService _instance = TaskDataService._internal();
 
@@ -13,39 +16,122 @@ class TaskDataService {
 
   TaskDataService._internal();
 
-  // Using Todo_Task from todo_list_screen.dart for consistency
-  final Map<String, List<Todo_Task>> tasksByDate = {};
+  // Todo List와 Planner 데이터를 분리하여 저장
+  final Map<String, List<Todo_Task>> todoTasksByDate = {};
+  final Map<String, List<Todo_Task>> plannerTasksByDate = {};
+
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
 
   String dateToKey(DateTime date) {
+    date = _normalizeDate(date);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  List<Todo_Task> getTasksForDate(DateTime date) {
+  // 날짜 비교 메서드
+  bool isSameDate(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+// Todo List 조회 메서드
+  List<Todo_Task> getTodoTasksForDate(DateTime date) {
     final dateKey = dateToKey(date);
-    return tasksByDate[dateKey] ?? [];
+    // dateKey로 찾은 목록에서 날짜가 정확히 일치하는 항목만 필터링
+    return todoTasksByDate[dateKey]?.where((task) =>
+        isSameDate(task.date, date)).toList() ?? [];
   }
 
-  void addTask(Todo_Task task) {
+// Todo List 추가 메서드
+  void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
-    if (tasksByDate.containsKey(dateKey)) {
-      tasksByDate[dateKey]!.add(task);
+    if (!todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey] = [];
+    }
+
+    // 중복 체크 후 추가
+    if (!todoTasksByDate[dateKey]!.any((existingTask) =>
+    isSameDate(existingTask.date, task.date) &&
+        existingTask.title == task.title)) {
+      todoTasksByDate[dateKey]!.add(task);
+    }
+  }
+
+  // Planner용 메서드
+  List<Todo_Task> getPlannerTasksForDate(DateTime date) {
+    final dateKey = dateToKey(date);
+    return plannerTasksByDate[dateKey] ?? [];
+  }
+
+  void addPlannerTask(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      plannerTasksByDate[dateKey]!.add(task);
     } else {
-      tasksByDate[dateKey] = [task];
+      plannerTasksByDate[dateKey] = [task];
     }
   }
 
-  double calculateProgressForDate(DateTime date) {
-    final tasks = getTasksForDate(date);
-    if (tasks.isEmpty) {
-      return 0.0;
+  void removeTask(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+
+    // Todo에서 제거
+    if (todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
     }
 
-    int completedTasks = tasks.where((task) => task.isCompleted).length;
-    return (completedTasks / tasks.length) * 100;
+    // Planner에서 제거 (플래너에서도 삭제될 수 있도록)
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      plannerTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
+    }
   }
+
+
+  // 진행률 계산 (Todo List와 Planner 각각에 대해)
+  double calculateCombinedProgressForDate(DateTime date) {
+    final todoTasks = getTodoTasksForDate(date);
+    final plannerTasks = getPlannerTasksForDate(date);
+
+    final totalTasks = todoTasks.length + plannerTasks.length;
+    if (totalTasks == 0) return 0.0;
+
+    final completedTasks = todoTasks.where((task) => task.isCompleted).length +
+        plannerTasks.where((task) => task.isCompleted).length;
+
+    return (completedTasks / totalTasks) * 100;
+  }
+
+  void updateTaskStatus(Todo_Task task, bool isCompleted) {
+    final dateKey = dateToKey(task.date);
+
+    // Todo List에서 해당 태스크 찾아 업데이트
+    if (todoTasksByDate.containsKey(dateKey)) {
+      try {
+        final todoTask = todoTasksByDate[dateKey]!
+            .firstWhere((t) => t.title == task.title);
+        todoTask.isCompleted = isCompleted;
+      } catch (e) {
+        // 태스크를 못 찾은 경우 무시
+      }
+    }
+
+    // Planner에서 해당 태스크 찾아 업데이트
+    if (plannerTasksByDate.containsKey(dateKey)) {
+      try {
+        final plannerTask = plannerTasksByDate[dateKey]!
+            .firstWhere((t) => t.title == task.title);
+        plannerTask.isCompleted = isCompleted;
+      } catch (e) {
+        // 태스크를 못 찾은 경우 무시
+      }
+    }
+  }
+
 }
 
-// DailyPlannerPage class definition
+// DailyPlannerPage 클래스
 class DailyPlannerPage extends StatefulWidget {
   const DailyPlannerPage({Key? key}) : super(key: key);
 
@@ -68,7 +154,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   void updateProgress() {
     setState(() {
-      progressPercentage = _taskDataService.calculateProgressForDate(selectedDate);
+      progressPercentage =
+          _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
   }
 
@@ -91,7 +178,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         child: Column(
           children: [
             // Calendar (Month selector)
-            MonthSelector(
+            ImprovedMonthSelector(
               selectedDate: selectedDate,
               onMonthChanged: (newDate) {
                 setState(() {
@@ -111,7 +198,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ProgressScreen(
-                tasks: _taskDataService.getTasksForDate(selectedDate),
+                tasks: isPlannerView
+                    ? _taskDataService.getPlannerTasksForDate(selectedDate)
+                    : _taskDataService.getTodoTasksForDate(selectedDate),
                 progressPercentage: progressPercentage,
               ),
             ),
@@ -119,13 +208,15 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             // Header with toggle
             _buildHeaderWithToggle(),
 
-            // Content area
             Expanded(
               child: isPlannerView
-                  ? (_taskDataService.getTasksForDate(selectedDate).isEmpty
+                  ? (_taskDataService
+                  .getPlannerTasksForDate(selectedDate)
+                  .isEmpty
                   ? const EmptyStateWidget()
                   : _buildPlannerView())
                   : TodoListScreen(
+                key: ValueKey(selectedDate),
                 isEmbedded: true,
                 initialDate: selectedDate,
                 onStateCreated: (state) {
@@ -141,7 +232,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(),
+      bottomNavigationBar: BottomNav(initialIndex: 1),
     );
   }
 
@@ -180,7 +271,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   Widget _buildPlannerView() {
-    final tasks = _taskDataService.getTasksForDate(selectedDate);
+    final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -243,7 +334,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                                 value: task.isCompleted,
                                 onChanged: (bool? value) {
                                   setState(() {
-                                    task.isCompleted = value ?? false;
+                                    _taskDataService.updateTaskStatus(
+                                        task, value ?? false);
                                     updateProgress();
                                   });
                                 },
@@ -261,11 +353,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             ),
                           ),
                         ],
-                        if (task.location != null && task.location!.isNotEmpty) ...[
+                        if (task.location != null &&
+                            task.location!.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                              Icon(Icons.location_on, size: 16,
+                                  color: Colors.grey[600]),
                               const SizedBox(width: 4),
                               Text(
                                 task.location!,
@@ -354,42 +448,231 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     });
   }
 
-  void _generateAIPlanner() {
-    // Demo data generation - 현재 선택된 날짜에만 일정 추가
-    final generatedTasks = [
-      Todo_Task(
-        title: "아침 운동",
-        date: selectedDate, // 현재 선택된 날짜에만 추가
-        time: "07:00",
-        importance: 2,
-        urgency: 1,
-        isImportant: false,
-        isUrgent: false,
-      ),
-      Todo_Task(
-        title: "팀 미팅",
-        date: selectedDate, // 현재 선택된 날짜에만 추가
-        time: "10:00",
-        importance: 3,
-        urgency: 2,
-        isImportant: true,
-        isUrgent: false,
-      ),
-    ];
+  void _generateAIPlanner() async {
+    final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
 
-    // Add generated tasks to data service
-    for (var task in generatedTasks) {
-      _taskDataService.addTask(task);
+    // Firebase에서 Calendar Event 가져오기
+    final eventsSnapshot = await FirebaseFirestore.instance.collection('events').get();
+    List<Todo_Task> calendarTasks = [];
+    List<Map<String, int>> occupiedTimes = []; // 예약된 시간 슬롯 저장
+
+    for (var doc in eventsSnapshot.docs) {
+      final data = doc.data();
+      final startDate = DateTime.parse(data['startDate']);
+
+      if (startDate.year == selectedDate.year &&
+          startDate.month == selectedDate.month &&
+          startDate.day == selectedDate.day) {
+        if (data['startTime'] != null) {
+          int hour = data['startTime']['hour'];
+          int minute = data['startTime']['minute'];
+          occupiedTimes.add({'hour': hour, 'minute': minute});
+        }
+
+        calendarTasks.add(
+          Todo_Task(
+            title: data['title'],
+            date: selectedDate,
+            time: data['startTime'] != null
+                ? '${data['startTime']['hour'].toString().padLeft(2, '0')}:${data['startTime']['minute'].toString().padLeft(2, '0')}'
+                : null,
+            isImportant: true,
+            isUrgent: false,
+            importance: 3,
+            urgency: 2,
+          ),
+        );
+      }
     }
 
-    // Update UI
+    final allTasks = [...todoTasks, ...calendarTasks];
+
+    if (allTasks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오늘 생성할 투두/일정이 없습니다!')),
+      );
+      return;
+    }
+
+    // 우선순위 정렬
+    allTasks.sort((a, b) {
+      int aScore = _calculatePriorityScore(a);
+      int bScore = _calculatePriorityScore(b);
+      return bScore.compareTo(aScore);
+    });
+
+    // 시간 슬롯 매핑 시작
+    int currentHour = 0;
+    int currentMinute = 0;
+
+    for (var task in allTasks) {
+      // 이미 시간이 있는 작업은 건너뛰기
+      if (task.time != null && task.time!.isNotEmpty) {
+        continue;
+      }
+
+      bool isUrgentTask = task.urgency >= 4;
+
+      while (currentHour < 24) {
+        // 현재 시간 슬롯이 비어있는지 확인
+        if (!_isSlotOccupied(currentHour, currentMinute, occupiedTimes)) {
+          // 슬롯 배정
+          task.time =
+          '${currentHour.toString().padLeft(2, '0')}:${currentMinute.toString().padLeft(2, '0')}';
+
+          // 예약된 시간 기록
+          occupiedTimes.add({'hour': currentHour, 'minute': currentMinute});
+
+          // 긴급한 작업은 30분 차지, 보통 작업은 1시간 차지
+          if (isUrgentTask) {
+            final nextTime = _advanceTime(currentHour, currentMinute, 30);
+            currentHour = nextTime['hour']!;
+            currentMinute = nextTime['minute']!;
+          } else {
+            final nextTime = _advanceTime(currentHour, currentMinute, 60);
+            currentHour = nextTime['hour']!;
+            currentMinute = nextTime['minute']!;
+          }
+          break;
+        } else {
+          // 슬롯이 차있으면 30분 후로 이동
+          final nextTime = _advanceTime(currentHour, currentMinute, 30);
+          currentHour = nextTime['hour']!;
+          currentMinute = nextTime['minute']!;
+        }
+      }
+
+      _taskDataService.addPlannerTask(task);
+    }
+
     setState(() {
       updateProgress();
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
+    );
+  }
+
+// 시간 전진 함수
+  Map<String, int> _advanceTime(int currentHour, int currentMinute, int minutes) {
+    currentMinute += minutes;
+    while (currentMinute >= 60) {
+      currentMinute -= 60;
+      currentHour += 1;
+    }
+    if (currentHour >= 24) {
+      currentHour = 0; // 24시간 넘으면 0으로
+    }
+    return {'hour': currentHour, 'minute': currentMinute};
+  }
+
+// 우선순위 점수 계산
+  int _calculatePriorityScore(Todo_Task task) {
+    int baseScore = (task.importance * 2) + (task.urgency * 2);
+
+    final now = DateTime.now();
+    final daysUntilDeadline = task.date
+        .difference(now)
+        .inDays;
+
+    if (daysUntilDeadline <= 1) {
+      baseScore += 5;
+    } else if (daysUntilDeadline <= 3) {
+      baseScore += 3;
+    } else if (daysUntilDeadline <= 7) {
+      baseScore += 1;
+    }
+
+    return baseScore;
+  }
+
+// 슬롯이 이미 예약됐는지 확인
+  bool _isSlotOccupied(int hour, int minute, List<Map<String, int>> occupied) {
+    return occupied.any((slot) =>
+    slot['hour'] == hour && slot['minute'] == minute);
+  }
+
+}
+
+// 개선된 월 선택기 위젯 - 화살표로 이전/다음 달 이동
+class ImprovedMonthSelector extends StatelessWidget {
+  final DateTime selectedDate;
+  final Function(DateTime) onMonthChanged;
+
+  const ImprovedMonthSelector({
+    Key? key,
+    required this.selectedDate,
+    required this.onMonthChanged,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Previous month button
+          IconButton(
+            icon: const Icon(Icons.chevron_left, size: 28),
+            onPressed: () {
+              // Go to previous month
+              final newDate = DateTime(selectedDate.year, selectedDate.month - 1, selectedDate.day);
+              onMonthChanged(newDate);
+            },
+          ),
+
+          // Current month and year display
+          GestureDetector(
+            onTap: () => _showMonthYearPicker(context),
+            child: Text(
+              '${selectedDate.year}년 ${selectedDate.month}월',
+              style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87
+              ),
+            ),
+          ),
+
+          // Next month button
+          IconButton(
+            icon: const Icon(Icons.chevron_right, size: 28),
+            onPressed: () {
+              // Go to next month
+              final newDate = DateTime(selectedDate.year, selectedDate.month + 1, selectedDate.day);
+              onMonthChanged(newDate);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMonthYearPicker(BuildContext context) {
+    // Show month-year picker dialog
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          height: 300,
+          child: YearPicker(
+            selectedDate: selectedDate,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2030),
+            onChanged: (DateTime dateTime) {
+              onMonthChanged(dateTime);
+              Navigator.pop(context);
+            },
+          ),
+        );
+      },
+    );
   }
 }
 
-// 개선된 주간 캘린더 위젯 (스크롤 기능 추가)
+// 개선된 주간 캘린더 위젯 (스크롤 기능 강화)
 class EnhancedWeeklyCalendar extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
@@ -409,19 +692,22 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   late int _currentPage;
   final int _totalWeeks = 100; // 충분히 많은 주를 표시
   late DateTime _baseDate;
+  late DateTime _currentStartDate;
 
   @override
   void initState() {
     super.initState();
-    _baseDate = DateTime.now().subtract(Duration(days: (_totalWeeks ~/ 2) * 7));
+    // Set base date to first day of current week, 50 weeks ago
+    _baseDate = _findFirstDayOfWeek(DateTime.now().subtract(Duration(days: 50 * 7)));
     _currentPage = _getPageForDate(widget.selectedDate);
     _pageController = PageController(initialPage: _currentPage);
+    _currentStartDate = _getStartDateForPage(_currentPage);
   }
 
   @override
   void didUpdateWidget(EnhancedWeeklyCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedDate != widget.selectedDate) {
+    if (!_isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
       final newPage = _getPageForDate(widget.selectedDate);
       if (newPage != _currentPage) {
         _currentPage = newPage;
@@ -430,18 +716,31 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+        _currentStartDate = _getStartDateForPage(_currentPage);
       }
     }
   }
 
-  int _getPageForDate(DateTime date) {
-    final daysSinceBase = date.difference(_baseDate).inDays;
-    return (daysSinceBase / 7).floor() + _totalWeeks ~/ 2;
+  // Find the first day (Monday) of the week containing the given date
+  DateTime _findFirstDayOfWeek(DateTime date) {
+    // Subtract weekday - 1 days to get to Monday (weekday 1)
+    return date.subtract(Duration(days: date.weekday - 1));
   }
 
-  DateTime _getDateForPage(int page) {
-    final weekOffset = page - _totalWeeks ~/ 2;
-    return _baseDate.add(Duration(days: weekOffset * 7));
+  // Get the page number for a given date
+  int _getPageForDate(DateTime date) {
+    final firstDayOfWeek = _findFirstDayOfWeek(date);
+    final diffDays = firstDayOfWeek.difference(_baseDate).inDays;
+    return (diffDays / 7).round();
+  }
+
+  // Get the start date for a given page
+  DateTime _getStartDateForPage(int page) {
+    return _baseDate.add(Duration(days: page * 7));
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   @override
@@ -453,10 +752,11 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
         onPageChanged: (int page) {
           setState(() {
             _currentPage = page;
+            _currentStartDate = _getStartDateForPage(page);
           });
         },
         itemBuilder: (context, index) {
-          final weekStart = _getDateForPage(index);
+          final weekStart = _getStartDateForPage(index);
           return _buildWeek(weekStart);
         },
         itemCount: _totalWeeks,
@@ -496,6 +796,7 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
           children: List.generate(7, (index) {
             final currentDate = weekStart.add(Duration(days: index));
             final isSelected = _isSameDay(currentDate, widget.selectedDate);
+            final isToday = _isSameDay(currentDate, DateTime.now());
 
             return GestureDetector(
               onTap: () => widget.onDateSelected(currentDate),
@@ -507,6 +808,11 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
                   shape: BoxShape.circle,
                   color: Colors.purple.withOpacity(0.2),
                 )
+                    : isToday
+                    ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.purple, width: 1),
+                )
                     : null,
                 child: Center(
                   child: Text(
@@ -517,7 +823,7 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
                           : (currentDate.weekday >= 6
                           ? (currentDate.weekday == 6 ? Colors.blue : Colors.red)
                           : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -531,27 +837,15 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
 
   String _getWeekdayString(int weekday) {
     switch (weekday) {
-      case 1:
-        return '월';
-      case 2:
-        return '화';
-      case 3:
-        return '수';
-      case 4:
-        return '목';
-      case 5:
-        return '금';
-      case 6:
-        return '토';
-      case 7:
-        return '일';
-      default:
-        return '';
+      case 1: return '월';
+      case 2: return '화';
+      case 3: return '수';
+      case 4: return '목';
+      case 5: return '금';
+      case 6: return '토';
+      case 7: return '일';
+      default: return '';
     }
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   @override
@@ -559,4 +853,27 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
     _pageController.dispose();
     super.dispose();
   }
+}
+
+// 랜덤한 밝은 파스텔 색상 생성
+Color getBrightPastelColor() {
+  final Random random = Random();
+  final List<Color> brightPastelColors = [
+    const Color(0xFFFFE6E6),
+    const Color(0xFFFFEDCC),
+    const Color(0xFFFFFFCC),
+    const Color(0xFFE6FFCC),
+    const Color(0xFFCCFFE1),
+    const Color(0xFFCCFFFF),
+    const Color(0xFFCCE6FF),
+    const Color(0xFFE6CCFF),
+    const Color(0xFFFDD5DF),
+    const Color(0xFFFFDAB9),
+    const Color(0xFFE0F7FA),
+    const Color(0xFFF1F8E9),
+    const Color(0xFFFCE4EC),
+    const Color(0xFFF3E5F5),
+    const Color(0xFFE8F5E9),
+  ];
+  return brightPastelColors[random.nextInt(brightPastelColors.length)];
 }

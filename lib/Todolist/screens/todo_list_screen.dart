@@ -6,7 +6,7 @@ import '../../Planner/DailyPlannerPage.dart';
 class Todo_Task {
   final String title;
   final String? description;
-  final String? time;
+  late final String? time;
   final DateTime date;
   final bool isImportant;
   final bool isUrgent;
@@ -297,7 +297,7 @@ class _WeeklyCalendarState extends State<WeeklyCalendar> {
                 currentDate.month == widget.selectedDate.month &&
                 currentDate.day == widget.selectedDate.day;
 
-            final hasTasks = tasksDataService.getTasksForDate(currentDate).isNotEmpty;
+            final hasTasks = tasksDataService.getTodoTasksForDate(currentDate).isNotEmpty;
 
             return Column(
               children: [
@@ -380,7 +380,7 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   List<Todo_Task> getTasksForSelectedDate() {
-    return _taskDataService.getTasksForDate(selectedDate);
+    return _taskDataService.getTodoTasksForDate(selectedDate);
   }
 
   void changeSelectedDate(DateTime date) {
@@ -392,7 +392,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
   void calculateProgress() {
     setState(() {
-      progressPercentage = _taskDataService.calculateProgressForDate(selectedDate);
+      progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
   }
 
@@ -515,60 +515,128 @@ class TodoListScreenState extends State<TodoListScreen> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  if (task.time != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      task.time!,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  ],
-                  if (task.location != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          task.location!,
-                          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            // 제목 + 이모지 + 체크박스 + 삭제 아이콘
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          task.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(width: 8),
+                      if (task.isImportant) const Text('🔔'),
+                      if (task.isUrgent) const Text('🔁'),
+                    ],
+                  ),
+                ),
+                Transform.scale(
+                  scale: 1.2,
+                  child: Checkbox(
+                    value: task.isCompleted,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        task.isCompleted = value ?? false;
+                        calculateProgress();
+                        if (widget.onTaskStatusChanged != null) {
+                          widget.onTaskStatusChanged!();
+                        }
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('삭제 확인'),
+                        content: const Text('이 일정을 삭제하시겠습니까?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _taskDataService.removeTask(task);
+                                calculateProgress();
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text('삭제', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: const Icon(Icons.delete, color: Colors.redAccent, size: 24),
+                ),
+              ],
+            ),
+
+            // 시간
+            if (task.time != null && task.time!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                task.time!,
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+            ],
+
+            // 위치
+            if (task.location != null && task.location!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    task.location!,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
                 ],
               ),
-            ),
-            Transform.scale(
-              scale: 1.2,
-              child: Checkbox(
-                value: task.isCompleted,
-                onChanged: (bool? value) {
-                  setState(() {
-                    task.isCompleted = value ?? false;
-                    calculateProgress();
+            ],
 
-                    if (widget.onTaskStatusChanged != null) {
-                      widget.onTaskStatusChanged!();
-                    }
-                  });
-                },
+            // 메모
+            if (task.memo != null && task.memo!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.notes, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      task.memo!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
   }
+
 
   Widget _buildEmptyState(String message) {
     return Container(
@@ -720,6 +788,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         return;
                                       }
 
+                                      // timeOfDay를 문자열로 변환
+                                      final String formattedTime = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+
+
                                       final newTask = Todo_Task(
                                         title: titleController.text,
                                         date: taskDate,
@@ -730,9 +802,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         location: locationController.text,
                                         importance: importanceLevel,
                                         urgency: urgencyLevel,
+                                        isCompleted: false,
                                       );
 
-                                      _taskDataService.addTask(newTask);
+                                      _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
                                       setState(() {
                                         selectedDate = taskDate;
@@ -745,6 +818,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                                       _showSnackBar(context, '일정이 저장되었습니다');
                                     },
+
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF9575CD),
                                       foregroundColor: Colors.white,
