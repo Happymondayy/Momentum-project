@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'empty_state_widget.dart';
@@ -153,7 +154,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   void updateProgress() {
     setState(() {
-      progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
+      progressPercentage =
+          _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
   }
 
@@ -208,7 +210,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
             Expanded(
               child: isPlannerView
-                  ? (_taskDataService.getPlannerTasksForDate(selectedDate).isEmpty
+                  ? (_taskDataService
+                  .getPlannerTasksForDate(selectedDate)
+                  .isEmpty
                   ? const EmptyStateWidget()
                   : _buildPlannerView())
                   : TodoListScreen(
@@ -330,7 +334,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                                 value: task.isCompleted,
                                 onChanged: (bool? value) {
                                   setState(() {
-                                    _taskDataService.updateTaskStatus(task, value ?? false);
+                                    _taskDataService.updateTaskStatus(
+                                        task, value ?? false);
                                     updateProgress();
                                   });
                                 },
@@ -348,11 +353,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             ),
                           ),
                         ],
-                        if (task.location != null && task.location!.isNotEmpty) ...[
+                        if (task.location != null &&
+                            task.location!.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                              Icon(Icons.location_on, size: 16,
+                                  color: Colors.grey[600]),
                               const SizedBox(width: 4),
                               Text(
                                 task.location!,
@@ -441,42 +448,151 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     });
   }
 
-  // Todo_Task 객체 생성 시 필수 매개변수 추가
-  void _generateAIPlanner() {
-    // Generate tasks only for the selected date
-    final generatedTasks = [
-      Todo_Task(
-        title: "아침 운동",
-        date: selectedDate,
-        time: "07:00",
-        isCompleted: false,
-        isImportant: true, // 중요도 설정
-        isUrgent: false, // 긴급도 설정
-        importance: 5, // 중요도 레벨 설정
-        urgency: 1, // 긴급도 레벨 설정
-      ),
-      Todo_Task(
-        title: "팀 미팅",
-        date: selectedDate,
-        time: "10:00",
-        isCompleted: false,
-        isImportant: true,
-        isUrgent: true,
-        importance: 4,
-        urgency: 5,
-      ),
-    ];
+  void _generateAIPlanner() async {
+    final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
 
-    // Add generated tasks to data service
-    for (var task in generatedTasks) {
+    // Firebase에서 Calendar Event 가져오기
+    final eventsSnapshot = await FirebaseFirestore.instance.collection('events').get();
+    List<Todo_Task> calendarTasks = [];
+    List<Map<String, int>> occupiedTimes = []; // 예약된 시간 슬롯 저장
+
+    for (var doc in eventsSnapshot.docs) {
+      final data = doc.data();
+      final startDate = DateTime.parse(data['startDate']);
+
+      if (startDate.year == selectedDate.year &&
+          startDate.month == selectedDate.month &&
+          startDate.day == selectedDate.day) {
+        if (data['startTime'] != null) {
+          int hour = data['startTime']['hour'];
+          int minute = data['startTime']['minute'];
+          occupiedTimes.add({'hour': hour, 'minute': minute});
+        }
+
+        calendarTasks.add(
+          Todo_Task(
+            title: data['title'],
+            date: selectedDate,
+            time: data['startTime'] != null
+                ? '${data['startTime']['hour'].toString().padLeft(2, '0')}:${data['startTime']['minute'].toString().padLeft(2, '0')}'
+                : null,
+            isImportant: true,
+            isUrgent: false,
+            importance: 3,
+            urgency: 2,
+          ),
+        );
+      }
+    }
+
+    final allTasks = [...todoTasks, ...calendarTasks];
+
+    if (allTasks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오늘 생성할 투두/일정이 없습니다!')),
+      );
+      return;
+    }
+
+    // 우선순위 정렬
+    allTasks.sort((a, b) {
+      int aScore = _calculatePriorityScore(a);
+      int bScore = _calculatePriorityScore(b);
+      return bScore.compareTo(aScore);
+    });
+
+    // 시간 슬롯 매핑 시작
+    int currentHour = 0;
+    int currentMinute = 0;
+
+    for (var task in allTasks) {
+      // 이미 시간이 있는 작업은 건너뛰기
+      if (task.time != null && task.time!.isNotEmpty) {
+        continue;
+      }
+
+      bool isUrgentTask = task.urgency >= 4;
+
+      while (currentHour < 24) {
+        // 현재 시간 슬롯이 비어있는지 확인
+        if (!_isSlotOccupied(currentHour, currentMinute, occupiedTimes)) {
+          // 슬롯 배정
+          task.time =
+          '${currentHour.toString().padLeft(2, '0')}:${currentMinute.toString().padLeft(2, '0')}';
+
+          // 예약된 시간 기록
+          occupiedTimes.add({'hour': currentHour, 'minute': currentMinute});
+
+          // 긴급한 작업은 30분 차지, 보통 작업은 1시간 차지
+          if (isUrgentTask) {
+            final nextTime = _advanceTime(currentHour, currentMinute, 30);
+            currentHour = nextTime['hour']!;
+            currentMinute = nextTime['minute']!;
+          } else {
+            final nextTime = _advanceTime(currentHour, currentMinute, 60);
+            currentHour = nextTime['hour']!;
+            currentMinute = nextTime['minute']!;
+          }
+          break;
+        } else {
+          // 슬롯이 차있으면 30분 후로 이동
+          final nextTime = _advanceTime(currentHour, currentMinute, 30);
+          currentHour = nextTime['hour']!;
+          currentMinute = nextTime['minute']!;
+        }
+      }
+
       _taskDataService.addPlannerTask(task);
     }
 
-    // Update UI
     setState(() {
       updateProgress();
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
+    );
   }
+
+// 시간 전진 함수
+  Map<String, int> _advanceTime(int currentHour, int currentMinute, int minutes) {
+    currentMinute += minutes;
+    while (currentMinute >= 60) {
+      currentMinute -= 60;
+      currentHour += 1;
+    }
+    if (currentHour >= 24) {
+      currentHour = 0; // 24시간 넘으면 0으로
+    }
+    return {'hour': currentHour, 'minute': currentMinute};
+  }
+
+// 우선순위 점수 계산
+  int _calculatePriorityScore(Todo_Task task) {
+    int baseScore = (task.importance * 2) + (task.urgency * 2);
+
+    final now = DateTime.now();
+    final daysUntilDeadline = task.date
+        .difference(now)
+        .inDays;
+
+    if (daysUntilDeadline <= 1) {
+      baseScore += 5;
+    } else if (daysUntilDeadline <= 3) {
+      baseScore += 3;
+    } else if (daysUntilDeadline <= 7) {
+      baseScore += 1;
+    }
+
+    return baseScore;
+  }
+
+// 슬롯이 이미 예약됐는지 확인
+  bool _isSlotOccupied(int hour, int minute, List<Map<String, int>> occupied) {
+    return occupied.any((slot) =>
+    slot['hour'] == hour && slot['minute'] == minute);
+  }
+
 }
 
 // 개선된 월 선택기 위젯 - 화살표로 이전/다음 달 이동

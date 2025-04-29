@@ -6,7 +6,7 @@ import '../../Planner/DailyPlannerPage.dart';
 class Todo_Task {
   final String title;
   final String? description;
-  final String? time;
+  late final String? time;
   final DateTime date;
   final bool isImportant;
   final bool isUrgent;
