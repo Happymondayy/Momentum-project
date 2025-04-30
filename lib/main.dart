@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/main_diary.dart';
-import 'package:momentum_planner/Diary/screens/journal_screen.dart';
+//import 'package:momentum_planner/Diary/screens/journal_screen.dart';
 import 'package:momentum_planner/Login/find_ID_page.dart';
 import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
@@ -11,6 +11,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // Firebase 설정 파일 import
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
+import 'package:momentum_planner/Settings/settings_page.dart';
 
 
 void main() async {
@@ -44,7 +45,8 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue, // 기본 테마 색상
         fontFamily: 'NotoSansKR', // 폰트 설정
       ),
-      home: JournalScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+      home: DailyPlannerPage(),
+      //home: SettingsPage(userId: '',), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       //home: CalendarScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
       initialRoute: 'Diary/screens/diary_list_screen',
@@ -56,7 +58,8 @@ class MyApp extends StatelessWidget {
         'Survey/models/survey_screen' : (context) => SurveyScreen(),
         'Calendar/screens/calendar_screen' : (context) => CalendarScreen(),
         'Planner/DailyPlannerPage' : (context) => DailyPlannerPage(),
-        'Diary/screens/journal_screen' : (context) => JournalScreen(),
+        //'Diary/screens/journal_screen' : (context) => JournalScreen(),
+        //'Setting/setting_page' : (context) => SettingsPage(userId: '',),
         //'/articles': (context) => ArticlesScreen(),
       },
     );
