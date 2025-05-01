@@ -7,6 +7,7 @@ class Todo_Task {
   final String title;
   final String? description;
   late final String? time;
+  final String? endTime;
   final DateTime date;
   final bool isImportant;
   final bool isUrgent;
@@ -20,6 +21,7 @@ class Todo_Task {
     required this.title,
     this.description,
     this.time,
+    this.endTime,
     required this.date,
     required this.isImportant,
     required this.isUrgent,
@@ -662,7 +664,11 @@ class TodoListScreenState extends State<TodoListScreen> {
     final TextEditingController locationController = TextEditingController();
 
     DateTime taskDate = selectedDate;
-    TimeOfDay selectedTime = TimeOfDay.now();
+    DateTime? dueDate;
+    TimeOfDay startTime = TimeOfDay.now();
+    TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1); // 🔹 startTime 이후 선언
+
+
     bool isImportant = false;
     bool isUrgent = false;
     int importanceLevel = 1;
@@ -735,13 +741,24 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              // 시간 선택
-                              _buildTimePicker(context, selectedTime, (pickedTime) {
+                              // 시작 시간 선택
+                              _buildTimePicker(context, startTime, (pickedTime) {
                                 setState(() {
-                                  selectedTime = pickedTime;
+                                  startTime = pickedTime;
                                 });
-                              }),
+                              }, label: '시작 시간'),
+
                               const SizedBox(height: 20),
+
+// 종료 시간 선택 (이거 추가해야 UI에 보여요!)
+                              _buildTimePicker(context, endTime, (pickedTime) {
+                                setState(() {
+                                  endTime = pickedTime;
+                                });
+                              }, label: '종료 시간'),
+
+                              const SizedBox(height: 20),
+
 
                               // 중요도 선택
                               _buildImportanceSelector(setState, importanceLevel, (level) {
@@ -749,11 +766,14 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              // 마감일 임박도 선택
-                              _buildUrgencySelector(setState, urgencyLevel, (level) {
-                                urgencyLevel = level;
+                              // 마감일 날짜 선택
+                              _buildDueDatePicker(context, dueDate, (picked) {
+                                setState(() {
+                                  dueDate = picked;
+                                });
                               }),
                               const SizedBox(height: 20),
+
 
                               // 알림 설정
                               _buildSwitchRow('알림 설정', isImportant, (value) {
@@ -788,14 +808,17 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         return;
                                       }
 
-                                      // timeOfDay를 문자열로 변환
-                                      final String formattedTime = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+                                      // 시작/종료 시간 AM/PM 형식으로 저장
+                                      final String formattedStart = '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+                                      final String formattedEnd = '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+
 
 
                                       final newTask = Todo_Task(
                                         title: titleController.text,
                                         date: taskDate,
-                                        time: '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
+                                        time: formattedStart,         // 시작시간
+                                        endTime: formattedEnd,        // 🔹 종료시간 이 줄 추가!
                                         isImportant: isImportant,
                                         isUrgent: isUrgent,
                                         memo: memoController.text,
@@ -804,6 +827,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         urgency: urgencyLevel,
                                         isCompleted: false,
                                       );
+
 
                                       _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
@@ -907,15 +931,22 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  // 시간 선택기 메서드
-  Widget _buildTimePicker(BuildContext context, TimeOfDay selectedTime, Function(TimeOfDay) onTimePicked) {
+  Widget _buildTimePicker(
+      BuildContext context,
+      TimeOfDay selectedTime,
+      Function(TimeOfDay) onTimePicked, {
+        String label = '시간',
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: InkWell(
             onTap: () async {
               final TimeOfDay? picked = await showTimePicker(
@@ -932,7 +963,10 @@ class TodoListScreenState extends State<TodoListScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 16)),
+                  Text(
+                    '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 16),
+                  ),
                   const Icon(Icons.access_time, size: 20),
                 ],
               ),
@@ -942,6 +976,8 @@ class TodoListScreenState extends State<TodoListScreen> {
       ],
     );
   }
+
+
 
   // 중요도 선택기 메서드
   Widget _buildImportanceSelector(StateSetter setState, int importanceLevel, Function(int) onLevelSelected) {
@@ -990,52 +1026,49 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  // 마감일 임박도 선택기 메서드
-  Widget _buildUrgencySelector(StateSetter setState, int urgencyLevel, Function(int) onLevelSelected) {
+  // 마감일 선택기 메서드 (DatePicker 기반)
+  Widget _buildDueDatePicker(BuildContext context, DateTime? dueDate, Function(DateTime) onPicked) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('마감일 임박도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const Text('마감일', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('임박도 (필수):'),
-              Row(
-                children: List.generate(3, (index) {
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        onLevelSelected(index + 1);
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: urgencyLevel == index + 1 ? Colors.red.shade300 : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          color: urgencyLevel == index + 1 ? Colors.white : Colors.black87,
-                          fontWeight: urgencyLevel == index + 1 ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  );
-                }),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: dueDate ?? DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (picked != null) {
+                onPicked(picked);
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    dueDate != null
+                        ? '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}'
+                        : '날짜를 선택하세요',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const Icon(Icons.calendar_today, size: 20),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ],
     );
   }
+
 
   // 스위치 행 생성 메서드
   Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) {

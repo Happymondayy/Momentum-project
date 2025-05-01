@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/screens/diary_screen.dart';
+import 'package:momentum_planner/Login/find_ID_page.dart';
 import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
 import 'Login/login_page.dart'; // LoginPage를 import
-import 'Login/find_ID_page.dart';
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // Firebase 설정 파일 import
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
+import 'package:momentum_planner/Settings/settings_page.dart';
 
 
 void main() async {
@@ -22,7 +23,6 @@ void main() async {
         options: DefaultFirebaseOptions.currentPlatform, // 명시적으로 options 추가
       );
       print("🔥 Firebase 초기화 성공!");
-
     } else {
       print("⚡ Firebase가 이미 초기화되었습니다.");
     }
@@ -45,6 +45,7 @@ class MyApp extends StatelessWidget {
         fontFamily: 'NotoSansKR', // 폰트 설정
       ),
       home: LoginPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
+      //home: SettingsPage(userId: '',), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       //home: CalendarScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
       debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
       initialRoute: 'Login/login_page.dart',
@@ -57,6 +58,7 @@ class MyApp extends StatelessWidget {
         'Calendar/screens/calendar_screen' : (context) => CalendarScreen(),
         'Planner/DailyPlannerPage' : (context) => DailyPlannerPage(),
         'Diary/screens/diary_screen' : (context) => DiaryScreen(),
+        //'Setting/setting_page' : (context) => SettingsPage(userId: '',),
         //'/articles': (context) => ArticlesScreen(),
       },
     );

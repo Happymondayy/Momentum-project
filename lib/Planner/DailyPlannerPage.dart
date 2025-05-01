@@ -1,10 +1,16 @@
 import 'dart:math';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:intl/intl.dart';
 
+
+// API URL (Flask 서버 URL)
+final String apiUrl = 'http://localhost:5000';  // 로컬 개발 환경에서 사용할 경우
 
 // TaskDataService 클래스
 class TaskDataService {
@@ -36,22 +42,19 @@ class TaskDataService {
         date1.day == date2.day;
   }
 
-// Todo List 조회 메서드
+  // Todo List 조회 메서드
   List<Todo_Task> getTodoTasksForDate(DateTime date) {
     final dateKey = dateToKey(date);
-    // dateKey로 찾은 목록에서 날짜가 정확히 일치하는 항목만 필터링
     return todoTasksByDate[dateKey]?.where((task) =>
         isSameDate(task.date, date)).toList() ?? [];
   }
 
-// Todo List 추가 메서드
+  // Todo List 추가 메서드
   void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
     if (!todoTasksByDate.containsKey(dateKey)) {
       todoTasksByDate[dateKey] = [];
     }
-
-    // 중복 체크 후 추가
     if (!todoTasksByDate[dateKey]!.any((existingTask) =>
     isSameDate(existingTask.date, task.date) &&
         existingTask.title == task.title)) {
@@ -76,67 +79,49 @@ class TaskDataService {
 
   void removeTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
-
-    // Todo에서 제거
     if (todoTasksByDate.containsKey(dateKey)) {
       todoTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
     }
-
-    // Planner에서 제거 (플래너에서도 삭제될 수 있도록)
     if (plannerTasksByDate.containsKey(dateKey)) {
       plannerTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
     }
   }
 
-
-  // 진행률 계산 (Todo List와 Planner 각각에 대해)
+  // 진행률 계산
   double calculateCombinedProgressForDate(DateTime date) {
     final todoTasks = getTodoTasksForDate(date);
     final plannerTasks = getPlannerTasksForDate(date);
-
     final totalTasks = todoTasks.length + plannerTasks.length;
     if (totalTasks == 0) return 0.0;
-
     final completedTasks = todoTasks.where((task) => task.isCompleted).length +
         plannerTasks.where((task) => task.isCompleted).length;
-
     return (completedTasks / totalTasks) * 100;
   }
 
   void updateTaskStatus(Todo_Task task, bool isCompleted) {
     final dateKey = dateToKey(task.date);
-
-    // Todo List에서 해당 태스크 찾아 업데이트
     if (todoTasksByDate.containsKey(dateKey)) {
       try {
         final todoTask = todoTasksByDate[dateKey]!
             .firstWhere((t) => t.title == task.title);
         todoTask.isCompleted = isCompleted;
-      } catch (e) {
-        // 태스크를 못 찾은 경우 무시
-      }
+      } catch (e) {}
     }
-
-    // Planner에서 해당 태스크 찾아 업데이트
     if (plannerTasksByDate.containsKey(dateKey)) {
       try {
         final plannerTask = plannerTasksByDate[dateKey]!
             .firstWhere((t) => t.title == task.title);
         plannerTask.isCompleted = isCompleted;
-      } catch (e) {
-        // 태스크를 못 찾은 경우 무시
-      }
+      } catch (e) {}
     }
   }
-
 }
+
 
 // DailyPlannerPage 클래스
 class DailyPlannerPage extends StatefulWidget {
-  const DailyPlannerPage({Key? key}) : super(key: key);
-
   @override
-  State<DailyPlannerPage> createState() => _DailyPlannerPageState();
+  _DailyPlannerPageState createState() => _DailyPlannerPageState();
 }
 
 class _DailyPlannerPageState extends State<DailyPlannerPage> {
@@ -187,14 +172,12 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 });
               },
             ),
-
             // Weekly Calendar with horizontal scrolling
             EnhancedWeeklyCalendar(
               selectedDate: selectedDate,
               onDateSelected: changeSelectedDate,
             ),
-
-            // Progress Section - Using the component from TodoList
+            // Progress Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ProgressScreen(
@@ -204,10 +187,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 progressPercentage: progressPercentage,
               ),
             ),
-
             // Header with toggle
             _buildHeaderWithToggle(),
-
             Expanded(
               child: isPlannerView
                   ? (_taskDataService
@@ -273,115 +254,145 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        final timeString = task.time ?? "00:00";
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+    return Column(
+      children: [
+        // 🔹 날짜 헤더 + 삭제 버튼 🗑️
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Left side time display
               Text(
-                timeString,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
+                DateFormat('yyyy-MM-dd').format(selectedDate),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 16),
-
-              // Task card
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: getBrightPastelColor(),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                task.title,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Transform.scale(
-                              scale: 1.2,
-                              child: Checkbox(
-                                value: task.isCompleted,
-                                onChanged: (bool? value) {
-                                  setState(() {
-                                    _taskDataService.updateTaskStatus(
-                                        task, value ?? false);
-                                    updateProgress();
-                                  });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (task.memo != null && task.memo!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            task.memo!,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF0484444),
-                            ),
-                          ),
-                        ],
-                        if (task.location != null &&
-                            task.location!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.location_on, size: 16,
-                                  color: Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Text(
-                                task.location!,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _taskDataService.plannerTasksByDate.remove(selectedDate);
+                  });
+                },
+                child: const Text('🗑️', style: TextStyle(fontSize: 20)),
               ),
             ],
           ),
-        );
-      },
+        ),
+
+        ListView.builder(
+          padding: const EdgeInsets.all(16),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final task = tasks[index];
+            final timeString = _formatTime(task.time, task.endTime);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    timeString,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Container(
+                      height: 100, // 🔹 박스 크기 통일
+                      decoration: BoxDecoration(
+                        color: getBrightPastelColor(),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            spreadRadius: 1,
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    task.title,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Transform.scale(
+                                  scale: 1.2,
+                                  child: Checkbox(
+                                    value: task.isCompleted,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        _taskDataService.updateTaskStatus(task, value ?? false);
+                                        updateProgress();
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (task.memo != null && task.memo!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                task.memo!,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF0484444),
+                                ),
+                              ),
+                            ],
+                            if (task.location != null && task.location!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    task.location!,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
+
+  String _formatTime(String? start, String? end) {
+    if (start == null || start.isEmpty) return '';
+    if (end == null || end.isEmpty) return start;
+    return '$start - $end';
+  }
+
 
   Widget _buildFloatingActionButton() {
     return FloatingActionButton(
@@ -494,26 +505,35 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       return;
     }
 
+    // API에서 우선순위 가져오기
+    Map<String, int> priorities = await _getPriorityFromAI(allTasks);
+
     // 우선순위 정렬
     allTasks.sort((a, b) {
-      int aScore = _calculatePriorityScore(a);
-      int bScore = _calculatePriorityScore(b);
-      return bScore.compareTo(aScore);
+      int aPriority = priorities[a.title] ?? 0;
+      int bPriority = priorities[b.title] ?? 0;
+      return bPriority.compareTo(aPriority);
     });
 
     // 시간 슬롯 매핑 시작
-    int currentHour = 0;
+    int currentHour = 9; // 오전 9시부터 시작 (기본값 수정)
     int currentMinute = 0;
+
+    // 기존의 플래너 태스크 초기화 (추가)
+    final dateKey = _taskDataService.dateToKey(selectedDate);
+    _taskDataService.plannerTasksByDate[dateKey] = [];
 
     for (var task in allTasks) {
       // 이미 시간이 있는 작업은 건너뛰기
       if (task.time != null && task.time!.isNotEmpty) {
+        _taskDataService.addPlannerTask(task); // 이미 시간이 있는 작업도 추가 (추가)
         continue;
       }
 
-      bool isUrgentTask = task.urgency >= 4;
+      bool isUrgentTask = task.isUrgent || (task.urgency != null && task.urgency >= 4);
+      bool taskScheduled = false; // 태스크가 스케줄링됐는지 확인 (추가)
 
-      while (currentHour < 24) {
+      while (currentHour < 24 && !taskScheduled) { // 조건 추가 (수정)
         // 현재 시간 슬롯이 비어있는지 확인
         if (!_isSlotOccupied(currentHour, currentMinute, occupiedTimes)) {
           // 슬롯 배정
@@ -533,7 +553,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             currentHour = nextTime['hour']!;
             currentMinute = nextTime['minute']!;
           }
-          break;
+
+          _taskDataService.addPlannerTask(task);
+          taskScheduled = true; // 태스크를 스케줄링 완료로 표시 (추가)
         } else {
           // 슬롯이 차있으면 30분 후로 이동
           final nextTime = _advanceTime(currentHour, currentMinute, 30);
@@ -541,12 +563,14 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           currentMinute = nextTime['minute']!;
         }
       }
-
-      _taskDataService.addPlannerTask(task);
     }
 
+    // 전체 UI 갱신 (수정)
     setState(() {
       updateProgress();
+      // 강제로 빌더를 다시 호출하도록 isPlannerView를 재설정
+      isPlannerView = false;
+      isPlannerView = true;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -554,7 +578,40 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-// 시간 전진 함수
+  // AI 모델에서 우선순위 계산 API 호출
+  Future<Map<String, int>> _getPriorityFromAI(List<Todo_Task> allTasks) async {
+    try {
+      final List<Map<String, dynamic>> tasksData = allTasks.map((task) {
+        return {
+          'title': task.title,
+          'importance': task.importance,
+          'urgency': task.urgency,
+        };
+      }).toList();
+
+      final response = await http.post(
+        Uri.parse('$apiUrl/priority'),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({'tasks': tasksData}),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        Map<String, int> priorityList = {};
+        for (var task in responseData['tasks']) {
+          priorityList[task['title']] = task['priority'];
+        }
+        return priorityList;
+      } else {
+        throw Exception('Failed to load priority');
+      }
+    } catch (e) {
+      print("Error fetching priority data: $e");
+      return {};
+    }
+  }
+
+  // 시간 전진 함수
   Map<String, int> _advanceTime(int currentHour, int currentMinute, int minutes) {
     currentMinute += minutes;
     while (currentMinute >= 60) {
@@ -562,40 +619,19 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       currentHour += 1;
     }
     if (currentHour >= 24) {
-      currentHour = 0; // 24시간 넘으면 0으로
+      currentHour = 0;
     }
     return {'hour': currentHour, 'minute': currentMinute};
   }
 
-// 우선순위 점수 계산
-  int _calculatePriorityScore(Todo_Task task) {
-    int baseScore = (task.importance * 2) + (task.urgency * 2);
-
-    final now = DateTime.now();
-    final daysUntilDeadline = task.date
-        .difference(now)
-        .inDays;
-
-    if (daysUntilDeadline <= 1) {
-      baseScore += 5;
-    } else if (daysUntilDeadline <= 3) {
-      baseScore += 3;
-    } else if (daysUntilDeadline <= 7) {
-      baseScore += 1;
-    }
-
-    return baseScore;
-  }
-
-// 슬롯이 이미 예약됐는지 확인
+  // 슬롯이 이미 예약됐는지 확인
   bool _isSlotOccupied(int hour, int minute, List<Map<String, int>> occupied) {
     return occupied.any((slot) =>
     slot['hour'] == hour && slot['minute'] == minute);
   }
-
 }
 
-// 개선된 월 선택기 위젯 - 화살표로 이전/다음 달 이동
+// 개선된 월 선택기 위젯
 class ImprovedMonthSelector extends StatelessWidget {
   final DateTime selectedDate;
   final Function(DateTime) onMonthChanged;
@@ -613,17 +649,13 @@ class ImprovedMonthSelector extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Previous month button
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 28),
             onPressed: () {
-              // Go to previous month
               final newDate = DateTime(selectedDate.year, selectedDate.month - 1, selectedDate.day);
               onMonthChanged(newDate);
             },
           ),
-
-          // Current month and year display
           GestureDetector(
             onTap: () => _showMonthYearPicker(context),
             child: Text(
@@ -635,12 +667,9 @@ class ImprovedMonthSelector extends StatelessWidget {
               ),
             ),
           ),
-
-          // Next month button
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 28),
             onPressed: () {
-              // Go to next month
               final newDate = DateTime(selectedDate.year, selectedDate.month + 1, selectedDate.day);
               onMonthChanged(newDate);
             },
@@ -651,7 +680,6 @@ class ImprovedMonthSelector extends StatelessWidget {
   }
 
   void _showMonthYearPicker(BuildContext context) {
-    // Show month-year picker dialog
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -672,7 +700,7 @@ class ImprovedMonthSelector extends StatelessWidget {
   }
 }
 
-// 개선된 주간 캘린더 위젯 (스크롤 기능 강화)
+// 개선된 주간 캘린더 위젯
 class EnhancedWeeklyCalendar extends StatefulWidget {
   final DateTime selectedDate;
   final Function(DateTime) onDateSelected;
@@ -690,14 +718,13 @@ class EnhancedWeeklyCalendar extends StatefulWidget {
 class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   late PageController _pageController;
   late int _currentPage;
-  final int _totalWeeks = 100; // 충분히 많은 주를 표시
+  final int _totalWeeks = 100;
   late DateTime _baseDate;
   late DateTime _currentStartDate;
 
   @override
   void initState() {
     super.initState();
-    // Set base date to first day of current week, 50 weeks ago
     _baseDate = _findFirstDayOfWeek(DateTime.now().subtract(Duration(days: 50 * 7)));
     _currentPage = _getPageForDate(widget.selectedDate);
     _pageController = PageController(initialPage: _currentPage);
@@ -705,7 +732,7 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   }
 
   @override
-  void didUpdateWidget(EnhancedWeeklyCalendar oldWidget) {
+  void didUpdateWidget(covariant EnhancedWeeklyCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!_isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
       final newPage = _getPageForDate(widget.selectedDate);
@@ -721,20 +748,16 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
     }
   }
 
-  // Find the first day (Monday) of the week containing the given date
   DateTime _findFirstDayOfWeek(DateTime date) {
-    // Subtract weekday - 1 days to get to Monday (weekday 1)
     return date.subtract(Duration(days: date.weekday - 1));
   }
 
-  // Get the page number for a given date
   int _getPageForDate(DateTime date) {
     final firstDayOfWeek = _findFirstDayOfWeek(date);
     final diffDays = firstDayOfWeek.difference(_baseDate).inDays;
     return (diffDays / 7).round();
   }
 
-  // Get the start date for a given page
   DateTime _getStartDateForPage(int page) {
     return _baseDate.add(Duration(days: page * 7));
   }
@@ -767,7 +790,6 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   Widget _buildWeek(DateTime weekStart) {
     return Column(
       children: [
-        // 요일 표시 행
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: List.generate(7, (index) {
@@ -790,14 +812,12 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
           }),
         ),
         const SizedBox(height: 8),
-        // 날짜 표시 행
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: List.generate(7, (index) {
             final currentDate = weekStart.add(Duration(days: index));
             final isSelected = _isSameDay(currentDate, widget.selectedDate);
             final isToday = _isSameDay(currentDate, DateTime.now());
-
             return GestureDetector(
               onTap: () => widget.onDateSelected(currentDate),
               child: Container(
