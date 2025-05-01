@@ -60,7 +60,7 @@ class _BottomNavState extends State<BottomNav> {
       case 2: // Diary
         Navigator.pushReplacementNamed(
             context,
-            'Diary/main_diary',
+            'Diary/screens/diary_screen',
             // 빠른 페이지 전환을 위한 트랜지션 설정
             arguments: PageRouteBuilder(
               pageBuilder: (context, animation, secondaryAnimation) => DailyPlannerPage(),
