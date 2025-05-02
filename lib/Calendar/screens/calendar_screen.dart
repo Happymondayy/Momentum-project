@@ -203,8 +203,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-
-
   void _showAddEventDialog() {
     showDialog(
       context: context,
@@ -225,10 +223,152 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  void _showEventDetailsDialog(Event event) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('일정 상세'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  event.title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text('시작: ${DateFormat('yyyy-MM-dd').format(event.startDate)}'),
+                if (event.startTime != null)
+                  Text('시간: ${event.startTime!.format(context)}'),
+                if (event.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10.0),
+                    child: Text('설명: ${event.description}'),
+                  ),
+                if (event.location.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5.0),
+                    child: Text('장소: ${event.location}'),
+                  ),
+                if (event.memo.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5.0),
+                    child: Text('메모: ${event.memo}'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('닫기'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showEditEventDialog(event);
+              },
+              child: Text('수정'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _confirmDelete(context, event);
+              },
+              child: Text('삭제', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showEditEventDialog(Event event) {
+    showDialog(
+      context: context,
+      builder: (context) => EventDialog(
+        selectedDay: event.startDate,
+        event: event,
+        onSave: _updateEvent,
+      ),
+    );
+  }
+
+  void _updateEvent(Event event) async {
+    try {
+      final startTimeMap = !event.isAllDay && event.startTime != null ? {
+        'hour': event.startTime!.hour,
+        'minute': event.startTime!.minute,
+      } : null;
+
+      final endTimeMap = !event.isAllDay && event.endTime != null ? {
+        'hour': event.endTime!.hour,
+        'minute': event.endTime!.minute,
+      } : null;
+
+      await FirebaseFirestore.instance.collection('events').doc(event.id).update({
+        'title': event.title,
+        'description': event.description,
+        'startDate': event.startDate.toIso8601String(),
+        'endDate': event.endDate.toIso8601String(),
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'memo': event.memo,
+        'location': event.location,
+        'isRepeating': event.isRepeating,
+        'repeatOption': event.repeatOption,
+        'repeatDays': event.repeatDays,
+        'repeatCustomDays': event.repeatCustomDays,
+        'isAllDay': event.isAllDay,
+        'reminder': event.reminder,
+      });
+
+      print('Event updated successfully');
+    } catch (e) {
+      print('Error updating event: $e');
+    }
+  }
+
+  Future<void> deleteEvent(Event event) async {
+    try {
+      await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
+      print('Event deleted successfully');
+    } catch (e) {
+      print('Error deleting event: $e');
+    }
+  }
+
+  void _confirmDelete(BuildContext context, Event event) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('정말 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              deleteEvent(event);
+              Navigator.pop(context);
+            },
+            child: Text('삭제'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-    backgroundColor: Colors.white,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
@@ -264,160 +404,162 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildCalendar() {
     return Column(
-      children: [
-        Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [ // 커스텀 헤더
-          IconButton(
-            icon: SvgPicture.asset(
-              'assets/svgs/arrow-left-svgrepo-com.svg', // 얇은 왼쪽 화살표 SVG 파일
-              width: 12.0,
-              height: 27.0,
-            ),
-            onPressed: () {
-              setState(() {
-                _focusedDay = DateTime(
-                _focusedDay.year,
-                _focusedDay.month - 1,
-                _focusedDay.day,
-              );
-             });
-            },
-          ),
-          SizedBox(width: 18,),
-          Text(
-            DateFormat('M').format(_focusedDay), // 현재 월 표시
-            style: TextStyle(
-            fontSize: 30.0,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'OpenSansBold',
-            ),
-          ),
-          SizedBox(width: 18,),
-          IconButton(
-            icon: SvgPicture.asset(
-              'assets/svgs/arrow-right-svgrepo-com.svg', // 얇은 오른쪽 화살표 SVG 파일
-              width: 12.0,
-              height: 27.0,
-            ),
-            onPressed: () {
-              setState(() {
-                _focusedDay = DateTime(
-                _focusedDay.year,
-                _focusedDay.month + 1,
-                _focusedDay.day,
-                );
-              });
-            },
-          ),
-        ],
-      ),
-    SizedBox(height: 15,),
-    TableCalendar(
-      firstDay: DateTime.utc(2020, 1, 1),
-      lastDay: DateTime.utc(2030, 12, 31),
-      focusedDay: _focusedDay,
-      calendarFormat: _calendarFormat,
-      headerVisible: false, // 커스텀 헤더를 사용하기 위해 기본 헤더는 숨김
-
-      selectedDayPredicate: (day) {
-        return isSameDay(_selectedDay, day);
-      },
-      onDaySelected: (selectedDay, focusedDay) {
-        setState(() {
-          _selectedDay = selectedDay;
-          _focusedDay = focusedDay;
-        });
-      },
-      onFormatChanged: (format) {
-        setState(() {
-          _calendarFormat = format;
-        });
-      },
-      onPageChanged: (focusedDay) {
-        _focusedDay = focusedDay;
-      },
-      eventLoader: _getEventsForDay,
-      calendarStyle: CalendarStyle(
-        todayDecoration: BoxDecoration(
-          color: Colors.deepPurple.shade100,
-          shape: BoxShape.circle,
-        ),
-        selectedDecoration: BoxDecoration(
-          color: Colors.deepPurple.shade300,
-          shape: BoxShape.circle,
-        ),
-        markerDecoration: BoxDecoration(
-          color: Colors.deepPurple.shade200,
-          shape: BoxShape.circle,
-        ),
-
-        outsideDaysVisible: false,
-        markersMaxCount: 1,
-        markersAnchor: 0.7,
-      ),
-      daysOfWeekHeight: 36.0,
-      rowHeight: 48.0,
-
-      daysOfWeekStyle: DaysOfWeekStyle(
-        weekdayStyle: TextStyle(color: Colors.black),
-        weekendStyle: TextStyle(color: Colors.black),
-      ),
-      calendarBuilders: CalendarBuilders(
-        dowBuilder: (context, day) {
-          // 요일 텍스트를 한 글자로 표시
-          String text;
-          if (day.weekday == DateTime.sunday || day.weekday == DateTime.saturday) {
-            text = "S"; // 일요일과 토요일은 "S"
-          } else {
-            text = DateFormat.E().format(day)[0]; // 나머지 요일은 첫 글자만
-          }
-
-          // 요일 색상 설정
-          Color color;
-          if (day.weekday == DateTime.sunday) {
-            color = Colors.red; // 일요일 빨간색
-          } else if (day.weekday == DateTime.saturday) {
-            color = Colors.blue; // 토요일 파란색
-          } else {
-            color = Colors.black; // 나머지 요일 검은색
-          }
-
-          return Center(
-            child: Text(
-              text,
-              style: TextStyle(color: color),
-            ),
-          );
-        },
-        defaultBuilder: (context, day, focusedDay) {
-          // 현재 달의 날짜 스타일
-          return Center(
-            child: Text(
-              '${day.day}',
-              style: TextStyle(color: Colors.black),
-            ),
-          );
-        },
-        markerBuilder: (context, date, events) {
-          if (events.isNotEmpty) {
-            return Positioned(
-              bottom: 1,
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.deepPurple.shade300,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [ // 커스텀 헤더
+              IconButton(
+                icon: SvgPicture.asset(
+                  'assets/svgs/arrow-left-svgrepo-com.svg', // 얇은 왼쪽 화살표 SVG 파일
+                  width: 12.0,
+                  height: 27.0,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _focusedDay = DateTime(
+                      _focusedDay.year,
+                      _focusedDay.month - 1,
+                      _focusedDay.day,
+                    );
+                  });
+                },
+              ),
+              SizedBox(width: 18,),
+              Text(
+                DateFormat('M').format(_focusedDay), // 현재 월 표시
+                style: TextStyle(
+                  fontSize: 30.0,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'OpenSansBold',
                 ),
               ),
-            );
-          }
-          return null;
-        },
-      ),
-    ),
-    ]
+              SizedBox(width: 18,),
+              IconButton(
+                icon: SvgPicture.asset(
+                  'assets/svgs/arrow-right-svgrepo-com.svg', // 얇은 오른쪽 화살표 SVG 파일
+                  width: 12.0,
+                  height: 27.0,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _focusedDay = DateTime(
+                      _focusedDay.year,
+                      _focusedDay.month + 1,
+                      _focusedDay.day,
+                    );
+                  });
+                },
+              ),
+            ],
+          ),
+          SizedBox(height: 15,),
+          TableCalendar(
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            calendarFormat: _calendarFormat,
+            headerVisible: false, // 커스텀 헤더를 사용하기 위해 기본 헤더는 숨김
+
+            selectedDayPredicate: (day) {
+              return isSameDay(_selectedDay, day);
+            },
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+            },
+            onFormatChanged: (format) {
+              setState(() {
+                _calendarFormat = format;
+              });
+            },
+            onPageChanged: (focusedDay) {
+              setState(() {
+                _focusedDay = focusedDay;
+              });
+            },
+            eventLoader: _getEventsForDay,
+            calendarStyle: CalendarStyle(
+              todayDecoration: BoxDecoration(
+                color: Colors.deepPurple.shade100,
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: BoxDecoration(
+                color: Colors.deepPurple.shade300,
+                shape: BoxShape.circle,
+              ),
+              markerDecoration: BoxDecoration(
+                color: Colors.deepPurple.shade200,
+                shape: BoxShape.circle,
+              ),
+
+              outsideDaysVisible: false,
+              markersMaxCount: 1,
+              markersAnchor: 0.7,
+            ),
+            daysOfWeekHeight: 36.0,
+            rowHeight: 48.0,
+
+            daysOfWeekStyle: DaysOfWeekStyle(
+              weekdayStyle: TextStyle(color: Colors.black),
+              weekendStyle: TextStyle(color: Colors.black),
+            ),
+            calendarBuilders: CalendarBuilders(
+              dowBuilder: (context, day) {
+                // 요일 텍스트를 한 글자로 표시
+                String text;
+                if (day.weekday == DateTime.sunday || day.weekday == DateTime.saturday) {
+                  text = "S"; // 일요일과 토요일은 "S"
+                } else {
+                  text = DateFormat.E().format(day)[0]; // 나머지 요일은 첫 글자만
+                }
+
+                // 요일 색상 설정
+                Color color;
+                if (day.weekday == DateTime.sunday) {
+                  color = Colors.red; // 일요일 빨간색
+                } else if (day.weekday == DateTime.saturday) {
+                  color = Colors.blue; // 토요일 파란색
+                } else {
+                  color = Colors.black; // 나머지 요일 검은색
+                }
+
+                return Center(
+                  child: Text(
+                    text,
+                    style: TextStyle(color: color),
+                  ),
+                );
+              },
+              defaultBuilder: (context, day, focusedDay) {
+                // 현재 달의 날짜 스타일
+                return Center(
+                  child: Text(
+                    '${day.day}',
+                    style: TextStyle(color: Colors.black),
+                  ),
+                );
+              },
+              markerBuilder: (context, date, events) {
+                if (events.isNotEmpty) {
+                  return Positioned(
+                    bottom: 1,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.deepPurple.shade300,
+                      ),
+                    ),
+                  );
+                }
+                return null;
+              },
+            ),
+          ),
+        ]
     );
   }
 
@@ -437,16 +579,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: Center(child: Text('오늘 일정이 없습니다.')),
         )
             : ListView.builder(
-          physics: NeverScrollableScrollPhysics(), // 중요: 개별 스크롤 비활성화
-          shrinkWrap: true, // 중요: 컨텐츠 크기만큼만 차지
+          physics: NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
           itemCount: events.length,
           itemBuilder: (context, index) {
             final event = events[index];
-            return EventCard(
-              event: event,
-              onMorePressed: () {
-                // Show options
-              },
+            return GestureDetector(
+              onTap: () => _showEventDetailsDialog(event),
+              child: EventCard(
+                event: event,
+                onMorePressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    builder: (context) => Container(
+                      height: 150,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: Icon(Icons.edit),
+                            title: Text('수정'),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showEditEventDialog(event);
+                            },
+                          ),
+                          ListTile(
+                            leading: Icon(Icons.delete, color: Colors.red),
+                            title: Text('삭제', style: TextStyle(color: Colors.red)),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _confirmDelete(context, event);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+                onEdit: () => _showEditEventDialog(event),
+                onDelete: () => _confirmDelete(context, event),
+              ),
             );
           },
         ),
@@ -498,7 +670,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 });
               },
               onMorePressed: () {
-                // Show options
+                // Todo에 대한 옵션 (수정/삭제 등) 표시
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => Container(
+                    height: 150,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: Icon(Icons.edit),
+                          title: Text('수정'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            // _showEditTodoDialog(todo); // Todo 수정 다이얼로그 구현 필요
+                          },
+                        ),
+                        ListTile(
+                          leading: Icon(Icons.delete, color: Colors.red),
+                          title: Text('삭제', style: TextStyle(color: Colors.red)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            // Todo 삭제 확인 다이얼로그 구현 필요
+                            _confirmDeleteTodo(context, todo);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               },
             );
           },
@@ -506,5 +705,37 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ],
     );
   }
-}
 
+  // Todo 삭제 확인 다이얼로그
+  void _confirmDeleteTodo(BuildContext context, TodoItem todo) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('정말 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              _deleteTodo(todo);
+              Navigator.pop(context);
+            },
+            child: Text('삭제'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Todo 삭제 기능
+  Future<void> _deleteTodo(TodoItem todo) async {
+    try {
+      await FirebaseFirestore.instance.collection('todos').doc(todo.id).delete();
+      print('Todo deleted successfully');
+    } catch (e) {
+      print('Error deleting todo: $e');
+    }
+  }
+}

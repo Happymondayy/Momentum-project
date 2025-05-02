@@ -4,11 +4,15 @@ import '../models/event.dart';
 class EventCard extends StatelessWidget {
   final Event event;
   final VoidCallback onMorePressed;
+  final VoidCallback? onEdit;  // Make optional with nullable type
+  final VoidCallback? onDelete;  // Make optional with nullable type
 
   const EventCard({
     Key? key,
     required this.event,
     required this.onMorePressed,
+    this.onEdit,  // Optional parameter
+    this.onDelete,  // Optional parameter
   }) : super(key: key);
 
   @override
@@ -21,6 +25,7 @@ class EventCard extends StatelessWidget {
     }
 
     return Card(
+      color: Color(0xFFF1F1FA),
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       elevation: 1,
       child: ListTile(
@@ -33,7 +38,8 @@ class EventCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notifications, color: Colors.amber),
+            if (event.reminder != null)
+              Icon(Icons.notifications, color: Colors.amber),
             if (event.isRepeating)
               Icon(Icons.repeat, color: Colors.blue),
             IconButton(
