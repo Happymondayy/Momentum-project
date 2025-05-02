@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 
+import 'Settings/settings_page.dart';
+
 class BottomNav extends StatefulWidget {
   // 현재 화면에 따라 초기 인덱스를 설정하기 위한 생성자 추가
   final int initialIndex;
+  final String userId; // 사용자 ID 추가
 
-  const BottomNav({Key? key, this.initialIndex = 0}) : super(key: key);
+  const BottomNav({Key? key, this.initialIndex = 0, required this.userId}) : super(key: key);
 
   @override
   State<BottomNav> createState() => _BottomNavState();
@@ -72,8 +75,11 @@ class _BottomNavState extends State<BottomNav> {
         );
         break;
       case 3: // Community
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('준비 중인 기능입니다'))
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SettingsPage(userId: widget.userId),
+          ),
         );
         break;
     }
@@ -103,7 +109,7 @@ class _BottomNavState extends State<BottomNav> {
         ),
         BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
-            label: 'Community'
+            label: 'User'
         ),
       ],
     );

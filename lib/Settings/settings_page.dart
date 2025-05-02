@@ -51,34 +51,58 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-
   // 닉네임 변경 다이얼로그
   Future<void> _showNicknameDialog() async {
-    TextEditingController nicknameController = TextEditingController(text: _nickname);
+    String currentNickname = _nickname ?? '';
+    TextEditingController nicknameController = TextEditingController(text: currentNickname);
 
-    await showDialog(
+    return showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('닉네임 변경'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('닉네임 변경',
+              style: TextStyle(fontWeight: FontWeight.bold)
+          ),
           content: TextField(
             controller: nicknameController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: '새 닉네임을 입력하세요',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: const Color(0xFFCFCFFF), width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
+            autofocus: true,
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () async {
-                if (nicknameController.text.trim().isNotEmpty) {
-                  await _updateNickname(nicknameController.text.trim());
-                  Navigator.pop(context);
+                String newNickname = nicknameController.text.trim();
+                if (newNickname.isNotEmpty) {
+                  Navigator.pop(dialogContext);
+                  await _updateNickname(newNickname);
                 }
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFCFCFFF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
               child: const Text('변경'),
             ),
           ],
@@ -90,21 +114,47 @@ class _SettingsPageState extends State<SettingsPage> {
   // 닉네임 업데이트
   Future<void> _updateNickname(String newNickname) async {
     try {
+      // 로딩 표시
+      setState(() {
+        _isLoading = true;
+      });
+
       await _firestore.collection('user').doc(widget.userId).update({
         'nickname': newNickname,
       });
 
       setState(() {
         _nickname = newNickname;
+        _isLoading = false;
       });
 
+      // 성공 메시지
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('닉네임이 업데이트되었습니다.')),
+        SnackBar(
+          content: const Text('닉네임이 성공적으로 변경되었습니다.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       );
     } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
       print('닉네임 업데이트 오류: $e');
+
+      // 오류 메시지
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('닉네임 업데이트 중 오류가 발생했습니다.')),
+        SnackBar(
+          content: const Text('닉네임 변경 중 오류가 발생했습니다.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       );
     }
   }
@@ -116,14 +166,17 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('로그아웃'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('로그아웃', style: TextStyle(fontWeight: FontWeight.bold)),
           content: const Text('정말 로그아웃하시겠습니까?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 Navigator.pop(context); // 다이얼로그 닫기
                 // 로그인 페이지로 이동 (이전 스택 모두 제거)
@@ -133,6 +186,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       (route) => false,
                 );
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               child: const Text('로그아웃'),
             ),
           ],
@@ -148,19 +208,21 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('회원 탈퇴'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('회원 탈퇴', style: TextStyle(fontWeight: FontWeight.bold)),
           content: const Text('정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () async {
                 try {
                   // 사용자 데이터 삭제
                   await _firestore.collection('user').doc(widget.userId).delete();
-
 
                   Navigator.pop(context); // 다이얼로그 닫기
 
@@ -172,16 +234,37 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
 
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('회원 탈퇴가 완료되었습니다.')),
+                    SnackBar(
+                      content: const Text('회원 탈퇴가 완료되었습니다.'),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   );
                 } catch (e) {
                   print('회원 탈퇴 오류: $e');
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('회원 탈퇴 중 오류가 발생했습니다.')),
+                    SnackBar(
+                      content: const Text('회원 탈퇴 중 오류가 발생했습니다.'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   );
                 }
               },
-              child: const Text('탈퇴하기', style: TextStyle(color: Colors.red)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('탈퇴하기'),
             ),
           ],
         );
@@ -189,150 +272,229 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // 설정 항목 위젯
+  Widget _buildSettingItem({
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+    Color? iconColor,
+    Color? textColor,
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: iconColor ?? Colors.black87, size: 22),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: textColor ?? Colors.black87,
+        ),
+      ),
+      trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.grey),
+      onTap: onTap,
+    );
+  }
+
+  // 섹션 구분자 위젯
+  Widget _buildSectionDivider({String? title}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        if (title != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 8),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+        const Divider(thickness: 1, height: 1),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        //title: const Text('설정'),
+        title: const Text('설정', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        elevation: 0.5,
+        elevation: 0,
+        centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFCFCFFF)))
           : SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 프로필 섹션
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
               child: Column(
                 children: [
                   // 프로필 이미지
-                  GestureDetector(
-                    child: Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundImage: const AssetImage('assets/images/default_profile.png'),
+                  Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFCFCFFF), width: 3),
                         ),
-
-                        Container(
-                          padding: const EdgeInsets.all(4),
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundImage: _profileImageUrl != null
+                              ? NetworkImage(_profileImageUrl!)
+                              : const AssetImage('assets/images/default_profile.png') as ImageProvider,
+                          backgroundColor: Colors.grey[200],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          // 프로필 이미지 변경 기능 (필요시 구현)
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: const Color(0xFFCFCFFF),
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.3),
+                                spreadRadius: 1,
+                                blurRadius: 3,
+                              ),
+                            ],
                           ),
                           child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 닉네임
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _nickname ?? 'User',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 16),
-                        onPressed: _showNicknameDialog,
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+
+                  // 닉네임
+                  GestureDetector(
+                    onTap: _showNicknameDialog,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _nickname ?? 'User',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit, size: 18, color: Color(0xFFCFCFFF)),
+                      ],
+                    ),
+                  ),
+
                   // 이메일
-                  Text(
-                    _email ?? '',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      _email ?? '',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
 
-            // 티밍 커뮤니티 섹션
-            ListTile(
-              leading: const Icon(Icons.group, color: Colors.black87),
-              title: const Text('FocusMate 커뮤니티'),
-              trailing: const Icon(Icons.chevron_right),
+            const SizedBox(height: 16),
+
+            // 커뮤니티 섹션
+            _buildSectionDivider(title: '커뮤니티'),
+            _buildSettingItem(
+              icon: Icons.group,
+              title: 'FocusMate 커뮤니티',
               onTap: () {
                 // 커뮤니티 화면으로 이동
               },
             ),
 
-            const Divider(height: 1),
-
-            // 공지사항
-            ListTile(
-              leading: const Icon(Icons.campaign, color: Colors.black87),
-              title: const Text('공지사항'),
-              trailing: const Icon(Icons.chevron_right),
+            // 지원 섹션
+            _buildSectionDivider(title: '지원'),
+            _buildSettingItem(
+              icon: Icons.campaign,
+              title: '공지사항',
               onTap: () {
                 // 공지사항 화면으로 이동
               },
             ),
-
-            // 의견 보내기
-            ListTile(
-              leading: const Icon(Icons.message, color: Colors.black87),
-              title: const Text('의견 보내기'),
-              trailing: const Icon(Icons.chevron_right),
+            _buildSettingItem(
+              icon: Icons.message,
+              title: '의견 보내기',
               onTap: () {
                 // 의견 보내기 화면으로 이동
               },
             ),
 
-            const Divider(height: 1),
-
-            // 서비스 정보 섹션
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.black87),
-              title: const Text('서비스 이용약관'),
-              trailing: const Icon(Icons.chevron_right),
+            // 정보 섹션
+            _buildSectionDivider(title: '정보'),
+            _buildSettingItem(
+              icon: Icons.info_outline,
+              title: '서비스 이용약관',
               onTap: () {
                 // 이용약관 화면으로 이동
               },
             ),
-
-            ListTile(
-              leading: const Icon(Icons.privacy_tip_outlined, color: Colors.black87),
-              title: const Text('개인정보 처리방침'),
-              trailing: const Icon(Icons.chevron_right),
+            _buildSettingItem(
+              icon: Icons.privacy_tip_outlined,
+              title: '개인정보 처리방침',
               onTap: () {
                 // 개인정보 처리방침 화면으로 이동
               },
             ),
-
-            ListTile(
-              leading: const Icon(Icons.verified_user_outlined, color: Colors.black87),
-              title: const Text('버전 정보'),
-              trailing: const Text('1.1.4'),
+            _buildSettingItem(
+              icon: Icons.verified_user_outlined,
+              title: '버전 정보',
+              trailing: Text('1.1.4', style: TextStyle(color: Colors.grey[600])),
+              onTap: null,
             ),
 
-            const Divider(height: 1),
-
-            // 로그아웃
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
+            // 계정 관리 섹션
+            _buildSectionDivider(title: '계정 관리'),
+            _buildSettingItem(
+              icon: Icons.logout,
+              iconColor: Colors.red,
+              title: '로그아웃',
+              textColor: Colors.red,
               onTap: _logout,
             ),
-
-            // 회원 탈퇴
-            ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text('회원 탈퇴', style: TextStyle(color: Colors.red)),
+            _buildSettingItem(
+              icon: Icons.delete_forever,
+              iconColor: Colors.red,
+              title: '회원 탈퇴',
+              textColor: Colors.red,
               onTap: _deleteAccount,
             ),
 

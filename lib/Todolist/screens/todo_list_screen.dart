@@ -15,6 +15,7 @@ class Todo_Task {
   final String? location;
   final int importance;
   final int urgency;
+  final Color? color;
   bool isCompleted;
 
   Todo_Task({
@@ -30,6 +31,7 @@ class Todo_Task {
     required this.importance,
     required this.urgency,
     this.isCompleted = false,
+    this.color,
   });
 }
 
@@ -500,11 +502,38 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
+  Color _getFixedColorForTask(String title) {
+    final colors = [
+      Colors.purple.shade100,
+      Colors.green.shade100,
+      Colors.blue.shade100,
+      Colors.orange.shade100,
+      Colors.red.shade100,
+      Colors.teal.shade100,
+    ];
+    return colors[title.hashCode % colors.length];
+  }
+
+  String _buildTimeRange(Todo_Task task) {
+    final start = task.time ?? '';
+    final end = task.endTime ?? '';
+    if (start.isNotEmpty && end.isNotEmpty) {
+      return '$start - $end';
+    } else if (start.isNotEmpty) {
+      return start;
+    } else if (end.isNotEmpty) {
+      return end;
+    } else {
+      return '';
+    }
+  }
+
+
   Widget _buildTaskItem(Todo_Task task) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: getBrightPastelColor(),
+        color: _getFixedColorForTask(task.title),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -589,11 +618,11 @@ class TodoListScreenState extends State<TodoListScreen> {
               ],
             ),
 
-            // 시간
-            if (task.time != null && task.time!.isNotEmpty) ...[
+            // 시작 - 종료 시간
+            if ((task.time != null && task.time!.isNotEmpty) || (task.endTime != null && task.endTime!.isNotEmpty)) ...[
               const SizedBox(height: 4),
               Text(
-                task.time!,
+                _buildTimeRange(task),
                 style: TextStyle(color: Colors.grey[600], fontSize: 14),
               ),
             ],
@@ -638,6 +667,7 @@ class TodoListScreenState extends State<TodoListScreen> {
       ),
     );
   }
+
 
 
   Widget _buildEmptyState(String message) {
@@ -750,7 +780,6 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                               const SizedBox(height: 20),
 
-// 종료 시간 선택 (이거 추가해야 UI에 보여요!)
                               _buildTimePicker(context, endTime, (pickedTime) {
                                 setState(() {
                                   endTime = pickedTime;
@@ -826,6 +855,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         importance: importanceLevel,
                                         urgency: urgencyLevel,
                                         isCompleted: false,
+                                        color: _getFixedColorForTask(titleController.text),
                                       );
 
 

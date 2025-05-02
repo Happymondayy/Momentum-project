@@ -59,8 +59,7 @@ class MyApp extends StatelessWidget {
         'Calendar/screens/calendar_screen' : (context) => CalendarScreen(),
         'Planner/DailyPlannerPage' : (context) => DailyPlannerPage(),
         //'Diary/screens/journal_screen' : (context) => JournalScreen(),
-        //'Setting/setting_page' : (context) => SettingsPage(userId: '',),
-        //'/articles': (context) => ArticlesScreen(),
+        'Setting/settings_page' : (context) => SettingsPage(userId: '',),
       },
     );
   }

@@ -257,7 +257,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       // 푸터는 하단에 고정
-      bottomNavigationBar: BottomNav(initialIndex: 0),
+      bottomNavigationBar: BottomNav(initialIndex: 0, userId: '',),
     );
   }
 

@@ -213,7 +213,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(initialIndex: 1),
+      bottomNavigationBar: BottomNav(initialIndex: 1, userId: '',),
     );
   }
 
@@ -226,9 +226,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           Text(
             isPlannerView
                 ? (isSameDay(selectedDate, DateTime.now())
-                ? 'My Today Tasks'
+                ? 'My Today Planner'
                 : 'Tasks for ${selectedDate.month}/${selectedDate.day}')
-                : 'My Todo List',
+                : 'My Todo Task',
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -251,12 +251,34 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
+// ✅ 이 파일은 DailyPlannerPage.dart 기준으로, 시간 24시간제 표기 및 시간/일정박스 가로 정렬 수정 버전입니다.
+
+  String _format24FromTimeString(String time) {
+    final match = RegExp(r'(AM|PM)\s(\d{1,2}):(\d{2})').firstMatch(time);
+    if (match == null) return time;
+
+    String period = match.group(1)!;
+    int hour = int.parse(match.group(2)!);
+    String minute = match.group(3)!;
+
+    if (period == 'PM' && hour != 12) hour += 12;
+    if (period == 'AM' && hour == 12) hour = 0;
+
+    return '${hour.toString().padLeft(2, '0')}:$minute';
+  }
+
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
 
+    // 시간 순 정렬
+    tasks.sort((a, b) {
+      DateTime? timeA = _parseTimeToDateTime(a.time);
+      DateTime? timeB = _parseTimeToDateTime(b.time);
+      return (timeA ?? DateTime(0)).compareTo(timeB ?? DateTime(0));
+    });
+
     return Column(
       children: [
-        // 🔹 날짜 헤더 + 삭제 버튼 🗑️
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -269,7 +291,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               GestureDetector(
                 onTap: () {
                   setState(() {
-                    _taskDataService.plannerTasksByDate.remove(selectedDate);
+                    final dateKey = _taskDataService.dateToKey(selectedDate);
+                    _taskDataService.plannerTasksByDate.remove(dateKey);
                   });
                 },
                 child: const Text('🗑️', style: TextStyle(fontSize: 20)),
@@ -277,7 +300,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             ],
           ),
         ),
-
         ListView.builder(
           padding: const EdgeInsets.all(16),
           shrinkWrap: true,
@@ -285,27 +307,45 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           itemCount: tasks.length,
           itemBuilder: (context, index) {
             final task = tasks[index];
-            final timeString = _formatTime(task.time, task.endTime);
+            final startTime = _format24FromTimeString(task.time ?? '');
+            final endTime = _format24FromTimeString(task.endTime ?? '');
 
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    timeString,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                  // 왼쪽 시간 표시
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (startTime.isNotEmpty)
+                        Text(
+                          startTime,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      const SizedBox(height: 40),
+                      if (endTime.isNotEmpty)
+                        Text(
+                          endTime,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
+                  // 오른쪽 일정박스
                   Expanded(
                     child: Container(
-                      height: 100, // 🔹 박스 크기 통일
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: getBrightPastelColor(),
+                        color: task.color ?? _getFixedColorForTask(task.title), // ✅ 고정 색상 적용
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
@@ -316,65 +356,58 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    task.title,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  task.title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                Transform.scale(
-                                  scale: 1.2,
-                                  child: Checkbox(
-                                    value: task.isCompleted,
-                                    onChanged: (bool? value) {
-                                      setState(() {
-                                        _taskDataService.updateTaskStatus(task, value ?? false);
-                                        updateProgress();
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (task.memo != null && task.memo!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                task.memo!,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Color(0xFF0484444),
+                              ),
+                              Transform.scale(
+                                scale: 1.2,
+                                child: Checkbox(
+                                  value: task.isCompleted,
+                                  onChanged: (bool? value) {
+                                    setState(() {
+                                      _taskDataService.updateTaskStatus(task, value ?? false);
+                                      updateProgress();
+                                    });
+                                  },
                                 ),
                               ),
                             ],
-                            if (task.location != null && task.location!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Row(
+                          ),
+                          if (task.memo != null && task.memo!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                task.memo!,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          if (task.location != null && task.location!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
                                 children: [
-                                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                                  const Icon(Icons.location_on, size: 16, color: Colors.grey),
                                   const SizedBox(width: 4),
                                   Text(
                                     task.location!,
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
+                                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                                   ),
                                 ],
                               ),
-                            ],
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -387,11 +420,27 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-  String _formatTime(String? start, String? end) {
-    if (start == null || start.isEmpty) return '';
-    if (end == null || end.isEmpty) return start;
-    return '$start - $end';
+
+
+  DateTime? _parseTimeToDateTime(String? time) {
+    if (time == null) return null;
+    final match = RegExp(r'(AM|PM)\s(\d{1,2}):(\d{2})').firstMatch(time);
+    if (match == null) return null;
+
+    String period = match.group(1)!;
+    int hour = int.parse(match.group(2)!);
+    String? minuteString = match.group(3);
+
+    if (minuteString == null) return null; // minute가 null일 경우 처리
+
+    int minute = int.tryParse(minuteString) ?? 0; // minute가 null이거나 숫자가 아닌 경우 기본값 0을 설정
+
+    if (period == 'PM' && hour != 12) hour += 12;
+    if (period == 'AM' && hour == 12) hour = 0;
+
+    return DateTime(0, 1, 1, hour, minute);
   }
+
 
 
   Widget _buildFloatingActionButton() {
@@ -874,6 +923,20 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
     super.dispose();
   }
 }
+
+Color _getFixedColorForTask(String title) {
+  final colors = [
+    Colors.purple.shade100,
+    Colors.green.shade100,
+    Colors.blue.shade100,
+    Colors.orange.shade100,
+    Colors.red.shade100,
+    Colors.teal.shade100,
+    Colors.amber.shade100,
+  ];
+  return colors[title.hashCode % colors.length];
+}
+
 
 // 랜덤한 밝은 파스텔 색상 생성
 Color getBrightPastelColor() {
