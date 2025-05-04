@@ -229,7 +229,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(initialIndex: 1, userId: userId),
+      bottomNavigationBar: BottomNav(initialIndex: 0, userId: widget.userId),
     );
   }
 
