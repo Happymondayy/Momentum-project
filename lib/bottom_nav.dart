@@ -34,47 +34,23 @@ class _BottomNavState extends State<BottomNav> {
     switch (index) {
       case 0: // Calendar
         Navigator.pushReplacementNamed(
-            context,
-            'Calendar/screens/calendar_screen',
-            // 빠른 페이지 전환을 위한 트랜지션 설정
-            arguments: PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => DailyPlannerPage(),
-              transitionDuration: Duration(milliseconds: 150),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            )
+          context,
+          'Calendar/screens/calendar_screen',
         );
         break;
       case 1: // Planner
         Navigator.pushReplacementNamed(
-            context,
-            'Planner/DailyPlannerPage',
-            // 빠른 페이지 전환을 위한 트랜지션 설정
-            arguments: PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => DailyPlannerPage(),
-              transitionDuration: Duration(milliseconds: 150),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            )
+          context,
+          'Planner/DailyPlannerPage',
         );
         break;
       case 2: // Diary
         Navigator.pushReplacementNamed(
-            context,
-            'Diary/main_diary',
-            // 빠른 페이지 전환을 위한 트랜지션 설정
-            arguments: PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => DailyPlannerPage(),
-              transitionDuration: Duration(milliseconds: 150),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            )
+          context,
+          'Diary/main_diary',
         );
         break;
-      case 3: // Community
+      case 3: // Settings
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -88,28 +64,30 @@ class _BottomNavState extends State<BottomNav> {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Colors.white,
       type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFF5E4DAE),
+      selectedItemColor: Colors.indigo,
       unselectedItemColor: Colors.grey.shade400,
+      showSelectedLabels: false,
+      showUnselectedLabels: false,
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.calendar_month),
-          label: 'Calendar',
+          label: '',
         ),
         BottomNavigationBarItem(
             icon: Icon(Icons.view_list),
-            label: 'Planner'
+            label: ''
         ),
         BottomNavigationBarItem(
             icon: Icon(Icons.article_outlined),
-            label: 'Diary'
+            label: ''
         ),
         BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            label: 'User'
+            icon: Icon(Icons.person),
+            label: ''
         ),
       ],
     );

@@ -35,6 +35,7 @@ class Todo_Task {
   });
 }
 
+
 // 진행률 화면 위젯
 class ProgressScreen extends StatelessWidget {
   final List<Todo_Task> tasks;
@@ -183,6 +184,7 @@ class _WeeklyCalendarState extends State<WeeklyCalendar> {
   late PageController _pageController;
   late DateTime _displayedWeekStart;
   int _currentPage = 0;
+
 
   @override
   void initState() {
@@ -688,16 +690,36 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
+
+
+// 2. 수정된 showAddTaskDialog 함수 (텍스트 컨트롤러 생성 삭제됨)
   void showAddTaskDialog(BuildContext context) {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController memoController = TextEditingController();
-    final TextEditingController locationController = TextEditingController();
+    // 1. 클래스 맨 위에 선언
+    late TextEditingController titleController;
+    late TextEditingController memoController;
+    late TextEditingController locationController;
+
+    @override
+    void initState() {
+      super.initState();
+      titleController = TextEditingController();
+      memoController = TextEditingController();
+      locationController = TextEditingController();
+    }
+
+    @override
+    void dispose() {
+      titleController.dispose();
+      memoController.dispose();
+      locationController.dispose();
+      super.dispose();
+    }
+
 
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
     TimeOfDay startTime = TimeOfDay.now();
-    TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1); // 🔹 startTime 이후 선언
-
+    TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1);
 
     bool isImportant = false;
     bool isUrgent = false;
@@ -750,7 +772,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 제목 입력
                               _buildTextField(
                                 titleController,
                                 '제목',
@@ -763,7 +784,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                               ),
                               const SizedBox(height: 20),
 
-                              // 날짜 선택
                               _buildDatePicker(context, taskDate, (pickedDate) {
                                 setState(() {
                                   taskDate = pickedDate;
@@ -771,7 +791,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              // 시작 시간 선택
                               _buildTimePicker(context, startTime, (pickedTime) {
                                 setState(() {
                                   startTime = pickedTime;
@@ -788,14 +807,11 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                               const SizedBox(height: 20),
 
-
-                              // 중요도 선택
                               _buildImportanceSelector(setState, importanceLevel, (level) {
                                 importanceLevel = level;
                               }),
                               const SizedBox(height: 20),
 
-                              // 마감일 날짜 선택
                               _buildDueDatePicker(context, dueDate, (picked) {
                                 setState(() {
                                   dueDate = picked;
@@ -803,14 +819,12 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-
-                              // 알림 설정
                               _buildSwitchRow('알림 설정', isImportant, (value) {
                                 setState(() {
                                   isImportant = value;
                                 });
                               }),
-                              // 반복 일정
+
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
                                   isUrgent = value;
@@ -818,15 +832,12 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              // 메모 입력
                               _buildTextField(memoController, '메모', '메모', null, maxLines: 3),
                               const SizedBox(height: 20),
 
-                              // 위치 입력
                               _buildTextField(locationController, '위치', '위치', null),
                               const SizedBox(height: 30),
 
-                              // 저장 버튼
                               Center(
                                 child: SizedBox(
                                   width: 150,
@@ -837,17 +848,16 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         return;
                                       }
 
-                                      // 시작/종료 시간 AM/PM 형식으로 저장
-                                      final String formattedStart = '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
-                                      final String formattedEnd = '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
-
-
+                                      final String formattedStart =
+                                          '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+                                      final String formattedEnd =
+                                          '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
                                       final newTask = Todo_Task(
                                         title: titleController.text,
                                         date: taskDate,
-                                        time: formattedStart,         // 시작시간
-                                        endTime: formattedEnd,        // 🔹 종료시간 이 줄 추가!
+                                        time: formattedStart,
+                                        endTime: formattedEnd,
                                         isImportant: isImportant,
                                         isUrgent: isUrgent,
                                         memo: memoController.text,
@@ -857,7 +867,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         isCompleted: false,
                                         color: _getFixedColorForTask(titleController.text),
                                       );
-
 
                                       _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
@@ -872,7 +881,6 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                                       _showSnackBar(context, '일정이 저장되었습니다');
                                     },
-
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF9575CD),
                                       foregroundColor: Colors.white,
@@ -901,6 +909,7 @@ class TodoListScreenState extends State<TodoListScreen> {
       setState(() {});
     });
   }
+
 
   // TextField 생성 메서드
   Widget _buildTextField(TextEditingController controller, String label, String hint, Function(String)? validator, {int maxLines = 1}) {
