@@ -118,13 +118,27 @@ class TaskDataService {
 }
 
 
-// DailyPlannerPage 클래스
 class DailyPlannerPage extends StatefulWidget {
+  final String userId;
+  const DailyPlannerPage({Key? key, required this.userId}) : super(key: key);
+
   @override
-  _DailyPlannerPageState createState() => _DailyPlannerPageState();
+  State<DailyPlannerPage> createState() => _DailyPlannerPageState();
 }
 
+
+
 class _DailyPlannerPageState extends State<DailyPlannerPage> {
+  late String userId; // 나중에 초기화할 변수
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    userId = args?['userId'] ?? '';
+    print('📌 userId 받은 값: $userId');
+  }
+
   bool isPlannerView = true; // true for planner, false for todo list
   DateTime selectedDate = DateTime.now();
   TodoListScreenState? todoListScreenState;
@@ -134,6 +148,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   @override
   void initState() {
     super.initState();
+    userId = widget.userId; // 여기서 초기화
+    print('📌 userId 받은 값: $userId');
     updateProgress();
   }
 
@@ -213,7 +229,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(initialIndex: 1, userId: '',),
+      bottomNavigationBar: BottomNav(initialIndex: 1, userId: userId),
     );
   }
 

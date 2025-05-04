@@ -368,6 +368,18 @@ class TodoListScreen extends StatefulWidget {
 }
 
 class TodoListScreenState extends State<TodoListScreen> {
+  final TextEditingController titleController = TextEditingController();
+  final TextEditingController memoController = TextEditingController();
+  final TextEditingController locationController = TextEditingController();
+
+  @override
+  void dispose() {
+  titleController.dispose();
+  memoController.dispose();
+  locationController.dispose();
+  super.dispose();
+  }
+
   late DateTime selectedDate;
   double progressPercentage = 0.0;
   late dynamic _taskDataService;
@@ -690,32 +702,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-
-
-// 2. 수정된 showAddTaskDialog 함수 (텍스트 컨트롤러 생성 삭제됨)
   void showAddTaskDialog(BuildContext context) {
-    // 1. 클래스 맨 위에 선언
-    late TextEditingController titleController;
-    late TextEditingController memoController;
-    late TextEditingController locationController;
-
-    @override
-    void initState() {
-      super.initState();
-      titleController = TextEditingController();
-      memoController = TextEditingController();
-      locationController = TextEditingController();
-    }
-
-    @override
-    void dispose() {
-      titleController.dispose();
-      memoController.dispose();
-      locationController.dispose();
-      super.dispose();
-    }
-
-
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
     TimeOfDay startTime = TimeOfDay.now();

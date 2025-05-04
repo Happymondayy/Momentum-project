@@ -16,6 +16,10 @@ import '../widgets/todo_card.dart';
 
 
 class CalendarScreen extends StatefulWidget {
+  final String userId;
+
+  const CalendarScreen({Key? key, required this.userId}) : super(key: key);
+
   @override
   _CalendarScreenState createState() => _CalendarScreenState();
 }

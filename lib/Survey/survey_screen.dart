@@ -8,11 +8,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
+  final String userId;
   final String? param1;
   final String? param2;
-  SurveyScreen({Key? key, this.param1, this.param2}) : super(key: key);
-
-
+  SurveyScreen({Key? key, this.param1, this.param2, required this.userId}) : super(key: key);
 
   @override
   _SurveyScreenState createState() => _SurveyScreenState();
@@ -285,7 +284,7 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                       Navigator.push( // 캘린더 화면으로 이동
                         context,
                         MaterialPageRoute(
-                            builder: (context) => CalendarScreen(),
+                          builder: (context) => CalendarScreen(userId: widget.userId),
                         )
                       );
                     } else {

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Firebase 인증 추가
-import 'package:google_sign_in/google_sign_in.dart'; // Google 로그인 추가
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class SignupPage extends StatefulWidget {
   SignupPage({Key? key}) : super(key: key);
@@ -24,39 +24,31 @@ class _SignupPageState extends State<SignupPage> {
   final FocusNode nicknameFocusNode = FocusNode();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance; // Firebase 인증 인스턴스 추가
-  final GoogleSignIn _googleSignIn = GoogleSignIn(); // Google 로그인 인스턴스 추가
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // Firebase 이메일/비밀번호로 회원가입
   Future<void> _signUpWithEmailAndPassword() async {
     try {
-      // 로딩 표시
       showLoadingDialog();
 
-      // Firebase Auth로 사용자 등록
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // Firestore에 사용자 추가 정보 저장
       await _saveUserDataToFirestore(
-          userId: userCredential.user!.uid,
-          email: emailController.text.trim(),
-          nickname: nicknameController.text.trim(),
-          authProvider: 'email'
+        userId: userCredential.user!.uid,
+        email: emailController.text.trim(),
+        nickname: nicknameController.text.trim(),
+        authProvider: 'email',
       );
 
-      // 로딩 닫기
       Navigator.pop(context);
 
-      // 설문조사 화면으로 이동
       navigateToSurvey(userCredential.user!.uid, nicknameController.text.trim());
 
     } on FirebaseAuthException catch (e) {
-      // 로딩 닫기
       Navigator.pop(context);
-
       String errorMessage = '회원가입 중 오류가 발생했습니다.';
       if (e.code == 'weak-password') {
         errorMessage = '비밀번호가 너무 약합니다.';
@@ -65,59 +57,43 @@ class _SignupPageState extends State<SignupPage> {
       } else if (e.code == 'invalid-email') {
         errorMessage = '유효하지 않은 이메일 형식입니다.';
       }
-
       showErrorSnackBar(errorMessage);
     } catch (e) {
-      // 로딩 닫기
       Navigator.pop(context);
       showErrorSnackBar('회원가입 중 오류가 발생했습니다: $e');
     }
   }
 
-  // 구글 로그인 구현
   Future<void> signInWithGoogle() async {
     try {
-      // 로딩 표시
       showLoadingDialog();
 
-      // Google Sign-In 플로우 시작
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-      // 사용자가 로그인 취소한 경우
       if (googleUser == null) {
-        Navigator.pop(context); // 로딩 닫기
+        Navigator.pop(context);
         return;
       }
 
-      // 인증 정보 얻기
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      // Firebase에 Google 계정으로 인증
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Firebase Auth로 로그인
       UserCredential userCredential = await _auth.signInWithCredential(credential);
-
-      // 새 사용자인지 확인
       bool isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
 
-      // 사용자 정보 저장 (새 사용자인 경우)
       if (isNewUser) {
-        // 닉네임은 Google 계정의 displayName을 기본값으로 사용
         String nickname = userCredential.user?.displayName ?? '사용자';
-
         await _saveUserDataToFirestore(
-            userId: userCredential.user!.uid,
-            email: userCredential.user!.email!,
-            nickname: nickname,
-            authProvider: 'google'
+          userId: userCredential.user!.uid,
+          email: userCredential.user!.email!,
+          nickname: nickname,
+          authProvider: 'google',
         );
       }
 
-      // 사용자 정보 가져오기
       DocumentSnapshot userDoc = await _firestore
           .collection('user')
           .doc(userCredential.user!.uid)
@@ -127,20 +103,15 @@ class _SignupPageState extends State<SignupPage> {
           ? (userDoc.data() as Map<String, dynamic>)['nickname'] ?? '사용자'
           : userCredential.user?.displayName ?? '사용자';
 
-      // 로딩 닫기
       Navigator.pop(context);
-
-      // 설문조사 화면으로 이동
       navigateToSurvey(userCredential.user!.uid, nickname);
 
     } catch (e) {
-      // 로딩 닫기
       if (context.mounted) Navigator.pop(context);
       showErrorSnackBar('구글 로그인 중 오류가 발생했습니다: $e');
     }
   }
 
-  // Firestore에 사용자 데이터 저장
   Future<void> _saveUserDataToFirestore({
     required String userId,
     required String email,
@@ -150,33 +121,26 @@ class _SignupPageState extends State<SignupPage> {
     await _firestore.collection('user').doc(userId).set({
       'email': email,
       'nickname': nickname,
-      'authProvider': authProvider, // 인증 제공자 저장 (email 또는 google)
+      'authProvider': authProvider,
       'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
-  // 로딩 다이얼로그 표시
   void showLoadingDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return const Center(
-          child: CircularProgressIndicator(
-            color: Colors.red,
-          ),
+          child: CircularProgressIndicator(color: Colors.red),
         );
       },
     );
   }
 
-  // 에러 메시지 표시
   void showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -202,7 +166,11 @@ class _SignupPageState extends State<SignupPage> {
   void navigateToSurvey(String userId, String nickname) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => SurveyScreen(param1: userId, param2: nickname),
+        builder: (context) => SurveyScreen(
+          param1: userId,     // 예: 이메일일 경우 변수명 수정 필요
+          param2: nickname,   // 닉네임
+          userId: userId,     // 여기! 올바른 userId 전달
+        ),
       ),
     );
   }
@@ -225,82 +193,17 @@ class _SignupPageState extends State<SignupPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: TextField(
-                  controller: emailController,
-                  focusNode: emailFocusNode,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(passwordFocusNode);
-                  },
-                  decoration: InputDecoration(
-                    hintText: '이메일 등록',
-                    border: InputBorder.none,
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                  ),
-                ),
-              ),
-            ),
+            buildInputField(emailController, emailFocusNode, passwordFocusNode, '이메일 등록'),
             const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: TextField(
-                  controller: passwordController,
-                  focusNode: passwordFocusNode,
-                  obscureText: true,
-                  keyboardType: TextInputType.visiblePassword,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(nicknameFocusNode);
-                  },
-                  decoration: InputDecoration(
-                    hintText: '비밀번호 등록',
-                    border: InputBorder.none,
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                  ),
-                ),
-              ),
-            ),
+            buildInputField(passwordController, passwordFocusNode, nicknameFocusNode, '비밀번호 등록', obscure: true),
             const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: TextField(
-                  controller: nicknameController,
-                  focusNode: nicknameFocusNode,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) {
-                    FocusScope.of(context).unfocus();
-                    if (isOver14 && emailController.text.isNotEmpty &&
-                        passwordController.text.isNotEmpty &&
-                        nicknameController.text.isNotEmpty) {
-                      _signUpWithEmailAndPassword();
-                    }
-                  },
-                  decoration: InputDecoration(
-                    hintText: '닉네임 등록',
-                    border: InputBorder.none,
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                  ),
-                ),
-              ),
-            ),
+            buildInputField(nicknameController, nicknameFocusNode, null, '닉네임 등록', onSubmit: () {
+              if (isOver14 && emailController.text.isNotEmpty &&
+                  passwordController.text.isNotEmpty &&
+                  nicknameController.text.isNotEmpty) {
+                _signUpWithEmailAndPassword();
+              }
+            }),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -339,69 +242,80 @@ class _SignupPageState extends State<SignupPage> {
               ],
             ),
             const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: isOver14 ? () {
-                  if (emailController.text.isEmpty ||
-                      passwordController.text.isEmpty ||
-                      nicknameController.text.isEmpty) {
-                    showErrorSnackBar('이메일, 비밀번호, 닉네임을 모두 입력해주세요.');
-                    return;
-                  }
-                  _signUpWithEmailAndPassword();
-                } : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFCFCFFF),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: Colors.grey[300],
-                  disabledForegroundColor: Colors.grey[600],
-                ),
-                child: const Text(
-                  '가입하기',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            buildMainButton('가입하기', onPressed: isOver14 ? () {
+              if (emailController.text.isEmpty ||
+                  passwordController.text.isEmpty ||
+                  nicknameController.text.isEmpty) {
+                showErrorSnackBar('이메일, 비밀번호, 닉네임을 모두 입력해주세요.');
+                return;
+              }
+              _signUpWithEmailAndPassword();
+            } : null),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
+            buildMainButton('구글로 가입하기',
                 onPressed: isOver14 ? signInWithGoogle : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  side: BorderSide(color: Colors.grey[300]!),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: Colors.grey[100],
-                  disabledForegroundColor: Colors.grey[500],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(width: 10),
-                    const Text(
-                      '구글로 가입하기',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                isGoogle: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildInputField(TextEditingController controller, FocusNode focusNode, FocusNode? nextFocus, String hintText,
+      {bool obscure = false, VoidCallback? onSubmit}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          obscureText: obscure,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: nextFocus != null ? TextInputAction.next : TextInputAction.done,
+          onSubmitted: (_) {
+            if (nextFocus != null) {
+              FocusScope.of(context).requestFocus(nextFocus);
+            } else {
+              FocusScope.of(context).unfocus();
+              if (onSubmit != null) onSubmit();
+            }
+          },
+          decoration: InputDecoration(
+            hintText: hintText,
+            border: InputBorder.none,
+            hintStyle: TextStyle(color: Colors.grey[600]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildMainButton(String text, {VoidCallback? onPressed, bool isGoogle = false}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isGoogle ? Colors.white : const Color(0xFFCFCFFF),
+          foregroundColor: isGoogle ? Colors.black : Colors.white,
+          side: isGoogle ? BorderSide(color: Colors.grey[300]!) : null,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 0,
+          disabledBackgroundColor: Colors.grey[300],
+          disabledForegroundColor: Colors.grey[600],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isGoogle) const SizedBox(width: 10),
+            Text(
+              text,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
         ),
