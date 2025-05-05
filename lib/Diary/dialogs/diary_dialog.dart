@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/diary_entry.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DiaryDialog extends StatefulWidget {
   final Function(
       {required DateTime date,
       required MoodState mood,
-      required String content}) onSave;
+      required String content,
+      required String userId}) onSave;
   final DateTime? initialDate; // nullable로 변경
   final MoodState? initialMood; // nullable로 변경
   final String? initialContent; // nullable로 변경
+  final Function(DiaryEntry diary)? onDelete;
+  final DiaryEntry? diary;
+  final bool isEditing;
+  final String currentUserId;
+
 
   const DiaryDialog({
     Key? key,
@@ -17,6 +25,10 @@ class DiaryDialog extends StatefulWidget {
     this.initialDate,
     this.initialMood,
     this.initialContent,
+    this.diary,
+    this.onDelete,
+    this.isEditing = false,
+    required this.currentUserId,
   }) : super(key: key);
 
   @override
@@ -28,6 +40,7 @@ class _DiaryDialogState extends State<DiaryDialog> {
   late DateTime _selectedDate;
   late MoodState _selectedMood;
   bool _contentError = false;
+  bool _editing = false;
 
   @override
   void initState() {
@@ -35,6 +48,8 @@ class _DiaryDialogState extends State<DiaryDialog> {
     _selectedDate = widget.initialDate ?? DateTime.now();
     _selectedMood = widget.initialMood ?? MoodState.neutral;
     _contentController.text = widget.initialContent ?? '';
+    _editing = widget.isEditing;
+    final user = FirebaseAuth.instance.currentUser; // 현재 로그인한 사용자의 user 객체 가져옴
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(FocusNode());
@@ -56,12 +71,43 @@ class _DiaryDialogState extends State<DiaryDialog> {
     }
 
     widget.onSave(
+      userId: widget.currentUserId,
       date: _selectedDate,
       mood: _selectedMood,
       content: _contentController.text,
     );
 
     Navigator.pop(context);
+  }
+
+  void _handleDelete() {
+    if (widget.onDelete != null && widget.diary != null) {
+      widget.onDelete!(widget.diary!);
+      Navigator.pop(context);
+    }
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('일기 삭제'),
+        content: Text('이 일기를 정말 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _handleDelete();
+            },
+            child: Text('삭제', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDateSelector() {
@@ -110,7 +156,7 @@ class _DiaryDialogState extends State<DiaryDialog> {
                   DateFormat('yyyy-MM-dd').format(_selectedDate),
                   style: TextStyle(fontSize: 16),
                 ),
-                Icon(Icons.calendar_today, size: 20),
+                _editing ? Icon(Icons.calendar_today, size: 20) : SizedBox.shrink(),
               ],
             ),
           ),
@@ -142,9 +188,11 @@ class _DiaryDialogState extends State<DiaryDialog> {
           decoration: BoxDecoration(
             color: Colors.grey[100],
             borderRadius: BorderRadius.circular(12),
+            border:  _editing ? Border.all(color: Colors.grey.shade300) : null,
           ),
           padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-          child: DropdownButtonHideUnderline(
+          child: _editing
+              ? DropdownButtonHideUnderline(
             child: DropdownButton<MoodState>(
               isExpanded: true,
               value: _selectedMood,
@@ -154,7 +202,7 @@ class _DiaryDialogState extends State<DiaryDialog> {
                   value: mood,
                   child: Row(
                     children: [
-                      Icon(mood.icon, color: mood.color),
+                      mood.getGradientCircle(),
                       SizedBox(width: 8),
                       Text(mood.koreanName),
                     ],
@@ -168,6 +216,16 @@ class _DiaryDialogState extends State<DiaryDialog> {
                   });
                 }
               },
+            ),
+          )
+              : Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                _selectedMood.getGradientCircle(),
+                SizedBox(width: 8),
+                Text(_selectedMood.koreanName),
+              ],
             ),
           ),
         ),
@@ -199,21 +257,25 @@ class _DiaryDialogState extends State<DiaryDialog> {
                   topRight: Radius.circular(15),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.close, color: Colors.grey[700]),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  Text(
-                    '새 일기 작성',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: Icon(Icons.close, color: Colors.grey[700]),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
-                  Container(width: 48),
+                  Center(
+                    child: Text(
+                      _editing ? '일기 상세' : '새 일기 작성',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -234,8 +296,8 @@ class _DiaryDialogState extends State<DiaryDialog> {
                           errorText: _contentError ? '본문을 입력해주세요.' : null,
                         ),
                         style: TextStyle(fontSize: 16),
-                        maxLines: 5,
-                        autofocus: true,
+                        maxLines: null,
+                        autofocus: widget.isEditing,
                         onChanged: (_) => setState(() {
                           _contentError = false;
                         }),
@@ -246,27 +308,70 @@ class _DiaryDialogState extends State<DiaryDialog> {
                       SizedBox(height: 20),
                       _buildMoodSelector(),
                       SizedBox(height: 30),
-                      Center(
-                        child: ElevatedButton(
-                          onPressed: _validateAndSave,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple[300],
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(horizontal: 50, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                      _editing
+                          ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _validateAndSave,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple[300],
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 2,
                             ),
-                            elevation: 2,
-                          ),
-                          child: Text(
-                            '저장',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                            child: Text(
+                              '저장',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                          SizedBox(width: 16),
+
+                          OutlinedButton(
+                            onPressed: _confirmDelete,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: BorderSide(color: Colors.red),
+                              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                            child: Text(
+                              '삭제',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ) :
+                      ElevatedButton(
+                      onPressed: _validateAndSave,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple[300],
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: Text(
+                        '저장',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                    ),
                     ],
                   ),
                 ),

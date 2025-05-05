@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
@@ -14,8 +14,10 @@ import '../widgets/section_header.dart';
 import '../widgets/event_card.dart';
 import '../widgets/todo_card.dart';
 
-
 class CalendarScreen extends StatefulWidget {
+  final String userId;
+  const CalendarScreen({Key? key, required this.userId}) : super(key: key); // 추가
+
   @override
   _CalendarScreenState createState() => _CalendarScreenState();
 }
@@ -26,16 +28,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selectedDay = DateTime.now();
   Map<DateTime, List<Event>> _events = {};
   Map<DateTime, List<TodoItem>> _todoItems = {};
+  String? _currentUserId; // 받은 userId 저장용
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = widget.userId;
+    print('✅ CalendarScreen에서 받은 userId = $_currentUserId');
     _loadEventsFromFirebase();
     _loadTodosFromFirebase();
   }
 
   void _loadEventsFromFirebase() {
-    FirebaseFirestore.instance.collection('events').snapshots().listen((snapshot) {
+    FirebaseFirestore.instance
+        .collection('events')
+        .where('userId',isEqualTo: _currentUserId)
+        .snapshots()
+        .listen((snapshot){
       Map<DateTime, List<Event>> events = {};
 
       for (var doc in snapshot.docs) {
@@ -51,6 +60,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             : null;
 
         final event = Event(
+          userId: data['userId'],
           id: doc.id,
           title: data['title'],
           description: data['description'] ?? '',
@@ -76,29 +86,39 @@ class _CalendarScreenState extends State<CalendarScreen> {
           events[key] = [event];
         }
       }
-
-      setState(() {
-        _events = events;
-      });
+    setState(() {
+      _events = events;
     });
+  });
   }
 
+
   void _loadTodosFromFirebase() {
-    FirebaseFirestore.instance.collection('todos').snapshots().listen((snapshot) {
+    FirebaseFirestore.instance
+        .collection('todos')
+        .where('userId', isEqualTo: _currentUserId)
+        .snapshots()
+        .listen((snapshot) {
       Map<DateTime, List<TodoItem>> todos = {};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final date = DateTime.parse(data['date']);
-        final time = data['time'] != null
-            ? TimeOfDay(hour: data['time']['hour'], minute: data['time']['minute'])
+
+        final startTime = data['startTime'] != null
+            ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
+            : null;
+        final endTime = data['endTime'] != null
+            ? TimeOfDay(hour: data['endTime']['hour'], minute: data['endTime']['minute'])
             : null;
 
         final todo = TodoItem(
+          userId: data['userId'],
           id: doc.id,
           title: data['title'],
           date: date, // date 속성 추가
-          time: time, // time을 선택적 인자로 전달
+          startTime: startTime,
+          endTime: endTime,
           memo: data['memo'] ?? '',
           location: data['location'] ?? '',
           isRepeating: data['isRepeating'] ?? false,
@@ -150,7 +170,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       'minute': event.endTime!.minute,
     } : null;
 
-    await FirebaseFirestore.instance.collection('events').add({
+    final eventDate = {
+      'userId': _currentUserId,
       'title': event.title,
       'description': event.description,
       'startDate': event.startDate.toIso8601String(),
@@ -165,37 +186,60 @@ class _CalendarScreenState extends State<CalendarScreen> {
       'repeatCustomDays': event.repeatCustomDays,
       'isAllDay': event.isAllDay,
       'reminder': event.reminder,
+    };
+
+    final docRef = await FirebaseFirestore.instance.collection('events').add(eventDate);
+
+    setState(() {
+      final key = DateTime(event.startDate.year, event.startDate.month, event.startDate.day);
+      final newEvent = event.copyWith(id: docRef.id);
+
+      if (_events[key] != null) {
+        _events[key]!.add(newEvent);
+      } else {
+        _events[key] = [newEvent];
+      }
     });
   }
 
-  void _addTodo(TodoItem todoitem) async {
+  void _addTodo(TodoItem todo) async {
     try {
-      final timeMap = todoitem.time != null ? {
-        'hour': todoitem.time!.hour,
-        'minute': todoitem.time!.minute,
+      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
+        'hour': todo.startTime!.hour,
+        'minute': todo.startTime!.minute,
       } : null;
 
-      await FirebaseFirestore.instance.collection('todos').add({
-        'title': todoitem.title,
-        'date': todoitem.date.toIso8601String(),
-        'time': timeMap,
-        'memo': todoitem.memo,
-        'location': todoitem.location ?? '',
-        'isRepeating': todoitem.isRepeating,
-        'repeatOption': todoitem.repeatOption,
-        'repeatDays': todoitem.repeatDays,
-        'repeatCustomDays': todoitem.repeatCustomDays,
-        'reminder': todoitem.reminder,
+      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
+        'hour': todo.endTime!.hour,
+        'minute': todo.endTime!.minute,
+      } : null;
+
+      final todoDate = {
+        'userId': _currentUserId,
+        'title': todo.title,
+        'date': todo.date.toIso8601String(),
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'memo': todo.memo,
+        'location': todo.location ?? '',
+        'isRepeating': todo.isRepeating,
+        'repeatOption': todo.repeatOption,
+        'repeatDays': todo.repeatDays,
+        'repeatCustomDays': todo.repeatCustomDays,
+        'reminder': todo.reminder,
         'isCompleted': false,
-      });
+      };
+
+      final docRef = await FirebaseFirestore.instance.collection('todos').add(todoDate);
 
       setState(() {
-        final key = DateTime(
-            todoitem.date.year, todoitem.date.month, todoitem.date.day);
+        final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
+        final newTodo = todo.copyWith(id: docRef.id);
+
         if (_todoItems[key] != null) {
-          _todoItems[key]!.add(todoitem);
+          _todoItems[key]!.add(newTodo);
         } else {
-          _todoItems[key] = [todoitem];
+          _todoItems[key] = [newTodo];
         }
       });
     } catch (e) {
@@ -207,8 +251,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     showDialog(
       context: context,
       builder: (context) => EventDialog(
+        currentUserId: _currentUserId ?? 'unknown',
         selectedDay: _selectedDay,
         onSave: _addEvent,
+        isEditing: false,
       ),
     );
   }
@@ -217,8 +263,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     showDialog(
       context: context,
       builder: (context) => TodoDialog(
+        currentUserId: _currentUserId ?? 'unknown',
         selectedDay: _selectedDay,
         onSave: _addTodo,
+        isEditing: false,
       ),
     );
   }
@@ -226,75 +274,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _showEventDetailsDialog(Event event) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('일정 상세'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  event.title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Text('시작: ${DateFormat('yyyy-MM-dd').format(event.startDate)}'),
-                if (event.startTime != null)
-                  Text('시간: ${event.startTime!.format(context)}'),
-                if (event.description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10.0),
-                    child: Text('설명: ${event.description}'),
-                  ),
-                if (event.location.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5.0),
-                    child: Text('장소: ${event.location}'),
-                  ),
-                if (event.memo.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5.0),
-                    child: Text('메모: ${event.memo}'),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('닫기'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showEditEventDialog(event);
-              },
-              child: Text('수정'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _confirmDelete(context, event);
-              },
-              child: Text('삭제', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showEditEventDialog(Event event) {
-    showDialog(
-      context: context,
       builder: (context) => EventDialog(
+        currentUserId: _currentUserId ?? 'unknown',
         selectedDay: event.startDate,
         event: event,
         onSave: _updateEvent,
+        onDelete: _deleteEvent, // 삭제 콜백 추가
+        isEditing: true, // 수정 모드임을 나타냄
+      ),
+    );
+  }
+
+  void _showTodoDetailsDialog(TodoItem todo) {
+    showDialog(
+      context: context,
+      builder: (context) => TodoDialog(
+        currentUserId: _currentUserId ?? 'unknown',
+        selectedDay: todo.date,
+        todo: todo,
+        onSave: _updateTodo,
+        onDelete: _deleteTodo, // 삭제 콜백 추가
+        isEditing: true, // 수정 모드임을 나타냄
       ),
     );
   }
@@ -343,30 +343,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  void _confirmDelete(BuildContext context, Event event) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('정말 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              deleteEvent(event);
-              Navigator.pop(context);
-            },
-            child: Text('삭제'),
-          ),
-        ],
-      ),
-    );
+  void _updateTodo(TodoItem todo) async {
+    try {
+      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
+        'hour': todo.startTime!.hour,
+        'minute': todo.startTime!.minute,
+      } : null;
+
+      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
+        'hour': todo.endTime!.hour,
+        'minute': todo.endTime!.minute,
+      } : null;
+
+      await FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
+        'title': todo.title,
+        'date': todo.date.toIso8601String(),
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'memo': todo.memo,
+        'location': todo.location,
+        'isRepeating': todo.isRepeating,
+        'repeatOption': todo.repeatOption,
+        'repeatDays': todo.repeatDays,
+        'repeatCustomDays': todo.repeatCustomDays,
+        'isAllDay': todo.isAllDay,
+        'reminder': todo.reminder,
+      });
+
+      print('Todo updated successfully');
+    } catch (e) {
+      print('Error updating todo: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    print('CalendarScreen: userId = ${widget.userId}');
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -397,7 +410,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
       // 푸터는 하단에 고정
-      bottomNavigationBar: BottomNav(initialIndex: 0),
+      bottomNavigationBar: BottomNav(initialIndex: 0, userId: _currentUserId ?? 'unknown'),
     );
   }
 
@@ -426,7 +439,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
               SizedBox(width: 18,),
               Text(
-                DateFormat('M').format(_focusedDay), // 현재 월 표시
+                intl.DateFormat('M').format(_focusedDay), // 현재 월 표시
                 style: TextStyle(
                   fontSize: 30.0,
                   fontWeight: FontWeight.bold,
@@ -512,7 +525,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 if (day.weekday == DateTime.sunday || day.weekday == DateTime.saturday) {
                   text = "S"; // 일요일과 토요일은 "S"
                 } else {
-                  text = DateFormat.E().format(day)[0]; // 나머지 요일은 첫 글자만
+                  text = intl.DateFormat.E().format(day)[0]; // 나머지 요일은 첫 글자만
                 }
 
                 // 요일 색상 설정
@@ -588,36 +601,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               onTap: () => _showEventDetailsDialog(event),
               child: EventCard(
                 event: event,
-                onMorePressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    builder: (context) => Container(
-                      height: 150,
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: Icon(Icons.edit),
-                            title: Text('수정'),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _showEditEventDialog(event);
-                            },
-                          ),
-                          ListTile(
-                            leading: Icon(Icons.delete, color: Colors.red),
-                            title: Text('삭제', style: TextStyle(color: Colors.red)),
-                            onTap: () {
-                              Navigator.pop(context);
-                              _confirmDelete(context, event);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                onEdit: () => _showEditEventDialog(event),
-                onDelete: () => _confirmDelete(context, event),
+                onEdit: () => _showEventDetailsDialog(event),
+                onDelete: () => _deleteEvent(event),
+                onMorePressed: () => _showEventDetailsDialog(event),
               ),
             );
           },
@@ -642,8 +628,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: Center(child: Text('오늘 할 일이 없습니다.')),
         )
             : ListView.builder(
-          physics: NeverScrollableScrollPhysics(), // 중요: 개별 스크롤 비활성화
-          shrinkWrap: true, // 중요: 컨텐츠 크기만큼만 차지
+          physics: NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
           itemCount: todos.length,
           itemBuilder: (context, index) {
             final todo = todos[index];
@@ -655,50 +641,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 if (value is bool) {
                   newStatus = value;
                 } else {
-                  // value가 bool이 아닌 경우 현재 상태를 반전
                   newStatus = !todo.isCompleted;
                 }
 
-                // Firestore 업데이트
                 FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
                   'isCompleted': newStatus,
-                });
-
-                // 로컬 상태 업데이트
-                setState(() {
-                  todo.isCompleted = newStatus;
+                }).then((_) { // Firestore 업데이트 성공 후 로컬 상태 업데이트
+                  setState(() {
+                    final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
+                    if (_todoItems.containsKey(key)) {
+                      final index = _todoItems[key]!.indexWhere((item) => item.id == todo.id);
+                      if (index != -1) {
+                        _todoItems[key]![index] = todo.copyWith(isCompleted: newStatus);
+                      }
+                    }
+                  });
+                }).catchError((error) {
+                  print("Error updating todo: $error");
+                  // 에러 처리 로직 (예: 스낵바 표시) 추가
                 });
               },
-              onMorePressed: () {
-                // Todo에 대한 옵션 (수정/삭제 등) 표시
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => Container(
-                    height: 150,
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: Icon(Icons.edit),
-                          title: Text('수정'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            // _showEditTodoDialog(todo); // Todo 수정 다이얼로그 구현 필요
-                          },
-                        ),
-                        ListTile(
-                          leading: Icon(Icons.delete, color: Colors.red),
-                          title: Text('삭제', style: TextStyle(color: Colors.red)),
-                          onTap: () {
-                            Navigator.pop(context);
-                            // Todo 삭제 확인 다이얼로그 구현 필요
-                            _confirmDeleteTodo(context, todo);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+              onEdit: () => _showTodoDetailsDialog(todo),
+              onDelete: () => _deleteTodo(todo),
+              onMorePressed: () => _showTodoDetailsDialog(todo),
             );
           },
         ),
@@ -706,36 +671,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // Todo 삭제 확인 다이얼로그
-  void _confirmDeleteTodo(BuildContext context, TodoItem todo) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('정말 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              _deleteTodo(todo);
-              Navigator.pop(context);
-            },
-            child: Text('삭제'),
-          ),
-        ],
-      ),
-    );
+  void _deleteEvent(Event event) async {
+    try {
+      await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
+      print('Event deleted successfully');
+      Navigator.pop(context); // 다이얼로그 닫기
+    } catch (e) {
+      print('Error deleting event: $e');
+    }
+    // 삭제 후 상태 업데이트 (예: 화면 갱신)
+    setState(() {
+      final key = DateTime(event.startDate.year, event.startDate.month, event.startDate.day);
+      _events[key]?.removeWhere((e) => e.id == event.id);
+    });
   }
 
-  // Todo 삭제 기능
   Future<void> _deleteTodo(TodoItem todo) async {
     try {
       await FirebaseFirestore.instance.collection('todos').doc(todo.id).delete();
       print('Todo deleted successfully');
+      Navigator.pop(context); // 다이얼로그 닫기
     } catch (e) {
       print('Error deleting todo: $e');
     }
+    // 삭제 후 상태 업데이트 (예: 화면 갱신)
+    setState(() {
+      final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
+      _events[key]?.removeWhere((e) => e.id == todo.id);
+    });
   }
 }

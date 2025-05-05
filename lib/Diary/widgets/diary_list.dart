@@ -1,19 +1,39 @@
 import 'package:flutter/material.dart';
 import '../models/diary_entry.dart';
 import '../utils/date_formatter.dart';
+import '../dialogs/diary_dialog.dart';
 
 class DiaryList extends StatelessWidget {
   final List<DiaryEntry> entries;
-  final Function(DiaryEntry) onViewDiary;
   final Function(DiaryEntry) onEditDiary;
   final Function(DiaryEntry) onDeleteDiary;
+  final Function({required DateTime date, required MoodState mood, required String content, required String userId}) onSaveDiary;
 
   DiaryList({
     required this.entries,
-    required this.onViewDiary,
     required this.onEditDiary,
     required this.onDeleteDiary,
+    required this.onSaveDiary,
   });
+
+  void _showDiaryDialog(BuildContext context, DiaryEntry entry) {
+    showDialog(
+      context: context,
+      builder: (context) => DiaryDialog(
+        diary: entry,
+        currentUserId: entry.userId,
+        initialDate: entry.date,
+        initialMood: entry.mood,
+        initialContent: entry.content,
+        onSave: ({required DateTime date, required MoodState mood, required String content, required String userId}) {
+          onSaveDiary(userId: entry.userId, date: date, mood: mood, content: content);
+        },
+        onDelete: (diary) {
+          onDeleteDiary(diary);
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,73 +66,84 @@ class DiaryList extends StatelessWidget {
 
   Widget _buildDiaryCard(BuildContext context, DiaryEntry entry) {
     return InkWell(
-      onTap: () => onViewDiary(entry),
+      onTap: () => _showDiaryDialog(context, entry),
       borderRadius: BorderRadius.circular(16),
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         color: Colors.white,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 상단: 아이콘 + 날짜 + 메뉴
+              // 상단: 기분 원형 그라데이션 + 날짜
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Icon(entry.mood.icon, color: entry.mood.color, size: 22),
-                      SizedBox(width: 8),
+                      entry.mood.getGradientCircle(size: 24), // 새로운 기분 표시 방식
+                      SizedBox(width: 10),
                       Text(
                         DateFormatter.formatShortDate(entry.date),
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
                           color: Colors.grey[800],
                         ),
                       ),
                     ],
                   ),
-                  PopupMenuButton(
-                    icon: Icon(Icons.more_vert, size: 20),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, color: Colors.blue, size: 20),
-                            SizedBox(width: 8),
-                            Text('수정'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, color: Colors.red, size: 20),
-                            SizedBox(width: 8),
-                            Text('삭제'),
-                          ],
-                        ),
-                      ),
-                    ],
-                    onSelected: (value) {
-                      if (value == 'edit') onEditDiary(entry);
-                      else if (value == 'delete') onDeleteDiary(entry);
-                    },
+                  Text(
+                    entry.mood.koreanName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
               SizedBox(height: 10),
               Divider(),
               SizedBox(height: 10),
-              // 본문: 제한 없이 전체 출력
-              Text(
-                entry.content,
-                style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
+              // 본문 내용: 그라데이션으로 흐리게 처리
+              Container(
+                width: double.infinity,
+                constraints: BoxConstraints(maxHeight: 100),
+                child: Stack(
+                  children: [
+                    Text(
+                      entry.content,
+                      style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.black87,
+                          height: 1.4
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.fade,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withOpacity(0.0),
+                              Colors.white.withOpacity(0.9),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

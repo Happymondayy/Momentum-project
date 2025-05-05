@@ -5,10 +5,14 @@ import '../models/diary_entry.dart';
 import '../utils/date_formatter.dart';
 import '../widgets/mood_chart.dart';
 import '../widgets/month_selector.dart';
-import '../dialogs/diary_dialog.dart'; // Import the new DiaryDialog
+import '../widgets/diary_list.dart';
+import '../dialogs/diary_dialog.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
+
 class DiaryScreen extends StatefulWidget {
+  final String userId;
+  const DiaryScreen({Key? key, required this.userId}) : super(key: key); // 추가
   @override
   _DiaryScreenState createState() => _DiaryScreenState();
 }
@@ -18,6 +22,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
   List<String> _availableMonths = [];
   String? _selectedMonth;
   bool _isLoading = true;
+  String? _currentUserId; // 받은 userId 저장용
 
   // 주간 차트용 날짜 범위
   late DateTime _startOfWeek;
@@ -26,6 +31,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
   @override
   void initState() {
     super.initState();
+    _currentUserId = widget.userId;
+    print('✅ DiaryScreen에서 받은 userId = $_currentUserId');
     _initWeekRange();
     _loadData();
   }
@@ -37,23 +44,25 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (_currentUserId == null) {
+      print('사용자 ID가 없습니다.');
+      return;
+    }
 
     try {
-      // 1. Firestore에서 모든 일기 데이터를 가져옴
+      // 현재 사용자의 일기만 가져오기 (복합 인덱스 요구 없이 수정)
       final QuerySnapshot diarySnapshot = await FirebaseFirestore.instance
           .collection('diaries')
-          .orderBy('date', descending: false) // 오름차순 정렬
+          .where('userId', isEqualTo: _currentUserId) // userId가 같은 데이터만
           .get();
 
-      // 2. DiaryEntry 리스트 생성
+      // 가져온 데이터를 메모리에서 정렬 (Firestore에서 정렬하지 않음)
       final entries = diarySnapshot.docs
           .map((doc) => DiaryEntry.fromFirestore(doc))
-          .toList();
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date)); // 메모리에서 날짜 내림차순 정렬
 
-      // 3. 현재 연도 기준으로 1월~12월 리스트 생성
+      // 현재 연도 기준으로 1월~12월 리스트 생성
       final now = DateTime.now();
       final currentYear = now.year;
 
@@ -62,7 +71,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
         return '$currentYear-${month.toString().padLeft(2, '0')}';
       });
 
-      // 4. 상태 업데이트
+      // 상태 업데이트
       setState(() {
         _diaryEntries = entries;
         _availableMonths = allMonths; // 항상 12개월 다 표시
@@ -102,36 +111,26 @@ class _DiaryScreenState extends State<DiaryScreen> {
     }).toList();
   }
 
-  void _navigateToDiaryDetail(DiaryEntry entry) {
-    // 일기 상세 보기 화면으로 이동
-    Navigator.pushNamed(
-      context,
-      '/diary_detail',
-      arguments: entry,
-    ).then((_) => _loadData()); // 돌아왔을 때 데이터 갱신
-  }
-
   void _showAddDiaryDialog() {
     // 일기 추가 팝업을 띄우는 함수
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return DiaryDialog(
-          onSave: ({required DateTime date, required MoodState mood, required String content}) async {
+          currentUserId: widget.userId,
+          onSave: ({required DateTime date, required MoodState mood, required String content, required String userId}) async {
             try {
-              final docRef = await FirebaseFirestore.instance
-                  .collection('diaries')
-                  .add({
+              final diaryData = {
+                'userId': _currentUserId,
                 'date': Timestamp.fromDate(date),
                 'content': content,
                 'mood': mood.index,
-              });
+              };
 
-              _loadData();
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('일기가 작성되었습니다.')),
-              );
+              await FirebaseFirestore.instance.collection('diaries').add(diaryData);
+
+              await _loadData();
+
             } catch (e) {
               print('일기 작성 오류: $e');
               ScaffoldMessenger.of(context).showSnackBar(
@@ -144,99 +143,38 @@ class _DiaryScreenState extends State<DiaryScreen> {
     );
   }
 
-  void _navigateToEditDiary(DiaryEntry? entry) {
-    // 일기 작성/수정 화면으로 이동
-    Navigator.pushNamed(
-      context,
-      '/diary_edit',
-      arguments: entry,
-    ).then((_) {
-      _loadData(); // Ensure data is reloaded after returning from edit screen
-    });
-  }
-
-  Future<void> _deleteDiary(DiaryEntry entry) async {
-    // 사용자 확인
-    final bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('일기 삭제'),
-        content: Text('이 일기를 정말 삭제하시겠습니까?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('삭제', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    ) ??
-        false;
-
-    if (!confirm) return;
-
-    try {
-      // Firestore에서 삭제
-      await FirebaseFirestore.instance
-          .collection('diaries')
-          .doc(entry.id)
-          .delete();
-
-      // 화면 갱신
-      _loadData();
-
-      // 성공 메시지
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('일기가 삭제되었습니다.')),
-      );
-    } catch (e) {
-      print('일기 삭제 오류: $e');
-
-      // 오류 메시지
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('일기 삭제 중 오류가 발생했습니다.')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final userId = _currentUserId ?? '알 수 없음';
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(30.0), // 원하는 높이 설정
+        preferredSize: Size.fromHeight(40.0),
         child: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
-          leading: IconButton(
-            icon: Icon(Icons.menu, color: Colors.black),
-            onPressed: () {
-              print('Menu button pressed');
-            },
+          title: Text(
+            '일기',
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
           ),
         ),
       ),
-
-
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddDiaryDialog, // 일기 추가 팝업 띄우기
+        onPressed: _showAddDiaryDialog,
         backgroundColor: Color(0xFFB39DDB),
         child: Icon(Icons.add),
         tooltip: '새 일기 작성',
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(  // overflow 방지용
+          : SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 그래프를 전체 배경에 표시 (박스 제거)
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.symmetric(vertical: 4),
@@ -257,7 +195,6 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 },
               ),
               SizedBox(height: 16),
-              // 리스트뷰를 고정 높이로 제한해서 overflow 방지
               _filteredEntries.isEmpty
                   ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 32),
@@ -281,8 +218,63 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ListTile(
-                      onTap: () => _navigateToDiaryDetail(entry),
-                      leading: Icon(entry.mood.icon, color: entry.mood.color),
+                      onTap: () {
+                        // 일기 상세보기/수정 다이얼로그
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            return DiaryDialog(
+                              currentUserId: widget.userId,
+                              isEditing: true,
+                              diary: entry,
+                              initialDate: entry.date,
+                              initialMood: entry.mood,
+                              initialContent: entry.content,
+                              onSave: ({required DateTime date, required MoodState mood, required String content, required String userId}) async {
+                                try {
+                                  // Firestore 문서 ID를 통한 업데이트
+                                  await FirebaseFirestore.instance
+                                      .collection('diaries')
+                                      .doc(entry.id)
+                                      .update({
+                                    'date': Timestamp.fromDate(date),
+                                    'content': content,
+                                    'mood': mood.index,
+                                  });
+
+                                  await _loadData();
+
+                                } catch (e) {
+                                  print('일기 수정 오류: $e');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('일기 수정 중 오류가 발생했습니다.')),
+                                  );
+                                }
+                              },
+                              onDelete: (diary) async {
+                                try {
+                                  await FirebaseFirestore.instance
+                                      .collection('diaries')
+                                      .doc(diary.id)
+                                      .delete();
+
+                                  await _loadData();
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('일기가 삭제되었습니다.')),
+                                  );
+                                } catch (e) {
+                                  print('일기 삭제 오류: $e');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('일기 삭제 중 오류가 발생했습니다.')),
+                                  );
+                                }
+                              },
+                            );
+                          },
+                        );
+                      },
+                      leading: entry.mood.getGradientCircle(),
                       title: Text(
                         DateFormat('yyyy-MM-dd').format(entry.date),
                         style: TextStyle(fontWeight: FontWeight.bold),
@@ -294,19 +286,6 @@ class _DiaryScreenState extends State<DiaryScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.edit, size: 20, color: Colors.blue),
-                            onPressed: () => _navigateToEditDiary(entry),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete, size: 20, color: Colors.red),
-                            onPressed: () => _deleteDiary(entry),
-                          ),
-                        ],
-                      ),
                     ),
                   );
                 },
@@ -315,7 +294,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNav(initialIndex: 2),
+      bottomNavigationBar: BottomNav(initialIndex: 2, userId: userId),
     );
   }
 }

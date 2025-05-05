@@ -10,12 +10,14 @@ enum MoodState {
 }
 
 class DiaryEntry {
+  final String userId;
   final String id;
   final DateTime date;
   final String content;
   final MoodState mood;
 
   DiaryEntry({
+    required this.userId,
     required this.id,
     required this.date,
     required this.content,
@@ -33,6 +35,7 @@ class DiaryEntry {
     }
 
     return DiaryEntry(
+      userId: data['userId'] ?? 'defaultUser',
       id: doc.id,
       date: (data['date'] as Timestamp).toDate(),
       content: data['content'] as String,
@@ -43,6 +46,7 @@ class DiaryEntry {
   // DiaryEntry 객체를 Firestore에 저장할 Map으로 변환
   Map<String, dynamic> toFirestore() {
     return {
+      'userId': userId,
       'date': Timestamp.fromDate(date),
       'content': content,
       'mood': mood.index,
@@ -51,12 +55,14 @@ class DiaryEntry {
 
   // 편집을 위한 복사본 생성
   DiaryEntry copyWith({
+    String? userId,
     String? id,
     DateTime? date,
     String? content,
     MoodState? mood,
   }) {
     return DiaryEntry(
+      userId: userId ?? this.userId,
       id: id ?? this.id,
       date: date ?? this.date,
       content: content ?? this.content,
@@ -85,16 +91,42 @@ extension MoodStateExtension on MoodState {
   Color get color {
     switch (this) {
       case MoodState.veryGood:
-        return Color(0xFFB39DDB); // 연보라색
+        return Colors.green;
       case MoodState.good:
-        return Color(0xFFD1C4E9); // 밝은 연보라색
+        return Colors.lightGreen;
       case MoodState.neutral:
-        return Color(0xFFE0E0E0); // 회색
+        return Colors.blue;
       case MoodState.bad:
-        return Color(0xFFBDBDBD); // 어두운 회색
+        return Colors.orange;
       case MoodState.veryBad:
-        return Color(0xFF9E9E9E); // 더 어두운 회색
+        return Colors.red;
     }
+  }
+
+  Widget getGradientCircle({double size = 24.0}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            color,
+            color.withOpacity(0.7),
+            color.withOpacity(0.3),
+          ],
+          stops: [0.4, 0.7, 1.0],
+          radius: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 3,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+    );
   }
 
   IconData get icon {

@@ -5,13 +5,19 @@ import 'package:momentum_planner/Calendar/models/event.dart';
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
   final Function(Event event) onSave;
+  final Function(Event event)? onDelete;
   final Event? event;
+  final bool isEditing;
+  final String currentUserId;
 
   const EventDialog({
     Key? key,
     required this.selectedDay,
     required this.onSave,
+    this.onDelete,
     this.event,
+    this.isEditing = false,
+    required this.currentUserId,
   }) : super(key: key);
 
   @override
@@ -136,6 +142,7 @@ class _EventDialogState extends State<EventDialog> {
     }
 
     final event = Event(
+      userId: widget.currentUserId,
       id: widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use existing ID if editing
       title: _titleController.text,
       description: _descriptionController.text,
@@ -190,27 +197,49 @@ class _EventDialogState extends State<EventDialog> {
         SizedBox(height: 10),
         InkWell(
           onTap: () async {
-            final DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: _startDate,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2100),
-              // 날짜 선택기 지역화 설정 추가
-              locale: Locale('ko', 'KR'),
-            );
-            if (pickedDate != null) {
-              setState(() {
-                _startDate = pickedDate;
-                if (_endDate.isBefore(_startDate)) {
-                  _endDate = _startDate;
-                }
-              });
+            try {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _startDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+                builder: (context, child) {
+                  return Theme(
+                    data: ThemeData.light().copyWith(
+                      colorScheme: ColorScheme.light(
+                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
+                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
+                        surface: Colors.white, // 배경색
+                        onSurface: Colors.black, // 일반 텍스트 색상
+                      ),
+                      dialogBackgroundColor: Colors.white,
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _startDate = pickedDate;
+                  if (_endDate.isBefore(_startDate)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('종료 날짜가 시작 날짜보다 이전입니다.')),
+                    );
+                    _endDate = _startDate;
+                  }
+                });
+              }
+            } catch (e) {
+              print('시작 날짜 선택 중 오류 발생: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
+              );
             }
           },
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Colors.white, // 회색에서 흰색으로 변경
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey[300]!),
             ),
@@ -221,7 +250,7 @@ class _EventDialogState extends State<EventDialog> {
                   _getFormattedDate(_startDate),
                   style: TextStyle(fontSize: 16),
                 ),
-                Icon(Icons.calendar_today, size: 20),
+                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
               ],
             ),
           ),
@@ -231,23 +260,43 @@ class _EventDialogState extends State<EventDialog> {
         SizedBox(height: 10),
         InkWell(
           onTap: () async {
-            final DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: _endDate,
-              firstDate: _startDate,
-              lastDate: DateTime(2100),
-              locale: Locale('ko', 'KR'),
-            );
-            if (pickedDate != null) {
-              setState(() {
-                _endDate = pickedDate;
-              });
+            try {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _endDate,
+                firstDate: _startDate, // 시작일보다 전의 날짜는 선택할 수 없도록
+                lastDate: DateTime(2100),
+                builder: (context, child) {
+                  return Theme(
+                    data: ThemeData.light().copyWith(
+                      colorScheme: ColorScheme.light(
+                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
+                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
+                        surface: Colors.white, // 배경색
+                        onSurface: Colors.black, // 일반 텍스트 색상
+                      ),
+                      dialogBackgroundColor: Colors.white,
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _endDate = pickedDate;
+                });
+              }
+            } catch (e) {
+              print('종료 날짜 선택 중 오류 발생: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
+              );
             }
           },
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Colors.white, // 회색에서 흰색으로 변경
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey[300]!),
             ),
@@ -258,7 +307,7 @@ class _EventDialogState extends State<EventDialog> {
                   _getFormattedDate(_endDate),
                   style: TextStyle(fontSize: 16),
                 ),
-                Icon(Icons.calendar_today, size: 20),
+                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
               ],
             ),
           ),
@@ -619,9 +668,38 @@ class _EventDialogState extends State<EventDialog> {
     return _reminderOption;
   }
 
+  void _deleteEvent() {
+    // 삭제 전 확인 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('일정 삭제'),
+          content: Text('이 일정을 삭제하시겠습니까?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('취소', style: TextStyle(color: Colors.grey[700])),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // 확인 다이얼로그 닫기
+                if (widget.onDelete != null && widget.event != null) {
+                  widget.onDelete!(widget.event!);
+                }
+                Navigator.pop(context); // 이벤트 다이얼로그 닫기
+              },
+              child: Text('삭제', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String dialogTitle = widget.event != null ? '일정 수정' : '새 일정 추가';
+    final String dialogTitle = widget.isEditing ? '일정 상세' : '새 일정 추가';
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -787,25 +865,56 @@ class _EventDialogState extends State<EventDialog> {
 
                       // Save button
                       Center(
-                        child: ElevatedButton(
-                          onPressed: _validateAndSave,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple[300],
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(horizontal: 50, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton(
+
+                              onPressed: _validateAndSave,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.deepPurple[300],
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: Text(
+                                '저장',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                            elevation: 2,
-                          ),
-                          child: Text(
-                            '저장',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                            if (widget.isEditing && widget.onDelete != null) ...[
+                              SizedBox(width: 15),
+                              ElevatedButton(
+                                onPressed: _deleteEvent,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red[400],
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: Text(
+                                  '삭제',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+
+                              ),
+                            ],
+                          ],
                         ),
+
+
                       ),
                     ],
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class Event {
+  final String? userId;
   final String id;
   final String title;
   final String description;
@@ -18,6 +19,7 @@ class Event {
   final String? reminder;
 
   Event({
+    required this.userId,
     required this.id,
     required this.title,
     required this.description,
@@ -37,6 +39,7 @@ class Event {
 
   // Create a copy of this event with optional modified fields
   Event copyWith({
+    String? userId,
     String? id,
     String? title,
     String? description,
@@ -54,6 +57,7 @@ class Event {
     String? reminder,
   }) {
     return Event(
+      userId: userId ?? this.userId,
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
@@ -85,6 +89,8 @@ class Event {
     } : null;
 
     return {
+      'userId' : userId,
+      'id' : id,
       'title': title,
       'description': description,
       'startDate': startDate.toIso8601String(),
@@ -103,7 +109,7 @@ class Event {
   }
 
   // Firebase에서 불러온 데이터로 Event 생성 (CalendarScreen 코드와 일치하도록 수정)
-  factory Event.fromMap(Map<String, dynamic> map, String docId) {
+  factory Event.fromMap(Map<String, dynamic> map, String userId, String docId) {
     final startDate = DateTime.parse(map['startDate']);
     final endDate = DateTime.parse(map['endDate']);
 
@@ -115,6 +121,7 @@ class Event {
         : null;
 
     return Event(
+      userId: map['userId'],
       id: docId,
       title: map['title'],
       description: map['description'] ?? '',

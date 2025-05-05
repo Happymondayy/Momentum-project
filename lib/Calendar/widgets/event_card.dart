@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/event.dart';
+import '../dialogs/event_dialog.dart';
 
 class EventCard extends StatelessWidget {
   final Event event;
-  final VoidCallback onMorePressed;
-  final VoidCallback? onEdit;  // Make optional with nullable type
-  final VoidCallback? onDelete;  // Make optional with nullable type
+  final void Function() onMorePressed;
+  final void Function()? onEdit;  // Make optional with nullable type
+  final void Function()? onDelete;  // Make optional with nullable type
 
   const EventCard({
     Key? key,
     required this.event,
     required this.onMorePressed,
-    this.onEdit,  // Optional parameter
+    this.onEdit,
     this.onDelete,  // Optional parameter
   }) : super(key: key);
 
@@ -39,15 +40,12 @@ class EventCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (event.reminder != null)
-              Icon(Icons.notifications, color: Colors.amber),
+              Icon(Icons.notifications, color: Colors.amber, size: 14),
             if (event.isRepeating)
-              Icon(Icons.repeat, color: Colors.blue),
-            IconButton(
-              icon: Icon(Icons.more_vert),
-              onPressed: onMorePressed,
-            ),
+              Icon(Icons.repeat, color: Colors.blue, size: 14),
           ],
         ),
+        onTap: () => onMorePressed(), // ListTile 자체에 onTap 부여
       ),
     );
   }

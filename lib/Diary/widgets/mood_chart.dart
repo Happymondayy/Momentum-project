@@ -134,21 +134,33 @@ class MoodChart extends StatelessWidget {
                 if (day < 1 || day > 7) return SizedBox.shrink();
 
                 final date = startOfWeek.add(Duration(days: day - 1));
+                final now = DateTime.now();
+
+                final isToday = date.year == now.year &&
+                    date.month == now.month &&
+                    date.day == now.day;
+
+                final textStyle = TextStyle(
+                  fontSize: 14,
+                  fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                  color: isToday ? Colors.deepPurple : Color(0xFF68737D),
+                );
 
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       ['월', '화', '수', '목', '금', '토', '일'][day - 1],
-                      style: TextStyle(fontSize: 14, color: Color(0xFF68737D)),
+                      style: textStyle,
                     ),
                     Text(
                       '${date.month}.${date.day}',
-                      style: TextStyle(fontSize: 14, color: Color(0xFF68737D)),
+                      style: textStyle,
                     ),
                   ],
                 );
               },
+
             ),
           ),
 
