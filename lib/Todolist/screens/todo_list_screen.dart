@@ -6,19 +6,19 @@ import 'package:intl/intl.dart';
 
 // Todo_Task 모델 클래스
 class Todo_Task {
-  final String title;//제목
-  final String? description;
+  String title;//제목
+  String? description;
   String? time;
-  final String? endTime;
-  final DateTime date;
-  final bool isImportant;
-  final bool isUrgent;
-  final String? memo;
-  final String? location;
-  final int importance;
-  final int urgency;
-  final Color? color;
-  final DateTime? dueDate;
+  String? endTime;
+  DateTime date;
+  bool isImportant;
+  bool isUrgent;
+  String? memo;
+  String? location;
+  int importance;
+  int urgency;
+  Color? color;
+  DateTime? dueDate;
   bool isCompleted;
 
   Todo_Task({
@@ -547,159 +547,405 @@ class TodoListScreenState extends State<TodoListScreen> {
     }
   }
 
-
+  // 1. _buildTaskItem 함수를 수정하여 GestureDetector로 감싸기
   Widget _buildTaskItem(Todo_Task task) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: _getFixedColorForTask(task.title),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 제목 + 이모지 + 체크박스 + 삭제 아이콘
-            Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          task.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (task.isImportant) const Text('🔔'),
-                      if (task.isUrgent) const Text('🔁'),
-                    ],
-                  ),
-                ),
-                Transform.scale(
-                  scale: 1.2,
-                  child: Checkbox(
-                    value: task.isCompleted,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        task.isCompleted = value ?? false;
-                        calculateProgress();
-                        if (widget.onTaskStatusChanged != null) {
-                          widget.onTaskStatusChanged!();
-                        }
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('삭제 확인'),
-                        content: const Text('이 일정을 삭제하시겠습니까?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('취소'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _taskDataService.removeTask(task);
-                                calculateProgress();
-                              });
-                              Navigator.pop(context);
-                            },
-                            child: const Text('삭제', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: const Icon(Icons.delete, color: Colors.redAccent, size: 24),
-                ),
-              ],
+    return GestureDetector(
+      onTap: () {
+        showTaskDetailDialog(context, task);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: _getFixedColorForTask(task.title),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-
-            // 시작 - 종료 시간
-            if ((task.time != null && task.time!.isNotEmpty) || (task.endTime != null && task.endTime!.isNotEmpty)) ...[
-              const SizedBox(height: 4),
-              Text(
-                _buildTimeRange(task),
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              ),
-            ],
-
-            // 위치
-            if (task.location != null && task.location!.isNotEmpty) ...[
-              const SizedBox(height: 4),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 제목 + 이모지 + 체크박스 + 삭제 아이콘
               Row(
                 children: [
-                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    task.location!,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                ],
-              ),
-            ],
-
-            // 메모
-            if (task.memo != null && task.memo!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.notes, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      task.memo!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            task.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (task.isImportant) const Text('🔔'),
+                        if (task.isUrgent) const Text('🔁'),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ],
-            // 마감일
-            if (task.dueDate != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.calendar_today, size: 16, color: Colors.deepOrange),
-                  const SizedBox(width: 4),
-                  Text(
-                    '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
-                    style: const TextStyle(fontSize: 14, color: Colors.deepOrange),
+                  Transform.scale(
+                    scale: 1.2,
+                    child: Checkbox(
+                      value: task.isCompleted,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          task.isCompleted = value ?? false;
+                          calculateProgress();
+                          if (widget.onTaskStatusChanged != null) {
+                            widget.onTaskStatusChanged!();
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('삭제 확인'),
+                          content: const Text('이 일정을 삭제하시겠습니까?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('취소'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _taskDataService.removeTask(task);
+                                  calculateProgress();
+                                });
+                                Navigator.pop(context);
+                              },
+                              child: const Text('삭제', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Icon(Icons.delete, color: Colors.redAccent, size: 24),
                   ),
                 ],
               ),
-            ],
 
-          ],
+              // 시작 - 종료 시간
+              if ((task.time != null && task.time!.isNotEmpty) || (task.endTime != null && task.endTime!.isNotEmpty)) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _buildTimeRange(task),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+              ],
+
+              // 위치
+              if (task.location != null && task.location!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      task.location!,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+
+              // 메모
+              if (task.memo != null && task.memo!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.notes, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        task.memo!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // 마감일
+              if (task.dueDate != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.deepOrange),
+                    const SizedBox(width: 4),
+                    Text(
+                      '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
+                      style: const TextStyle(fontSize: 14, color: Colors.deepOrange),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+// 2. 상세보기 및 수정 다이얼로그 함수 추가
+  void showTaskDetailDialog(BuildContext context, Todo_Task task) {
+    // 컨트롤러 초기화 및 현재 값 설정
+    final titleController = TextEditingController(text: task.title);
+    final memoController = TextEditingController(text: task.memo ?? '');
+    final locationController = TextEditingController(text: task.location ?? '');
+
+    // 시간 변환
+    TimeOfDay startTime = _parseTimeString(task.time ?? '');
+    TimeOfDay endTime = _parseTimeString(task.endTime ?? '');
+
+    // 날짜 및 설정 변수
+    DateTime taskDate = task.date;
+    DateTime? dueDate = task.dueDate;
+    bool isImportant = task.isImportant;
+    bool isUrgent = task.isUrgent;
+    int importanceLevel = task.importance;
+    int urgencyLevel = task.urgency;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              insetPadding: EdgeInsets.zero,
+              child: Container(
+                width: MediaQuery.of(context).size.width,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 다이얼로그 헤더
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: const BoxDecoration(
+                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                          const Expanded(
+                            child: Text(
+                              '일정 상세 정보',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () {
+                              // 수정 모드로 전환 (다이얼로그 내에서 바로 수정 가능)
+                              if (titleController.text.isEmpty) {
+                                _showSnackBar(context, '제목을 입력해주세요');
+                                return;
+                              }
+
+                              final String formattedStart =
+                                  '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+                              final String formattedEnd =
+                                  '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+
+                              // 기존 객체 업데이트
+                              task.title = titleController.text;
+                              task.time = formattedStart;
+                              task.endTime = formattedEnd;
+                              task.isImportant = isImportant;
+                              task.isUrgent = isUrgent;
+                              task.memo = memoController.text;
+                              task.location = locationController.text;
+                              task.importance = importanceLevel;
+                              task.urgency = urgencyLevel;
+                              task.dueDate = dueDate;
+
+                              Navigator.of(context).pop();
+                              setState(() {
+                                calculateProgress();
+                              });
+
+                              if (widget.onTaskStatusChanged != null) {
+                                widget.onTaskStatusChanged!();
+                              }
+
+                              _showSnackBar(context, '일정이 수정되었습니다');
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 폼 영역
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildTextField(
+                                titleController,
+                                '제목',
+                                '제목을 입력하세요 (필수)',
+                                    (value) {
+                                  if (value.isEmpty) {
+                                    _showSnackBar(context, '제목을 입력해주세요');
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 20),
+
+                              _buildDatePicker(context, taskDate, (pickedDate) {
+                                setState(() {
+                                  taskDate = pickedDate;
+                                });
+                              }),
+                              const SizedBox(height: 20),
+
+                              _buildTimePicker(context, startTime, (pickedTime) {
+                                setState(() {
+                                  startTime = pickedTime;
+                                });
+                              }, label: '시작 시간'),
+
+                              const SizedBox(height: 20),
+
+                              _buildTimePicker(context, endTime, (pickedTime) {
+                                setState(() {
+                                  endTime = pickedTime;
+                                });
+                              }, label: '종료 시간'),
+
+                              const SizedBox(height: 20),
+
+                              _buildImportanceSelector(setState, importanceLevel, (level) {
+                                importanceLevel = level;
+                              }),
+                              const SizedBox(height: 20),
+
+                              _buildDueDatePicker(
+                                  context,
+                                  dueDate,
+                                      (pickedDate) {
+                                    setState(() {
+                                      dueDate = pickedDate;
+                                    });
+                                  }),
+
+                              const SizedBox(height: 20),
+
+                              _buildSwitchRow('알림 설정', isImportant, (value) {
+                                setState(() {
+                                  isImportant = value;
+                                });
+                              }),
+
+                              _buildSwitchRow('반복 일정', isUrgent, (value) {
+                                setState(() {
+                                  isUrgent = value;
+                                });
+                              }),
+                              const SizedBox(height: 20),
+
+                              _buildTextField(memoController, '메모', '메모', null, maxLines: 3),
+                              const SizedBox(height: 20),
+
+                              _buildTextField(locationController, '위치', '위치', null),
+                              const SizedBox(height: 30),
+
+                              Center(
+                                child: SizedBox(
+                                  width: 150,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.grey.shade400,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(25),
+                                      ),
+                                    ),
+                                    child: const Text('닫기'),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      setState(() {});
+    });
+  }
+
+// 3. 시간 문자열을 TimeOfDay로 변환하는 유틸리티 함수 추가
+  TimeOfDay _parseTimeString(String timeString) {
+    // 기본값 설정
+    if (timeString.isEmpty) {
+      return TimeOfDay.now();
+    }
+
+    // "AM 09:30" 또는 "PM 03:45" 형식 파싱
+    bool isAM = timeString.startsWith('AM');
+
+    final parts = timeString.substring(3).split(':');
+    if (parts.length != 2) {
+      return TimeOfDay.now();
+    }
+
+    try {
+      int hour = int.parse(parts[0].trim());
+      int minute = int.parse(parts[1].trim());
+
+      // PM인 경우 12시간제 -> 24시간제로 변환
+      if (!isAM && hour < 12) {
+        hour += 12;
+      }
+      // AM인 경우 12시는 0시로 변환
+      if (isAM && hour == 12) {
+        hour = 0;
+      }
+
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      return TimeOfDay.now();
+    }
   }
 
 
