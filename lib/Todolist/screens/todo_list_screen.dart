@@ -379,10 +379,10 @@ class TodoListScreenState extends State<TodoListScreen> {
 
   @override
   void dispose() {
-    titleController.dispose();
-    memoController.dispose();
-    locationController.dispose();
-    super.dispose();
+  titleController.dispose();
+  memoController.dispose();
+  locationController.dispose();
+  super.dispose();
   }
 
   late DateTime selectedDate;
@@ -819,16 +819,16 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              _buildDueDatePicker(
-                                  context,
-                                  selectedDueDate,
-                                      (pickedDate) {
-                                    setState(() {
-                                      selectedDueDate = pickedDate;
-                                    });
-                                  }),
+                            _buildDueDatePicker(
+                              context,
+                              selectedDueDate,
+                                  (pickedDate) {
+                                setState(() {
+                                  selectedDueDate = pickedDate;
+                                });
+                              }),
 
-                              const SizedBox(height: 20),
+                            const SizedBox(height: 20),
 
                               _buildSwitchRow('알림 설정', isImportant, (value) {
                                 setState(() {

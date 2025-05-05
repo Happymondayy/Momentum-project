@@ -1,190 +1,240 @@
 import 'package:flutter/material.dart';
-import 'signup_page.dart';
-import 'find_ID_page.dart';
-import 'find_password_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import 'package:momentum_planner/Login/find_password_page.dart';
+import 'package:momentum_planner/Login/signup_page.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
-class LoginPage extends StatelessWidget {
-  LoginPage({Key? key}) : super(key: key);
+import '../Calendar/screens/calendar_screen.dart'; // ✅ 변경된 부분
 
+class LoginPage extends StatefulWidget {
+  const LoginPage({Key? key}) : super(key: key);
+
+  @override
+  _LoginPageState createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
-
-  // Firestore에서 이메일과 비밀번호 확인하는 함수
-  Future<void> _loginUser(BuildContext context) async {
-    String email = emailController.text.trim();
-    String password = passwordController.text.trim();
-
-    if (email.isEmpty || password.isEmpty) {
-      _showDialog(context, "로그인 실패", "이메일과 비밀번호를 입력하세요.");
-      return;
-    }
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
     try {
-      // Firestore에서 해당 이메일을 가진 유저 검색
-      var querySnapshot = await _firestore
-          .collection('user') // ⚠️ 'users' 컬렉션에서 검색해야 함
-          .where('email', isEqualTo: email)
-          .get();
+      final UserCredential userCredential =
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      if (querySnapshot.docs.isEmpty) {
-        _showDialog(context, "로그인 실패", "등록되지 않은 이메일입니다.");
-        return;
-      }
+      final User? user = userCredential.user;
 
-      var userData = querySnapshot.docs.first.data();
-      if (userData['password'] == password) {
-        _showDialog(context, "로그인 성공", "환영합니다! 😊");
-        // 로그인 성공 시 calendar_screen.dart로 이동
-        Navigator.push(
+      if (user != null) {
+        final userDoc = await _firestore
+            .collection('users')
+            .where('email', isEqualTo: user.email)
+            .get();
+
+        String userId;
+        if (userDoc.docs.isNotEmpty) {
+          userId = userDoc.docs.first.id;
+        } else {
+          final newDoc = await _firestore.collection('users').add({
+            'email': user.email,
+            'name': user.displayName ?? '',
+            'googleLogin': false,
+          });
+          userId = newDoc.id;
+        }
+
+        print('로그인 성공! userId = $userId');
+
+        // ✅ 변경된 부분: BottomNav -> CalendarScreen
+        Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => CalendarScreen()), // CalendarScreen으로 이동
+          MaterialPageRoute(
+            builder: (context) => CalendarScreen(userId: userId),
+          ),
         );
-      } else {
-        _showDialog(context, "로그인 실패", "비밀번호가 일치하지 않습니다.");
       }
+    } on FirebaseAuthException catch (e) {
+      _showError('로그인 실패: ${e.message}');
     } catch (e) {
-      _showDialog(context, "로그인 오류", "로그인 중 오류가 발생했습니다: $e");
+      _showError('알 수 없는 오류가 발생했습니다.');
     }
   }
 
-  // 다이얼로그 창 띄우기
-  void _showDialog(BuildContext context, String title, String message) {
+  Future<void> _loginWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth =
+      await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential =
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      final User? user = userCredential.user;
+
+      if (user != null) {
+        final userDoc = await _firestore
+            .collection('users')
+            .where('email', isEqualTo: user.email)
+            .get();
+
+        String userId;
+        if (userDoc.docs.isNotEmpty) {
+          userId = userDoc.docs.first.id;
+        } else {
+          final docRef = await _firestore.collection('users').add({
+            'email': user.email,
+            'name': user.displayName ?? '',
+            'googleLogin': true,
+          });
+          userId = docRef.id;
+        }
+
+        print('Google 로그인 성공! userId = $userId');
+
+        // ✅ 변경된 부분: BottomNav -> CalendarScreen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CalendarScreen(userId: userId),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Google 로그인 중 오류가 발생했습니다.');
+    }
+  }
+
+  void _showError(String message) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("확인"),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: Text('오류'),
+        content: Text(message),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      backgroundColor: Colors.white,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 100),
-              const Text(
+              const SizedBox(height: 60),
+              Text(
                 'FocusMate',
-                style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 80),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: TextField(
-                    controller: emailController,
-                    decoration: InputDecoration(
-                      hintText: '이메일을 입력하세요',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
+              const SizedBox(height: 60),
+              _buildTextField(_emailController, '이메일을 입력하세요'),
               const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      hintText: '비밀번호를 입력하세요',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(color: Colors.grey[600]),
+              _buildTextField(_passwordController, '비밀번호를 입력하세요', isPassword: true),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _login,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFFD9D7F1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    '로그인',
+                    style: TextStyle(color: Colors.black87),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  _loginUser(context); // 로그인 기능 실행
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFCFCFFF),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text(
-                  '로그인',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: _loginWithGoogle,
+                child: Text(
+                  'Google로 로그인',
+                  style: TextStyle(color: Colors.black87),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 40),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const FindIdPage()),
-                      );
-                    },
-                    child: Text(
-                      '아이디 찾기',
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const FindPasswordPage()),
-                      );
-                    },
-                    child: Text(
-                      '비밀번호 찾기',
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SignupPage()),
-                      );
-                    },
-                    child: Text(
-                      '회원가입',
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                  ),
+                  _buildLink('아이디 찾기', () {}),
+                  _buildLink('비밀번호 찾기', () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => FindPasswordPage()),
+                    );
+                  }),
+                  _buildLink('회원가입', () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => SignupPage()),
+                    );
+                  }),
                 ],
               ),
+              const SizedBox(height: 30),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint,
+      {bool isPassword = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Color(0xFFEDEDED),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword,
+        decoration: InputDecoration(
+          hintText: hint,
+          border: InputBorder.none,
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLink(String text, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: Colors.black54,
+          fontSize: 13,
         ),
       ),
     );

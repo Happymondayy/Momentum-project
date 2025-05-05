@@ -7,20 +7,17 @@ import 'package:momentum_planner/Login/signup_page.dart';
 import 'Login/login_page.dart'; // LoginPage를 import
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart'; // Firebase 설정 파일 import
+import 'firebase_options.dart';
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 import 'package:momentum_planner/Settings/settings_page.dart';
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // Firebase가 이미 초기화되지 않았다면 초기화
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform, // 명시적으로 options 추가
+        options: DefaultFirebaseOptions.currentPlatform,
       );
       print("🔥 Firebase 초기화 성공!");
     } else {
@@ -30,7 +27,7 @@ void main() async {
     print("❌ Firebase 초기화 실패: $e");
   }
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -39,27 +36,49 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FocusMate', // 앱 제목
+      title: 'FocusMate',
       theme: ThemeData(
-        primarySwatch: Colors.blue, // 기본 테마 색상
-        fontFamily: 'NotoSansKR', // 폰트 설정
+        primarySwatch: Colors.blue,
+        fontFamily: 'NotoSansKR',
       ),
-      home: LoginPage(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
-      //home: SettingsPage(userId: '',), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
-      //home: CalendarScreen(), // 앱 시작 시 보일 첫 번째 화면 (LoginPage)
-      debugShowCheckedModeBanner: false, // 디버그 배너 숨기기
-      initialRoute: 'Login/login_page.dart',
-      routes: {
-        'Login/login_page' : (context) => LoginPage(),
-        'Login/signup_page' : (context) => SignupPage(),
-        'Login/find_ID_page' : (context) => FindIdPage(),
-        'Login/find_password_page' : (context) => FindPasswordPage(),
-        'Survey/models/survey_screen' : (context) => SurveyScreen(),
-        'Calendar/screens/calendar_screen' : (context) => CalendarScreen(),
-        'Planner/DailyPlannerPage' : (context) => DailyPlannerPage(),
-        'Diary/screens/diary_screen' : (context) => DiaryScreen(),
-        //'Setting/setting_page' : (context) => SettingsPage(userId: '',),
-        //'/articles': (context) => ArticlesScreen(),
+      debugShowCheckedModeBanner: false,
+      initialRoute: 'Login/login_page',
+      // ✅ arguments 사용을 위해 routes 대신 onGenerateRoute 사용
+      onGenerateRoute: (settings) {
+        final args = settings.arguments as Map<String, dynamic>?;
+
+        switch (settings.name) {
+          case 'Login/login_page':
+            return MaterialPageRoute(builder: (_) => LoginPage());
+          case 'Login/signup_page':
+            return MaterialPageRoute(builder: (_) => SignupPage());
+          case 'Login/find_ID_page':
+            return MaterialPageRoute(builder: (_) => FindIdPage());
+          case 'Login/find_password_page':
+            return MaterialPageRoute(builder: (_) => FindPasswordPage());
+          case 'Survey/models/survey_screen':
+            return MaterialPageRoute(
+              builder: (_) => SurveyScreen(userId: args?['userId'] ?? ''),
+            );
+          case 'Planner/DailyPlannerPage':
+            return MaterialPageRoute(
+              builder: (_) => DailyPlannerPage(userId: args?['userId'] ?? ''),
+            );
+          case 'Calendar/screens/calendar_screen':
+            return MaterialPageRoute(
+              builder: (_) => CalendarScreen(userId: args?['userId'] ?? ''),
+            );
+          case 'Diary/screens/diary_screen':
+            return MaterialPageRoute(
+              builder: (_) => DiaryScreen(userId: args?['userId'] ?? ''),
+            );
+          case 'Setting/settings_page':
+            return MaterialPageRoute(
+              builder: (_) => SettingsPage(userId: args?['userId'] ?? ''),
+            );
+          default:
+            return null;
+        }
       },
     );
   }

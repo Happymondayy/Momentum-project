@@ -118,13 +118,27 @@ class TaskDataService {
 }
 
 
-// DailyPlannerPage 클래스
 class DailyPlannerPage extends StatefulWidget {
+  final String userId;
+  const DailyPlannerPage({Key? key, required this.userId}) : super(key: key);
+
   @override
-  _DailyPlannerPageState createState() => _DailyPlannerPageState();
+  State<DailyPlannerPage> createState() => _DailyPlannerPageState();
 }
 
+
+
 class _DailyPlannerPageState extends State<DailyPlannerPage> {
+  late String userId; // 나중에 초기화할 변수
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    userId = args?['userId'] ?? '';
+    print('📌 userId 받은 값: $userId');
+  }
+
   bool isPlannerView = true; // true for planner, false for todo list
   DateTime selectedDate = DateTime.now();
   TodoListScreenState? todoListScreenState;
@@ -134,6 +148,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   @override
   void initState() {
     super.initState();
+    userId = widget.userId; // 여기서 초기화
+    print('📌 userId 받은 값: $userId');
     updateProgress();
   }
 
@@ -213,7 +229,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(initialIndex: 1),
+      bottomNavigationBar: BottomNav(initialIndex: 0, userId: widget.userId),
     );
   }
 
@@ -226,9 +242,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           Text(
             isPlannerView
                 ? (isSameDay(selectedDate, DateTime.now())
-                ? 'My Today Tasks'
+                ? 'My Today Planner'
                 : 'Tasks for ${selectedDate.month}/${selectedDate.day}')
-                : 'My Todo List',
+                : 'My Todo Task',
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -251,147 +267,202 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
+
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
 
-    return Column(
-      children: [
-        // 🔹 날짜 헤더 + 삭제 버튼 🗑️
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                DateFormat('yyyy-MM-dd').format(selectedDate),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _taskDataService.plannerTasksByDate.remove(selectedDate);
-                  });
-                },
-                child: const Text('🗑️', style: TextStyle(fontSize: 20)),
-              ),
-            ],
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('yyyy-MM-dd').format(selectedDate),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      final dateKey = _taskDataService.dateToKey(selectedDate);
+                      _taskDataService.plannerTasksByDate.remove(dateKey);
+                    });
+                  },
+                  child: const Text('🗑️', style: TextStyle(fontSize: 20)),
+                ),
+              ],
+            ),
           ),
-        ),
 
-        ListView.builder(
-          padding: const EdgeInsets.all(16),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: tasks.length,
-          itemBuilder: (context, index) {
-            final task = tasks[index];
-            final timeString = _formatTime(task.time, task.endTime);
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 24,
+            itemBuilder: (context, index) {
+              final hour = index;
+              final time = DateTime(2025, 1, 1, hour);
+              final timeLabel = DateFormat('HH:00').format(time);
 
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    timeString,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Container(
-                      height: 100, // 🔹 박스 크기 통일
-                      decoration: BoxDecoration(
-                        color: getBrightPastelColor(),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
-                            spreadRadius: 1,
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+              // 현재 시간대에 해당하는 일정들
+              final hourTasks = tasks.where((task) {
+                final taskStart = _parseTimeToDateTime(task.time);
+                return taskStart != null && taskStart.hour == hour;
+              }).toList();
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      child: Text(
+                        timeLabel,
+                        style: const TextStyle(fontSize: 13, color: Colors.black87),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    task.title,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Transform.scale(
-                                  scale: 1.2,
-                                  child: Checkbox(
-                                    value: task.isCompleted,
-                                    onChanged: (bool? value) {
-                                      setState(() {
-                                        _taskDataService.updateTaskStatus(task, value ?? false);
-                                        updateProgress();
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (task.memo != null && task.memo!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                task.memo!,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Color(0xFF0484444),
-                                ),
-                              ),
-                            ],
-                            if (task.location != null && task.location!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    task.location!,
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Row(
+                        children: hourTasks.map((task) {
+                          final start = _parseTimeToDateTime(task.time);
+                          final end = _parseTimeToDateTime(task.endTime);
+                          final timeRange = (start != null && end != null)
+                              ? '${DateFormat.Hm().format(start)} ~ ${DateFormat.Hm().format(end)}'
+                              : '';
+
+                          return Expanded(
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: task.color ?? _getFixedColorForTask(task.title),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.grey.withOpacity(0.1),
+                                    spreadRadius: 1,
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                            ],
-                          ],
-                        ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          task.title,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      Transform.scale(
+                                        scale: 1.2,
+                                        child: Checkbox(
+                                          value: task.isCompleted,
+                                          onChanged: (bool? value) {
+                                            setState(() {
+                                              _taskDataService.updateTaskStatus(task, value ?? false);
+                                              updateProgress();
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (timeRange.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        timeRange,
+                                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                      ),
+                                    ),
+                                  if (task.memo != null && task.memo!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        task.memo!,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  if (task.location != null && task.location!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              task.location!,
+                                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (task.dueDate != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today, size: 14, color: Colors.deepOrange),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '마감: ${DateFormat('MM/dd').format(task.dueDate!)}',
+                                            style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  String _formatTime(String? start, String? end) {
-    if (start == null || start.isEmpty) return '';
-    if (end == null || end.isEmpty) return start;
-    return '$start - $end';
+  DateTime? _parseTimeToDateTime(String? time) {
+    if (time == null) return null;
+
+    final match24 = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(time);
+    if (match24 != null) {
+      final hour = int.parse(match24.group(1)!);
+      final minute = int.parse(match24.group(2)!);
+      return DateTime(0, 1, 1, hour, minute);
+    }
+
+    final match12 = RegExp(r'(AM|PM)\s(\d{1,2}):(\d{2})').firstMatch(time);
+    if (match12 != null) {
+      String period = match12.group(1)!;
+      int hour = int.parse(match12.group(2)!);
+      int minute = int.parse(match12.group(3)!);
+      if (period == 'PM' && hour != 12) hour += 12;
+      if (period == 'AM' && hour == 12) hour = 0;
+      return DateTime(0, 1, 1, hour, minute);
+    }
+
+    return null;
   }
+
 
 
   Widget _buildFloatingActionButton() {
@@ -874,6 +945,20 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
     super.dispose();
   }
 }
+
+Color _getFixedColorForTask(String title) {
+  final colors = [
+    Colors.purple.shade100,
+    Colors.green.shade100,
+    Colors.blue.shade100,
+    Colors.orange.shade100,
+    Colors.red.shade100,
+    Colors.teal.shade100,
+    Colors.amber.shade100,
+  ];
+  return colors[title.hashCode % colors.length];
+}
+
 
 // 랜덤한 밝은 파스텔 색상 생성
 Color getBrightPastelColor() {
