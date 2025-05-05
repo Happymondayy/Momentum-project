@@ -282,10 +282,10 @@ class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderSt
                       _saveUserData_();
 
                       Navigator.push( // 캘린더 화면으로 이동
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CalendarScreen(userId: widget.userId),
-                        )
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CalendarScreen(userId: widget.userId),
+                          )
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(

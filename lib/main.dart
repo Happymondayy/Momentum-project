@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
-import 'package:momentum_planner/Diary/main_diary.dart';
+import 'package:momentum_planner/Diary/screens/diary_screen.dart';
 import 'package:momentum_planner/Login/find_ID_page.dart';
 import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
-import 'Login/login_page.dart';
+import 'Login/login_page.dart'; // LoginPage를 import
 import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -67,6 +67,10 @@ class MyApp extends StatelessWidget {
           case 'Calendar/screens/calendar_screen':
             return MaterialPageRoute(
               builder: (_) => CalendarScreen(userId: args?['userId'] ?? ''),
+            );
+          case 'Diary/screens/diary_screen':
+            return MaterialPageRoute(
+              builder: (_) => DiaryScreen(userId: args?['userId'] ?? ''),
             );
           case 'Setting/settings_page':
             return MaterialPageRoute(

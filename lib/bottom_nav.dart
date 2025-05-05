@@ -3,6 +3,7 @@ import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 import 'package:momentum_planner/Settings/settings_page.dart';
 
 class BottomNav extends StatefulWidget {
+  // 현재 화면에 따라 초기 인덱스를 설정하기 위한 생성자 추가
   final int initialIndex;
   final String userId; // 사용자 ID 추가
 

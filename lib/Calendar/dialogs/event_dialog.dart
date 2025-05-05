@@ -5,11 +5,19 @@ import 'package:momentum_planner/Calendar/models/event.dart';
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
   final Function(Event event) onSave;
+  final Function(Event event)? onDelete;
+  final Event? event;
+  final bool isEditing;
+  final String currentUserId;
 
   const EventDialog({
     Key? key,
     required this.selectedDay,
     required this.onSave,
+    this.onDelete,
+    this.event,
+    this.isEditing = false,
+    required this.currentUserId,
   }) : super(key: key);
 
   @override
@@ -21,6 +29,8 @@ class _EventDialogState extends State<EventDialog> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _memoController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _customReminderController = TextEditingController();
+  final TextEditingController _repeatCustomDaysController = TextEditingController();
 
   late DateTime _startDate;
   late DateTime _endDate;
@@ -45,8 +55,15 @@ class _EventDialogState extends State<EventDialog> {
   @override
   void initState() {
     super.initState();
-    _startDate = widget.selectedDay;
-    _endDate = widget.selectedDay;
+
+    // Initialize with the existing event data if editing
+    if (widget.event != null) {
+      _initializeWithEvent(widget.event!);
+    } else {
+      // Default values for new event
+      _startDate = widget.selectedDay;
+      _endDate = widget.selectedDay;
+    }
 
     // Auto focus the title field and show keyboard
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -54,8 +71,62 @@ class _EventDialogState extends State<EventDialog> {
     });
   }
 
-  // Remove the second _validateAndSave() method completely
-// Keep only this one:
+  void _initializeWithEvent(Event event) {
+    _titleController.text = event.title;
+    _descriptionController.text = event.description ?? '';
+    _memoController.text = event.memo ?? '';
+    _locationController.text = event.location ?? '';
+
+    _startDate = event.startDate;
+    _endDate = event.endDate;
+
+    _isAllDay = event.isAllDay;
+    if (!_isAllDay && event.startTime != null) {
+      _startTime = event.startTime!;
+    }
+    if (!_isAllDay && event.endTime != null) {
+      _endTime = event.endTime!;
+    }
+
+    _isRepeating = event.isRepeating;
+    _repeatOption = event.repeatOption;
+
+    if (_isRepeating && event.repeatDays != null) {
+      _repeatDays = List<int>.from(event.repeatDays!);
+    }
+
+    if (_isRepeating && event.repeatCustomDays != null) {
+      _repeatCustomDays = event.repeatCustomDays;
+      _repeatCustomDaysController.text = event.repeatCustomDays.toString();
+    }
+
+    if (event.reminder != null) {
+      _hasReminder = true;
+      _reminderOption = event.reminder;
+
+      // Extract custom reminder minutes if it's a custom reminder
+      if (event.reminder!.endsWith('분 전')) {
+        final minutes = event.reminder!.split('분 전')[0].trim();
+        if (int.tryParse(minutes) != null) {
+          _reminderOption = '기타';
+          _customReminderMinutes = int.parse(minutes);
+          _customReminderController.text = minutes;
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _memoController.dispose();
+    _locationController.dispose();
+    _customReminderController.dispose();
+    _repeatCustomDaysController.dispose();
+    super.dispose();
+  }
+
   void _validateAndSave() {
     if (_titleController.text.trim().isEmpty) {
       setState(() {
@@ -71,7 +142,8 @@ class _EventDialogState extends State<EventDialog> {
     }
 
     final event = Event(
-      id: DateTime.now().millisecondsSinceEpoch.toString(), // Generate a unique ID
+      userId: widget.currentUserId,
+      id: widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use existing ID if editing
       title: _titleController.text,
       description: _descriptionController.text,
       startDate: _startDate,
@@ -100,6 +172,10 @@ class _EventDialogState extends State<EventDialog> {
     return '$period ${hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
+  String _getFormattedDate(DateTime date) {
+    return DateFormat('yyyy-MM-dd').format(date);
+  }
+
   Widget _buildDateSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,35 +197,60 @@ class _EventDialogState extends State<EventDialog> {
         SizedBox(height: 10),
         InkWell(
           onTap: () async {
-            final DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: _startDate,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2100),
-            );
-            if (pickedDate != null) {
-              setState(() {
-                _startDate = pickedDate;
-                if (_endDate.isBefore(_startDate)) {
-                  _endDate = _startDate;
-                }
-              });
+            try {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _startDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+                builder: (context, child) {
+                  return Theme(
+                    data: ThemeData.light().copyWith(
+                      colorScheme: ColorScheme.light(
+                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
+                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
+                        surface: Colors.white, // 배경색
+                        onSurface: Colors.black, // 일반 텍스트 색상
+                      ),
+                      dialogBackgroundColor: Colors.white,
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _startDate = pickedDate;
+                  if (_endDate.isBefore(_startDate)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('종료 날짜가 시작 날짜보다 이전입니다.')),
+                    );
+                    _endDate = _startDate;
+                  }
+                });
+              }
+            } catch (e) {
+              print('시작 날짜 선택 중 오류 발생: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
+              );
             }
           },
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Colors.white, // 회색에서 흰색으로 변경
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  DateFormat('yyyy-MM-dd').format(_startDate),
+                  _getFormattedDate(_startDate),
                   style: TextStyle(fontSize: 16),
                 ),
-                Icon(Icons.calendar_today, size: 20),
+                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
               ],
             ),
           ),
@@ -159,32 +260,54 @@ class _EventDialogState extends State<EventDialog> {
         SizedBox(height: 10),
         InkWell(
           onTap: () async {
-            final DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: _endDate,
-              firstDate: _startDate,
-              lastDate: DateTime(2100),
-            );
-            if (pickedDate != null) {
-              setState(() {
-                _endDate = pickedDate;
-              });
+            try {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _endDate,
+                firstDate: _startDate, // 시작일보다 전의 날짜는 선택할 수 없도록
+                lastDate: DateTime(2100),
+                builder: (context, child) {
+                  return Theme(
+                    data: ThemeData.light().copyWith(
+                      colorScheme: ColorScheme.light(
+                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
+                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
+                        surface: Colors.white, // 배경색
+                        onSurface: Colors.black, // 일반 텍스트 색상
+                      ),
+                      dialogBackgroundColor: Colors.white,
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _endDate = pickedDate;
+                });
+              }
+            } catch (e) {
+              print('종료 날짜 선택 중 오류 발생: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
+              );
             }
           },
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Colors.white, // 회색에서 흰색으로 변경
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  DateFormat('yyyy-MM-dd').format(_endDate),
+                  _getFormattedDate(_endDate),
                   style: TextStyle(fontSize: 16),
                 ),
-                Icon(Icons.calendar_today, size: 20),
+                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
               ],
             ),
           ),
@@ -200,7 +323,7 @@ class _EventDialogState extends State<EventDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('시간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text('하루종일', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             Switch(
               value: _isAllDay,
               onChanged: (value) {
@@ -232,6 +355,11 @@ class _EventDialogState extends State<EventDialog> {
                     if (time != null) {
                       setState(() {
                         _startTime = time;
+                        // 시작 시간이 종료 시간보다 늦다면 종료 시간을 1시간 뒤로 설정
+                        if (_isSameDay() && _isTimeAfter(_startTime, _endTime)) {
+                          final int hour = (_startTime.hour + 1) % 24;
+                          _endTime = TimeOfDay(hour: hour, minute: _startTime.minute);
+                        }
                       });
                     }
                   },
@@ -240,6 +368,7 @@ class _EventDialogState extends State<EventDialog> {
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -281,6 +410,7 @@ class _EventDialogState extends State<EventDialog> {
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -297,11 +427,22 @@ class _EventDialogState extends State<EventDialog> {
               ),
             ],
           ),
-        ] else ...[
-          Text('하루 종일', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
         ],
       ],
     );
+  }
+
+  // 같은 날짜인지 확인하는 헬퍼 메서드
+  bool _isSameDay() {
+    return _startDate.year == _endDate.year &&
+        _startDate.month == _endDate.month &&
+        _startDate.day == _endDate.day;
+  }
+
+  // 시작 시간이 종료 시간보다 이후인지 확인하는 헬퍼 메서드
+  bool _isTimeAfter(TimeOfDay time1, TimeOfDay time2) {
+    return time1.hour > time2.hour ||
+        (time1.hour == time2.hour && time1.minute >= time2.minute);
   }
 
   Widget _buildReminderSelector() {
@@ -317,6 +458,9 @@ class _EventDialogState extends State<EventDialog> {
               onChanged: (value) {
                 setState(() {
                   _hasReminder = value;
+                  if (value && _reminderOption == null) {
+                    _reminderOption = '10분 전'; // 기본값 설정
+                  }
                 });
               },
               activeColor: Colors.deepPurple[300],
@@ -329,6 +473,7 @@ class _EventDialogState extends State<EventDialog> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
             padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
             child: DropdownButtonHideUnderline(
@@ -361,9 +506,11 @@ class _EventDialogState extends State<EventDialog> {
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
                     ),
                     padding: EdgeInsets.symmetric(horizontal: 15),
                     child: TextField(
+                      controller: _customReminderController,
                       decoration: InputDecoration(
                         hintText: '시간(분)',
                         border: InputBorder.none,
@@ -398,6 +545,9 @@ class _EventDialogState extends State<EventDialog> {
               onChanged: (value) {
                 setState(() {
                   _isRepeating = value;
+                  if (value && _repeatOption == null) {
+                    _repeatOption = '매일'; // 기본값 설정
+                  }
                 });
               },
               activeColor: Colors.deepPurple[300],
@@ -410,6 +560,7 @@ class _EventDialogState extends State<EventDialog> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
             padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
             child: DropdownButtonHideUnderline(
@@ -428,8 +579,11 @@ class _EventDialogState extends State<EventDialog> {
                 onChanged: (String? value) {
                   setState(() {
                     _repeatOption = value;
-                    if (value == '매요일') {
-                      _repeatDays = [];
+                    if (value == '매요일' && _repeatDays.isEmpty) {
+                      // 처음 매요일을 선택했을 때 현재 요일을 기본으로 선택
+                      final now = DateTime.now();
+                      int weekday = now.weekday - 1; // 0-6으로 변환 (월-일)
+                      _repeatDays = [weekday];
                     }
                   });
                 },
@@ -450,7 +604,18 @@ class _EventDialogState extends State<EventDialog> {
                         if (selected) {
                           _repeatDays.add(i);
                         } else {
-                          _repeatDays.remove(i);
+                          // 적어도 하나의 요일은 선택되어 있어야 함
+                          if (_repeatDays.length > 1) {
+                            _repeatDays.remove(i);
+                          } else {
+                            // 사용자에게 알림
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('적어도 하나의 요일을 선택해야 합니다'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         }
                       });
                     },
@@ -469,9 +634,11 @@ class _EventDialogState extends State<EventDialog> {
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
                     ),
                     padding: EdgeInsets.symmetric(horizontal: 15),
                     child: TextField(
+                      controller: _repeatCustomDaysController,
                       decoration: InputDecoration(
                         hintText: '날짜 간격',
                         border: InputBorder.none,
@@ -501,8 +668,39 @@ class _EventDialogState extends State<EventDialog> {
     return _reminderOption;
   }
 
+  void _deleteEvent() {
+    // 삭제 전 확인 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('일정 삭제'),
+          content: Text('이 일정을 삭제하시겠습니까?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('취소', style: TextStyle(color: Colors.grey[700])),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // 확인 다이얼로그 닫기
+                if (widget.onDelete != null && widget.event != null) {
+                  widget.onDelete!(widget.event!);
+                }
+                Navigator.pop(context); // 이벤트 다이얼로그 닫기
+              },
+              child: Text('삭제', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String dialogTitle = widget.isEditing ? '일정 상세' : '새 일정 추가';
+
     return Dialog(
       insetPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       backgroundColor: Colors.white,
@@ -534,7 +732,7 @@ class _EventDialogState extends State<EventDialog> {
                     onPressed: () => Navigator.pop(context),
                   ),
                   Text(
-                    '새 일정 추가',
+                    dialogTitle,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -556,19 +754,38 @@ class _EventDialogState extends State<EventDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Title field
-                      TextField(
-                        controller: _titleController,
-                        decoration: InputDecoration(
-                          hintText: '제목',
-                          hintStyle: TextStyle(color: Colors.grey),
-                          border: InputBorder.none,
-                          errorText: _titleError ? '제목을 입력해주세요' : null,
-                        ),
-                        style: TextStyle(fontSize: 18),
-                        autofocus: true,
-                        onChanged: (_) => setState(() {
-                          _titleError = false;
-                        }),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _titleController,
+                              decoration: InputDecoration(
+                                hintText: '제목',
+                                hintStyle: TextStyle(color: Colors.grey),
+                                border: InputBorder.none,
+                                errorText: _titleError ? '제목을 입력해주세요' : null,
+                                contentPadding: EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              style: TextStyle(fontSize: 18),
+                              autofocus: true,
+                              onChanged: (_) => setState(() {
+                                _titleError = false;
+                              }),
+                            ),
+                          ),
+                          // 필수 표시 (빨간 별표 등)
+                          if (_titleError)
+                            Icon(Icons.error_outline, color: Colors.red, size: 18)
+                          else
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
                       ),
                       Divider(color: _titleError ? Colors.red : Colors.grey[300]),
                       SizedBox(height: 10),
@@ -580,6 +797,7 @@ class _EventDialogState extends State<EventDialog> {
                           hintText: '간단한 내용',
                           hintStyle: TextStyle(color: Colors.grey),
                           border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8),
                         ),
                         style: TextStyle(fontSize: 16),
                       ),
@@ -609,6 +827,7 @@ class _EventDialogState extends State<EventDialog> {
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
                         padding: EdgeInsets.symmetric(horizontal: 15),
                         child: TextField(
@@ -630,6 +849,7 @@ class _EventDialogState extends State<EventDialog> {
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
                         padding: EdgeInsets.symmetric(horizontal: 15),
                         child: TextField(
@@ -645,25 +865,56 @@ class _EventDialogState extends State<EventDialog> {
 
                       // Save button
                       Center(
-                        child: ElevatedButton(
-                          onPressed: _validateAndSave,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple[300],
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(horizontal: 50, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton(
+
+                              onPressed: _validateAndSave,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.deepPurple[300],
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: Text(
+                                '저장',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                            elevation: 2,
-                          ),
-                          child: Text(
-                            '저장',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                            if (widget.isEditing && widget.onDelete != null) ...[
+                              SizedBox(width: 15),
+                              ElevatedButton(
+                                onPressed: _deleteEvent,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red[400],
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: Text(
+                                  '삭제',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+
+                              ),
+                            ],
+                          ],
                         ),
+
+
                       ),
                     ],
                   ),

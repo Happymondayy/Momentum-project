@@ -17,13 +17,19 @@ class Header extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: Icon(Icons.menu),
-            onPressed: onMenuPressed,
+          Text(
+            '${focusedDay.year}년',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
-
         ],
       ),
     );
   }
+}
+
+class DateFormat {
 }
