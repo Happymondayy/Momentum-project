@@ -1,12 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../Planner/DailyPlannerPage.dart';
+import 'package:intl/intl.dart';
+
 
 // Todo_Task 모델 클래스
 class Todo_Task {
-  final String title;
+  final String title;//제목
   final String? description;
-  late final String? time;
+  String? time;
   final String? endTime;
   final DateTime date;
   final bool isImportant;
@@ -16,6 +18,7 @@ class Todo_Task {
   final int importance;
   final int urgency;
   final Color? color;
+  final DateTime? dueDate;
   bool isCompleted;
 
   Todo_Task({
@@ -32,6 +35,7 @@ class Todo_Task {
     required this.urgency,
     this.isCompleted = false,
     this.color,
+    this.dueDate, // ✅ 생성자에도 포함
   });
 }
 
@@ -368,6 +372,7 @@ class TodoListScreen extends StatefulWidget {
 }
 
 class TodoListScreenState extends State<TodoListScreen> {
+  DateTime? selectedDueDate; // ✅ 이거 추가!
   final TextEditingController titleController = TextEditingController();
   final TextEditingController memoController = TextEditingController();
   final TextEditingController locationController = TextEditingController();
@@ -676,6 +681,21 @@ class TodoListScreenState extends State<TodoListScreen> {
                 ],
               ),
             ],
+            // 마감일
+            if (task.dueDate != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 16, color: Colors.deepOrange),
+                  const SizedBox(width: 4),
+                  Text(
+                    '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
+                    style: const TextStyle(fontSize: 14, color: Colors.deepOrange),
+                  ),
+                ],
+              ),
+            ],
+
           ],
         ),
       ),
@@ -799,12 +819,16 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              _buildDueDatePicker(context, dueDate, (picked) {
+                            _buildDueDatePicker(
+                              context,
+                              selectedDueDate,
+                                  (pickedDate) {
                                 setState(() {
-                                  dueDate = picked;
+                                  selectedDueDate = pickedDate;
                                 });
                               }),
-                              const SizedBox(height: 20),
+
+                            const SizedBox(height: 20),
 
                               _buildSwitchRow('알림 설정', isImportant, (value) {
                                 setState(() {
@@ -853,7 +877,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         urgency: urgencyLevel,
                                         isCompleted: false,
                                         color: _getFixedColorForTask(titleController.text),
+                                        dueDate: selectedDueDate, // ✅ 마감일 추가
                                       );
+
 
                                       _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
