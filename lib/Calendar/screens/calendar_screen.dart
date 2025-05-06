@@ -16,7 +16,7 @@ import '../widgets/todo_card.dart';
 
 class CalendarScreen extends StatefulWidget {
   final String userId;
-  const CalendarScreen({Key? key, required this.userId}) : super(key: key); // 추가
+  const CalendarScreen({Key? key, required this.userId}) : super(key: key);
 
   @override
   _CalendarScreenState createState() => _CalendarScreenState();
@@ -28,7 +28,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selectedDay = DateTime.now();
   Map<DateTime, List<Event>> _events = {};
   Map<DateTime, List<TodoItem>> _todoItems = {};
-  String? _currentUserId; // 받은 userId 저장용
+  String? _currentUserId;
 
   @override
   void initState() {
@@ -86,10 +86,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
           events[key] = [event];
         }
       }
-    setState(() {
-      _events = events;
+      setState(() {
+        _events = events;
+      });
     });
-  });
   }
 
 
@@ -116,7 +116,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           userId: data['userId'],
           id: doc.id,
           title: data['title'],
-          date: date, // date 속성 추가
+          date: date,
           startTime: startTime,
           endTime: endTime,
           memo: data['memo'] ?? '',
@@ -158,48 +158,41 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return todos;
   }
 
-  // In CalendarScreen class
   void _addEvent(Event event) async {
-    final startTimeMap = !event.isAllDay && event.startTime != null ? {
-      'hour': event.startTime!.hour,
-      'minute': event.startTime!.minute,
-    } : null;
+    try {
+      final startTimeMap = !event.isAllDay && event.startTime != null ? {
+        'hour': event.startTime!.hour,
+        'minute': event.startTime!.minute,
+      } : null;
 
-    final endTimeMap = !event.isAllDay && event.endTime != null ? {
-      'hour': event.endTime!.hour,
-      'minute': event.endTime!.minute,
-    } : null;
+      final endTimeMap = !event.isAllDay && event.endTime != null ? {
+        'hour': event.endTime!.hour,
+        'minute': event.endTime!.minute,
+      } : null;
 
-    final eventDate = {
-      'userId': _currentUserId,
-      'title': event.title,
-      'description': event.description,
-      'startDate': event.startDate.toIso8601String(),
-      'endDate': event.endDate.toIso8601String(),
-      'startTime': startTimeMap,
-      'endTime': endTimeMap,
-      'memo': event.memo,
-      'location': event.location,
-      'isRepeating': event.isRepeating,
-      'repeatOption': event.repeatOption,
-      'repeatDays': event.repeatDays,
-      'repeatCustomDays': event.repeatCustomDays,
-      'isAllDay': event.isAllDay,
-      'reminder': event.reminder,
-    };
+      final eventDate = {
+        'userId': _currentUserId,
+        'title': event.title,
+        'description': event.description,
+        'startDate': event.startDate.toIso8601String(),
+        'endDate': event.endDate.toIso8601String(),
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'memo': event.memo,
+        'location': event.location,
+        'isRepeating': event.isRepeating,
+        'repeatOption': event.repeatOption,
+        'repeatDays': event.repeatDays,
+        'repeatCustomDays': event.repeatCustomDays,
+        'isAllDay': event.isAllDay,
+        'reminder': event.reminder,
+      };
 
-    final docRef = await FirebaseFirestore.instance.collection('events').add(eventDate);
-
-    setState(() {
-      final key = DateTime(event.startDate.year, event.startDate.month, event.startDate.day);
-      final newEvent = event.copyWith(id: docRef.id);
-
-      if (_events[key] != null) {
-        _events[key]!.add(newEvent);
-      } else {
-        _events[key] = [newEvent];
-      }
-    });
+      await FirebaseFirestore.instance.collection('events').add(eventDate);
+      // No need to update state here as the Firestore listener will handle it
+    } catch (e) {
+      print("Error adding event: $e");
+    }
   }
 
   void _addTodo(TodoItem todo) async {
@@ -230,18 +223,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         'isCompleted': false,
       };
 
-      final docRef = await FirebaseFirestore.instance.collection('todos').add(todoDate);
-
-      setState(() {
-        final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
-        final newTodo = todo.copyWith(id: docRef.id);
-
-        if (_todoItems[key] != null) {
-          _todoItems[key]!.add(newTodo);
-        } else {
-          _todoItems[key] = [newTodo];
-        }
-      });
+      await FirebaseFirestore.instance.collection('todos').add(todoDate);
+      // No need to update state here as the Firestore listener will handle it
     } catch (e) {
       print("Error adding todo: $e");
     }
@@ -279,8 +262,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         selectedDay: event.startDate,
         event: event,
         onSave: _updateEvent,
-        onDelete: _deleteEvent, // 삭제 콜백 추가
-        isEditing: true, // 수정 모드임을 나타냄
+        onDelete: _deleteEvent,
+        isEditing: true,
       ),
     );
   }
@@ -293,8 +276,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         selectedDay: todo.date,
         todo: todo,
         onSave: _updateTodo,
-        onDelete: _deleteTodo, // 삭제 콜백 추가
-        isEditing: true, // 수정 모드임을 나타냄
+        onDelete: _deleteTodo,
+        isEditing: true,
       ),
     );
   }
@@ -329,17 +312,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
 
       print('Event updated successfully');
+      Navigator.pop(context); // Close the dialog
     } catch (e) {
       print('Error updating event: $e');
-    }
-  }
-
-  Future<void> deleteEvent(Event event) async {
-    try {
-      await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
-      print('Event deleted successfully');
-    } catch (e) {
-      print('Error deleting event: $e');
     }
   }
 
@@ -371,6 +346,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
 
       print('Todo updated successfully');
+      Navigator.pop(context); // Close the dialog
     } catch (e) {
       print('Error updating todo: $e');
     }
@@ -646,20 +622,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                 FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
                   'isCompleted': newStatus,
-                }).then((_) { // Firestore 업데이트 성공 후 로컬 상태 업데이트
-                  setState(() {
-                    final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
-                    if (_todoItems.containsKey(key)) {
-                      final index = _todoItems[key]!.indexWhere((item) => item.id == todo.id);
-                      if (index != -1) {
-                        _todoItems[key]![index] = todo.copyWith(isCompleted: newStatus);
-                      }
-                    }
-                  });
-                }).catchError((error) {
-                  print("Error updating todo: $error");
-                  // 에러 처리 로직 (예: 스낵바 표시) 추가
                 });
+                // No need to update state here as the Firestore listener will handle it
               },
               onEdit: () => _showTodoDetailsDialog(todo),
               onDelete: () => _deleteTodo(todo),
@@ -679,11 +643,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } catch (e) {
       print('Error deleting event: $e');
     }
-    // 삭제 후 상태 업데이트 (예: 화면 갱신)
-    setState(() {
-      final key = DateTime(event.startDate.year, event.startDate.month, event.startDate.day);
-      _events[key]?.removeWhere((e) => e.id == event.id);
-    });
+    // No need to update state here as the Firestore listener will handle it
   }
 
   Future<void> _deleteTodo(TodoItem todo) async {
@@ -694,10 +654,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } catch (e) {
       print('Error deleting todo: $e');
     }
-    // 삭제 후 상태 업데이트 (예: 화면 갱신)
-    setState(() {
-      final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
-      _events[key]?.removeWhere((e) => e.id == todo.id);
-    });
+    // No need to update state here as the Firestore listener will handle it
   }
 }

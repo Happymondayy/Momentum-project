@@ -53,7 +53,7 @@ class _BottomNavState extends State<BottomNav> {
         print('Diary 탭으로 이동: userId = ${widget.userId}');
         Navigator.pushReplacementNamed(
           context,
-          'Diary/main_diary',
+          'Diary/screens/diary_screen',
           arguments: {'userId': widget.userId},
         );
         break;
