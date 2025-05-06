@@ -1,12 +1,13 @@
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../Planner/DailyPlannerPage.dart';
 import 'package:intl/intl.dart';
 
 
-// Todo_Task 모델 클래스
 class Todo_Task {
-  String title;//제목
+  String id; // Firestore 문서 ID를 저장할 필드 추가
+  String title; // 제목
   String? description;
   String? time;
   String? endTime;
@@ -22,6 +23,7 @@ class Todo_Task {
   bool isCompleted;
 
   Todo_Task({
+    this.id = '', // 기본값 빈 문자열
     required this.title,
     this.description,
     this.time,
@@ -35,10 +37,58 @@ class Todo_Task {
     required this.urgency,
     this.isCompleted = false,
     this.color,
-    this.dueDate, // ✅ 생성자에도 포함
+    this.dueDate,
   });
-}
 
+  // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
+  factory Todo_Task.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+    // Color 객체는 Firestore에 직접 저장할 수 없으므로 정수값으로 변환하여 저장
+    Color? taskColor;
+    if (data['color'] != null) {
+      taskColor = Color(data['color']);
+    }
+
+    return Todo_Task(
+      id: doc.id,
+      title: data['title'] ?? '',
+      description: data['description'],
+      time: data['time'],
+      endTime: data['endTime'],
+      date: (data['date'] as Timestamp).toDate(),
+      isImportant: data['isImportant'] ?? false,
+      isUrgent: data['isUrgent'] ?? false,
+      memo: data['memo'],
+      location: data['location'],
+      importance: data['importance'] ?? 1,
+      urgency: data['urgency'] ?? 1,
+      isCompleted: data['isCompleted'] ?? false,
+      color: taskColor,
+      dueDate: data['dueDate'] != null ? (data['dueDate'] as Timestamp).toDate() : null,
+    );
+  }
+
+  // Todo_Task 객체를 Firestore 문서로 변환하는 메서드
+  Map<String, dynamic> toFirestore() {
+    return {
+      'title': title,
+      'description': description,
+      'time': time,
+      'endTime': endTime,
+      'date': Timestamp.fromDate(date),
+      'isImportant': isImportant,
+      'isUrgent': isUrgent,
+      'memo': memo,
+      'location': location,
+      'importance': importance,
+      'urgency': urgency,
+      'isCompleted': isCompleted,
+      'color': color?.value, // Color 객체를 정수값으로 변환
+      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
+    };
+  }
+}
 
 // 진행률 화면 위젯
 class ProgressScreen extends StatelessWidget {

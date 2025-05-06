@@ -22,6 +22,203 @@ class TaskDataService {
 
   TaskDataService._internal();
 
+  // Firestore 컬렉션 참조
+  final CollectionReference todoCollection = FirebaseFirestore.instance.collection('todos');
+  final CollectionReference plannerCollection = FirebaseFirestore.instance.collection('planners');
+
+// 사용자 ID 저장 변수
+  String? currentUserId;
+
+// 사용자 ID 설정 메서드
+  void setUserId(String userId) {
+    currentUserId = userId;
+  }
+
+// Firestore에서 데이터 로드
+  Future<void> loadTasksFromFirestore(String userId) async {
+    setUserId(userId);
+
+    // Todo 데이터 로드
+    try {
+      final todoSnapshot = await todoCollection
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      for (var doc in todoSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final dateTime = DateTime.parse(data['date']);
+        final dateKey = dateToKey(dateTime);
+
+        final task = Todo_Task(
+          title: data['title'],
+          description: data['description'],
+          time: data['time'],
+          endTime: data['endTime'],
+          date: dateTime,
+          isImportant: data['isImportant'] ?? false,
+          isUrgent: data['isUrgent'] ?? false,
+          memo: data['memo'],
+          location: data['location'],
+          importance: data['importance'] ?? 1,
+          urgency: data['urgency'] ?? 1,
+          isCompleted: data['isCompleted'] ?? false,
+          dueDate: data['dueDate'] != null
+              ? DateTime.parse(data['dueDate'])
+              : null,
+        );
+
+        if (!todoTasksByDate.containsKey(dateKey)) {
+          todoTasksByDate[dateKey] = [];
+        }
+        todoTasksByDate[dateKey]!.add(task);
+      }
+
+      // Planner 데이터 로드
+      final plannerSnapshot = await plannerCollection
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      for (var doc in plannerSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final dateTime = DateTime.parse(data['date']);
+        final dateKey = dateToKey(dateTime);
+
+        final task = Todo_Task(
+          title: data['title'],
+          description: data['description'],
+          time: data['time'],
+          endTime: data['endTime'],
+          date: dateTime,
+          isImportant: data['isImportant'] ?? false,
+          isUrgent: data['isUrgent'] ?? false,
+          memo: data['memo'],
+          location: data['location'],
+          importance: data['importance'] ?? 1,
+          urgency: data['urgency'] ?? 1,
+          isCompleted: data['isCompleted'] ?? false,
+          dueDate: data['dueDate'] != null
+              ? DateTime.parse(data['dueDate'])
+              : null,
+        );
+
+        if (!plannerTasksByDate.containsKey(dateKey)) {
+          plannerTasksByDate[dateKey] = [];
+        }
+        plannerTasksByDate[dateKey]!.add(task);
+      }
+    } catch (e) {
+      print('Firestore 데이터 로드 오류: $e');
+    }
+  }
+
+// Todo Task를 Firestore에 저장
+  Future<void> saveTodoTaskToFirestore(Todo_Task task) async {
+    if (currentUserId == null) return;
+
+    try {
+      await todoCollection.add({
+        'userId': currentUserId,
+        'title': task.title,
+        'description': task.description,
+        'time': task.time,
+        'endTime': task.endTime,
+        'date': task.date.toIso8601String(),
+        'isImportant': task.isImportant,
+        'isUrgent': task.isUrgent,
+        'memo': task.memo,
+        'location': task.location,
+        'importance': task.importance,
+        'urgency': task.urgency,
+        'isCompleted': task.isCompleted,
+        'dueDate': task.dueDate?.toIso8601String(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Todo Task 저장 오류: $e');
+    }
+  }
+
+// Planner Task를 Firestore에 저장
+  Future<void> savePlannerTaskToFirestore(Todo_Task task) async {
+    if (currentUserId == null) return;
+
+    try {
+      await plannerCollection.add({
+        'userId': currentUserId,
+        'title': task.title,
+        'description': task.description,
+        'time': task.time,
+        'endTime': task.endTime,
+        'date': task.date.toIso8601String(),
+        'isImportant': task.isImportant,
+        'isUrgent': task.isUrgent,
+        'memo': task.memo,
+        'location': task.location,
+        'importance': task.importance,
+        'urgency': task.urgency,
+        'isCompleted': task.isCompleted,
+        'dueDate': task.dueDate?.toIso8601String(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Planner Task 저장 오류: $e');
+    }
+  }
+
+// Task 상태 업데이트 (완료/미완료)
+  Future<void> updateTaskCompletionInFirestore(Todo_Task task, bool isCompleted) async {
+    if (currentUserId == null) return;
+
+    try {
+      // Todo 컬렉션 확인
+      final todoQuery = await todoCollection
+          .where('userId', isEqualTo: currentUserId)
+          .where('title', isEqualTo: task.title)
+          .where('date', isEqualTo: task.date.toIso8601String())
+          .get();
+
+      for (var doc in todoQuery.docs) {
+        await doc.reference.update({'isCompleted': isCompleted});
+      }
+
+      // Planner 컬렉션 확인
+      final plannerQuery = await plannerCollection
+          .where('userId', isEqualTo: currentUserId)
+          .where('title', isEqualTo: task.title)
+          .where('date', isEqualTo: task.date.toIso8601String())
+          .get();
+
+      for (var doc in plannerQuery.docs) {
+        await doc.reference.update({'isCompleted': isCompleted});
+      }
+    } catch (e) {
+      print('Task 상태 업데이트 오류: $e');
+    }
+  }
+
+// 특정 날짜의 Planner 작업 모두 삭제
+  Future<void> clearPlannerTasksForDate(DateTime date) async {
+    if (currentUserId == null) return;
+
+    final dateKey = dateToKey(date);
+
+    try {
+      final plannerQuery = await plannerCollection
+          .where('userId', isEqualTo: currentUserId)
+          .where('date', isEqualTo: date.toIso8601String())
+          .get();
+
+      for (var doc in plannerQuery.docs) {
+        await doc.reference.delete();
+      }
+
+      // 로컬 캐시도 삭제
+      plannerTasksByDate.remove(dateKey);
+    } catch (e) {
+      print('Planner Tasks 삭제 오류: $e');
+    }
+  }
+
   // Todo List와 Planner 데이터를 분리하여 저장
   final Map<String, List<Todo_Task>> todoTasksByDate = {};
   final Map<String, List<Todo_Task>> plannerTasksByDate = {};
@@ -49,7 +246,7 @@ class TaskDataService {
         isSameDate(task.date, date)).toList() ?? [];
   }
 
-  // Todo List 추가 메서드
+  // Todo List 추가 메서드 수정
   void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
     if (!todoTasksByDate.containsKey(dateKey)) {
@@ -59,6 +256,8 @@ class TaskDataService {
     isSameDate(existingTask.date, task.date) &&
         existingTask.title == task.title)) {
       todoTasksByDate[dateKey]!.add(task);
+      // Firestore에 저장
+      saveTodoTaskToFirestore(task);
     }
   }
 
@@ -68,6 +267,7 @@ class TaskDataService {
     return plannerTasksByDate[dateKey] ?? [];
   }
 
+  // Planner용 메서드 수정
   void addPlannerTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
     if (plannerTasksByDate.containsKey(dateKey)) {
@@ -75,6 +275,8 @@ class TaskDataService {
     } else {
       plannerTasksByDate[dateKey] = [task];
     }
+    // Firestore에 저장
+    savePlannerTaskToFirestore(task);
   }
 
   void removeTask(Todo_Task task) {
@@ -114,6 +316,8 @@ class TaskDataService {
         plannerTask.isCompleted = isCompleted;
       } catch (e) {}
     }
+    // Firestore 업데이트 - 수정된 부분
+    this.updateTaskCompletionInFirestore(task, isCompleted);
   }
 }
 
@@ -145,11 +349,21 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   final TaskDataService _taskDataService = TaskDataService();
   double progressPercentage = 0.0;
 
+
   @override
   void initState() {
     super.initState();
     userId = widget.userId; // 여기서 초기화
     print('📌 userId 받은 값: $userId');
+
+    // 파이어스토어에서 데이터 로드
+    _taskDataService.setUserId(userId);
+    _loadData();
+  }
+
+// 파이어스토어에서 데이터 로드하는 메서드
+  Future<void> _loadData() async {
+    await _taskDataService.loadTasksFromFirestore(userId);
     updateProgress();
   }
 
@@ -318,10 +532,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             child: const Text('취소'),
                           ),
                           TextButton(
-                            onPressed: () {
+                            onPressed: () async {
+                              await _taskDataService.clearPlannerTasksForDate(selectedDate);
                               setState(() {
-                                final dateKey = _taskDataService.dateToKey(selectedDate);
-                                _taskDataService.plannerTasksByDate.remove(dateKey);
+                                updateProgress();
                               });
                               Navigator.pop(context);
                             },
