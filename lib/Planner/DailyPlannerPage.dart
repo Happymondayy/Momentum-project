@@ -1,12 +1,16 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
+import '../main.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:timezone/timezone.dart' as tz;
+
 
 
 // API URL (Flask 서버 URL)
@@ -277,6 +281,11 @@ class TaskDataService {
     }
     // Firestore에 저장
     savePlannerTaskToFirestore(task);
+
+// 🔔 알림 예약
+    final plannerPageState = WidgetsBinding.instance.renderViewElement?.findAncestorStateOfType<_DailyPlannerPageState>();
+    plannerPageState?.scheduleDueDateNotifications(task);
+
   }
 
   void removeTask(Todo_Task task) {
@@ -899,6 +908,78 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
+  Future<void> scheduleDueDateNotifications(Todo_Task task) async {
+    if (task.dueDate == null) return;
+
+    final due = DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
+    final dMinus1 = due.subtract(const Duration(days: 1));
+    final morningTime = const TimeOfDay(hour: 9, minute: 0);
+
+    final dMinus1Time = DateTime(dMinus1.year, dMinus1.month, dMinus1.day, morningTime.hour, morningTime.minute);
+    final dDayTime = DateTime(due.year, due.month, due.day, morningTime.hour, morningTime.minute);
+
+    if (dMinus1Time.isAfter(DateTime.now())) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        task.hashCode + 1000,
+        '[D-1] 내일 마감!',
+        '${task.title} 마감이 하루 남았습니다.',
+        tz.TZDateTime.from(dMinus1Time, tz.local),
+        const NotificationDetails(
+          android: AndroidNotificationDetails('due_channel', '마감 알림', importance: Importance.high),
+        ),
+        androidAllowWhileIdle: true,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    }
+
+    if (dDayTime.isAfter(DateTime.now())) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        task.hashCode + 2000,
+        '[D-Day] 오늘 마감!',
+        '${task.title} 오늘이 마감일입니다.',
+        tz.TZDateTime.from(dDayTime, tz.local),
+        const NotificationDetails(
+          android: AndroidNotificationDetails('due_channel', '마감 알림', importance: Importance.high),
+        ),
+        androidAllowWhileIdle: true,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    }
+  }
+
+  Future<void> scheduleStartTimeNotification(Todo_Task task) async {
+    if (task.time == null || task.time!.isEmpty) return;
+
+    final timeParts = task.time!.split(':');
+    if (timeParts.length != 2) return;
+
+    final int hour = int.tryParse(timeParts[0]) ?? 0;
+    final int minute = int.tryParse(timeParts[1]) ?? 0;
+
+    final scheduleTime = DateTime(task.date.year, task.date.month, task.date.day, hour, minute);
+
+    if (scheduleTime.isAfter(DateTime.now())) {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        task.hashCode + 3000,
+        '일정 시작 알림',
+        '${task.title} 시작할 시간이에요!',
+        tz.TZDateTime.from(scheduleTime, tz.local),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'start_channel',
+            '시작 시간 알림',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+        ),
+        androidAllowWhileIdle: true,
+        uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    }
+  }
+
+
 
   DateTime? _parseTimeToDateTime(String? time) {
     if (time == null) return null;
@@ -1086,6 +1167,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           }
 
           _taskDataService.addPlannerTask(task);
+          await scheduleStartTimeNotification(task);        // 시간 알림 예약
+          await scheduleDueDateNotifications(task);         // D-Day 알림 예약 (이미 있는 경우)
           taskScheduled = true; // 태스크를 스케줄링 완료로 표시 (추가)
         } else {
           // 슬롯이 차있으면 30분 후로 이동
