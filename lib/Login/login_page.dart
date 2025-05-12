@@ -7,8 +7,6 @@ import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
-import '../Calendar/screens/calendar_screen.dart'; // ✅ 변경된 부분
-
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
 
@@ -54,7 +52,6 @@ class _LoginPageState extends State<LoginPage> {
 
         print('로그인 성공! userId = $userId');
 
-        // ✅ 변경된 부분: BottomNav -> CalendarScreen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -63,7 +60,26 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      _showError('로그인 실패: ${e.message}');
+      String message = '로그인 실패';
+
+      switch (e.code) {
+        case 'invalid-email':
+          message = '유효하지 않은 이메일입니다.';
+          break;
+        case 'user-not-found':
+          message = '존재하지 않는 사용자입니다.';
+          break;
+        case 'wrong-password':
+          message = '비밀번호가 틀렸습니다.';
+          break;
+        case 'network-request-failed':
+          message = '네트워크 연결에 실패했습니다. 인터넷 상태를 확인하세요.';
+          break;
+        default:
+          message = e.message ?? '알 수 없는 오류가 발생했습니다.';
+      }
+
+      _showError(message);
     } catch (e) {
       _showError('알 수 없는 오류가 발생했습니다.');
     }
@@ -106,7 +122,6 @@ class _LoginPageState extends State<LoginPage> {
 
         print('Google 로그인 성공! userId = $userId');
 
-        // ✅ 변경된 부분: BottomNav -> CalendarScreen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -114,8 +129,18 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       }
+    } on FirebaseAuthException catch (e) {
+      String message = 'Google 로그인 실패';
+
+      if (e.code == 'network-request-failed') {
+        message = '네트워크 오류로 Google 로그인에 실패했습니다.';
+      } else {
+        message = e.message ?? 'Google 로그인 중 알 수 없는 오류가 발생했습니다.';
+      }
+
+      _showError(message);
     } catch (e) {
-      _showError('Google 로그인 중 오류가 발생했습니다.');
+      _showError('Google 로그인 중 알 수 없는 오류가 발생했습니다.');
     }
   }
 
@@ -123,8 +148,14 @@ class _LoginPageState extends State<LoginPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('오류'),
+        title: const Text('오류'),
         content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
       ),
     );
   }
@@ -140,7 +171,7 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 60),
-              Text(
+              const Text(
                 'FocusMate',
                 style: TextStyle(
                   fontSize: 28,
@@ -159,13 +190,13 @@ class _LoginPageState extends State<LoginPage> {
                 child: ElevatedButton(
                   onPressed: _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFFD9D7F1),
+                    backgroundColor: const Color(0xFFD9D7F1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
+                  child: const Text(
                     '로그인',
                     style: TextStyle(color: Colors.black87),
                   ),
@@ -174,7 +205,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 20),
               TextButton(
                 onPressed: _loginWithGoogle,
-                child: Text(
+                child: const Text(
                   'Google로 로그인',
                   style: TextStyle(color: Colors.black87),
                 ),
@@ -188,7 +219,7 @@ class _LoginPageState extends State<LoginPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (context) => FindPasswordPage()),
+                          builder: (context) => const FindPasswordPage()),
                     );
                   }),
                   _buildLink('회원가입', () {
@@ -211,7 +242,7 @@ class _LoginPageState extends State<LoginPage> {
       {bool isPassword = false}) {
     return Container(
       decoration: BoxDecoration(
-        color: Color(0xFFEDEDED),
+        color: const Color(0xFFEDEDED),
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(
@@ -232,7 +263,7 @@ class _LoginPageState extends State<LoginPage> {
       onTap: onTap,
       child: Text(
         text,
-        style: TextStyle(
+        style: const TextStyle(
           color: Colors.black54,
           fontSize: 13,
         ),

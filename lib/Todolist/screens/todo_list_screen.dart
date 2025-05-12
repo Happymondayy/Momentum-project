@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../Planner/DailyPlannerPage.dart';
 import 'package:intl/intl.dart';
+import 'notification_service.dart';
 
 
 class Todo_Task {
@@ -21,6 +22,7 @@ class Todo_Task {
   Color? color;
   DateTime? dueDate;
   bool isCompleted;
+  int? notificationId;
 
   Todo_Task({
     this.id = '', // 기본값 빈 문자열
@@ -38,6 +40,7 @@ class Todo_Task {
     this.isCompleted = false,
     this.color,
     this.dueDate,
+    this.notificationId,
   });
 
   // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
@@ -66,6 +69,7 @@ class Todo_Task {
       isCompleted: data['isCompleted'] ?? false,
       color: taskColor,
       dueDate: data['dueDate'] != null ? (data['dueDate'] as Timestamp).toDate() : null,
+      notificationId: data['notificationId'],
     );
   }
 
@@ -86,6 +90,7 @@ class Todo_Task {
       'isCompleted': isCompleted,
       'color': color?.value, // Color 객체를 정수값으로 변환
       'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
+      'notificationId': notificationId,
     };
   }
 }
@@ -422,11 +427,11 @@ class TodoListScreen extends StatefulWidget {
 }
 
 class TodoListScreenState extends State<TodoListScreen> {
-  DateTime? selectedDueDate; // ✅ 이거 추가!
+  DateTime? selectedDueDate;
   final TextEditingController titleController = TextEditingController();
   final TextEditingController memoController = TextEditingController();
   final TextEditingController locationController = TextEditingController();
-
+  final NotificationService _notificationService = NotificationService();
   @override
   void dispose() {
   titleController.dispose();
@@ -444,6 +449,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     super.initState();
     selectedDate = widget.initialDate ?? DateTime.now();
     _taskDataService = widget.taskDataService ?? TaskDataService();
+    _notificationService.init();
 
     if (widget.onStateCreated != null) {
       widget.onStateCreated!(this);
@@ -467,6 +473,52 @@ class TodoListScreenState extends State<TodoListScreen> {
     setState(() {
       progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
+  }
+
+  void _scheduleNotificationsForTask(Todo_Task task) {
+    // Only schedule if notifications are requested (isImportant is true)
+    if (!task.isImportant) return;
+
+    // Generate a unique ID for notifications if not present
+    final notificationId = task.notificationId ?? DateTime.now().millisecondsSinceEpoch % 100000;
+    task.notificationId = notificationId;
+
+    // Schedule start time notification if time is set
+    if (task.time != null && task.time!.isNotEmpty) {
+      final startDateTime = _parseTimeToDateTime(task.time, task.date);
+
+      // Only schedule if time is in the future
+      if (startDateTime.isAfter(DateTime.now())) {
+        _notificationService.scheduleTaskStartNotification(
+          notificationId,
+          task.title,
+          '시작 시간: ${task.time}',
+          startDateTime,
+        );
+      }
+    }
+
+    // Schedule due date notification if due date is set
+    if (task.dueDate != null) {
+      // Set notification for 9 AM on the due date
+      final dueDateTime = DateTime(
+        task.dueDate!.year,
+        task.dueDate!.month,
+        task.dueDate!.day,
+        9, // 9 AM
+        0,
+      );
+
+      // Only schedule if due date is in the future
+      if (dueDateTime.isAfter(DateTime.now())) {
+        _notificationService.scheduleTaskDueNotification(
+          notificationId,
+          '마감일 알림: ${task.title}',
+          '오늘이 마감일입니다.',
+          dueDateTime,
+        );
+      }
+    }
   }
 
   // 날짜 선택 헤더 위젯
@@ -597,6 +649,43 @@ class TodoListScreenState extends State<TodoListScreen> {
     }
   }
 
+  DateTime _parseTimeToDateTime(String? timeString, DateTime taskDate) {
+    if (timeString == null || timeString.isEmpty) {
+      return taskDate;
+    }
+
+    // Parse "AM 09:30" or "PM 03:45" format
+    final isAM = timeString.startsWith('AM');
+    final timeParts = timeString.substring(3).split(':');
+
+    if (timeParts.length != 2) return taskDate;
+
+    try {
+      int hour = int.parse(timeParts[0].trim());
+      int minute = int.parse(timeParts[1].trim());
+
+      // Convert 12-hour format to 24-hour
+      if (!isAM && hour < 12) {
+        hour += 12;
+      }
+      // Convert 12 AM to 0 hours
+      if (isAM && hour == 12) {
+        hour = 0;
+      }
+
+      return DateTime(
+        taskDate.year,
+        taskDate.month,
+        taskDate.day,
+        hour,
+        minute,
+      );
+    } catch (e) {
+      print('Error parsing time: $e');
+      return taskDate;
+    }
+  }
+
   // 1. _buildTaskItem 함수를 수정하여 GestureDetector로 감싸기
   Widget _buildTaskItem(Todo_Task task) {
     return GestureDetector(
@@ -650,6 +739,11 @@ class TodoListScreenState extends State<TodoListScreen> {
                       value: task.isCompleted,
                       onChanged: (bool? value) {
                         setState(() {
+                          // If task is being marked as completed, cancel notifications
+                          if (!task.isCompleted && value == true && task.notificationId != null) {
+                            _notificationService.cancelNotification(task.notificationId!);
+                            _notificationService.cancelNotification(task.notificationId! + 1000); // Cancel due date notification
+                          }
                           task.isCompleted = value ?? false;
                           calculateProgress();
                           if (widget.onTaskStatusChanged != null) {
@@ -674,6 +768,11 @@ class TodoListScreenState extends State<TodoListScreen> {
                             ),
                             TextButton(
                               onPressed: () {
+                                // If task has notifications, cancel them
+                                if (task.notificationId != null) {
+                                  _notificationService.cancelNotification(task.notificationId!);
+                                  _notificationService.cancelNotification(task.notificationId! + 1000); // Cancel due date notification
+                                }
                                 setState(() {
                                   _taskDataService.removeTask(task);
                                   calculateProgress();
@@ -822,6 +921,18 @@ class TodoListScreenState extends State<TodoListScreen> {
                               final String formattedEnd =
                                   '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
+                              // If notification settings changed, handle notification updates
+                              if (task.isImportant != isImportant ||
+                                  task.time != formattedStart ||
+                                  task.dueDate != dueDate) {
+
+                                // If previously had notifications, cancel them
+                                if (task.notificationId != null) {
+                                  _notificationService.cancelNotification(task.notificationId!);
+                                  _notificationService.cancelNotification(task.notificationId! + 1000); // Due date notification
+                                }
+                              }
+
                               // 기존 객체 업데이트
                               task.title = titleController.text;
                               task.time = formattedStart;
@@ -833,6 +944,11 @@ class TodoListScreenState extends State<TodoListScreen> {
                               task.importance = importanceLevel;
                               task.urgency = urgencyLevel;
                               task.dueDate = dueDate;
+
+                              // Schedule new notifications if needed
+                              if (isImportant) {
+                                _scheduleNotificationsForTask(task);
+                              }
 
                               Navigator.of(context).pop();
                               setState(() {
@@ -1176,6 +1292,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         dueDate: selectedDueDate, // ✅ 마감일 추가
                                       );
 
+                                      // Schedule notifications if notifications are enabled
+                                      if (isImportant) {
+                                        _scheduleNotificationsForTask(newTask);
+                                      }
 
                                       _taskDataService.addTodoTask(newTask);
                                       Navigator.of(context).pop();
@@ -1187,7 +1307,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       if (widget.onTaskStatusChanged != null) {
                                         widget.onTaskStatusChanged!();
                                       }
-
                                       _showSnackBar(context, '일정이 저장되었습니다');
                                     },
                                     style: ElevatedButton.styleFrom(

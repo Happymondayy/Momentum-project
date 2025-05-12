@@ -926,9 +926,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         tz.TZDateTime.from(dMinus1Time, tz.local),
         const NotificationDetails(
           android: AndroidNotificationDetails('due_channel', '마감 알림', importance: Importance.high),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // ✅ 대체 파라미터
       );
     }
 
@@ -940,9 +944,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         tz.TZDateTime.from(dDayTime, tz.local),
         const NotificationDetails(
           android: AndroidNotificationDetails('due_channel', '마감 알림', importance: Importance.high),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     }
   }
@@ -971,13 +979,17 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             importance: Importance.max,
             priority: Priority.high,
           ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     }
   }
+
 
 
 

@@ -40,7 +40,6 @@ flutter {
 }
 
 dependencies {
-    // ✅ Kotlin DSL에서는 아래처럼 작성해야 함
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-ktx:1.10.1")
 }
