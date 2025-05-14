@@ -5,58 +5,21 @@ import 'package:momentum_planner/Diary/screens/diary_screen.dart';
 import 'package:momentum_planner/Login/find_ID_page.dart';
 import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
-import 'Login/login_page.dart';
+import 'package:momentum_planner/Login/login_page.dart';
 import 'package:momentum_planner/Survey/survey_screen.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 import 'package:momentum_planner/Settings/settings_page.dart';
+import 'package:momentum_planner/Todolist/screens/notification_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'Todolist/screens/notification_test_page.dart';
+import 'firebase_options.dart';
 import 'dart:async';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
-
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-Future<void> initializeNotifications() async {
-  const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-
-  final InitializationSettings initSettings = InitializationSettings(
-    android: androidSettings,
-  );
-
-  // 🔔 알림 채널 등록
-  const AndroidNotificationChannel startChannel = AndroidNotificationChannel(
-    'start_channel',
-    '시작 시간 알림',
-    description: '일정 시작 시각 알림 채널',
-    importance: Importance.high,
-  );
-
-  const AndroidNotificationChannel dueChannel = AndroidNotificationChannel(
-    'due_channel',
-    '마감 알림',
-    description: 'D-Day 마감 알림 채널',
-    importance: Importance.high,
-  );
-
-  final plugin = flutterLocalNotificationsPlugin;
-  final androidPlugin = plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-
-  await androidPlugin?.createNotificationChannel(startChannel);
-  await androidPlugin?.createNotificationChannel(dueChannel);
-  await plugin.initialize(initSettings);
-}
-
-Future<void> initializeTimeZone() async {
-  tz.initializeTimeZones();
-  tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeNotifications();
-  await initializeTimeZone();
+
+  // ✅ 알림 및 권한 초기화
+  await NotificationService().init();
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -68,7 +31,7 @@ void main() async {
       print("⚡ Firebase가 이미 초기화되었습니다.");
     }
   } catch (e) {
-    print("❌ Firebase 초기화 실패: \$e");
+    print("❌ Firebase 초기화 실패: $e");
   }
 
   runApp(const MyApp());
@@ -86,6 +49,7 @@ class MyApp extends StatelessWidget {
         fontFamily: 'NotoSansKR',
       ),
       debugShowCheckedModeBanner: false,
+      //home: NotificationTestPage(),
       home: SplashScreen(),
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;

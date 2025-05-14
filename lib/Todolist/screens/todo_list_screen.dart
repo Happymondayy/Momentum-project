@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../Planner/DailyPlannerPage.dart';
 import 'package:intl/intl.dart';
 import 'notification_service.dart';
-
+import 'package:collection/collection.dart';
 
 class Todo_Task {
   String id; // Firestore 문서 ID를 저장할 필드 추가
@@ -23,6 +23,7 @@ class Todo_Task {
   DateTime? dueDate;
   bool isCompleted;
   int? notificationId;
+  List<int>? reminderMinutesBefore; // 알림을 몇 분 전에 울릴지
 
   Todo_Task({
     this.id = '', // 기본값 빈 문자열
@@ -41,6 +42,7 @@ class Todo_Task {
     this.color,
     this.dueDate,
     this.notificationId,
+    this.reminderMinutesBefore,
   });
 
   // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
@@ -70,6 +72,7 @@ class Todo_Task {
       color: taskColor,
       dueDate: data['dueDate'] != null ? (data['dueDate'] as Timestamp).toDate() : null,
       notificationId: data['notificationId'],
+      reminderMinutesBefore: List<int>.from(data['reminderMinutesBefore'] ?? []),
     );
   }
 
@@ -91,6 +94,7 @@ class Todo_Task {
       'color': color?.value, // Color 객체를 정수값으로 변환
       'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
       'notificationId': notificationId,
+      'reminderMinutesBefore': reminderMinutesBefore,
     };
   }
 }
@@ -476,50 +480,38 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   void _scheduleNotificationsForTask(Todo_Task task) {
-    // Only schedule if notifications are requested (isImportant is true)
     if (!task.isImportant) return;
 
-    // Generate a unique ID for notifications if not present
     final notificationId = task.notificationId ?? DateTime.now().millisecondsSinceEpoch % 100000;
     task.notificationId = notificationId;
 
-    // Schedule start time notification if time is set
-    if (task.time != null && task.time!.isNotEmpty) {
-      final startDateTime = _parseTimeToDateTime(task.time, task.date);
+    // ✅ 시작 시간 있는 경우에만 알림 설정
+    if (task.time != null && task.time!.isNotEmpty && task.reminderMinutesBefore != null) {
+      final startDateTime = _parseTimeToDateTime(task.time, task.date); // ✅ 이거 추가하면 에러 해결됨
 
-      // Only schedule if time is in the future
-      if (startDateTime.isAfter(DateTime.now())) {
-        _notificationService.scheduleTaskStartNotification(
-          notificationId,
-          task.title,
-          '시작 시간: ${task.time}',
-          startDateTime,
-        );
+      for (final minute in task.reminderMinutesBefore!) {
+        final scheduledTime = startDateTime.subtract(Duration(minutes: minute));
+        if (scheduledTime.isAfter(DateTime.now())) {
+          _notificationService.scheduleCustomReminderNotification(
+            notificationId + minute,
+            task.title,
+            scheduledTime,
+            minute,
+          );
+        }
       }
     }
 
-    // Schedule due date notification if due date is set
+    // ✅ 마감일 알림은 그대로 유지
     if (task.dueDate != null) {
-      // Set notification for 9 AM on the due date
-      final dueDateTime = DateTime(
-        task.dueDate!.year,
-        task.dueDate!.month,
-        task.dueDate!.day,
-        9, // 9 AM
-        0,
+      _notificationService.scheduleDeadlineNotification(
+        notificationId,
+        task.title,
+        task.dueDate!,
       );
-
-      // Only schedule if due date is in the future
-      if (dueDateTime.isAfter(DateTime.now())) {
-        _notificationService.scheduleTaskDueNotification(
-          notificationId,
-          '마감일 알림: ${task.title}',
-          '오늘이 마감일입니다.',
-          dueDateTime,
-        );
-      }
     }
   }
+
 
   // 날짜 선택 헤더 위젯
   Widget _buildDateHeader() {
@@ -855,24 +847,21 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-// 2. 상세보기 및 수정 다이얼로그 함수 추가
   void showTaskDetailDialog(BuildContext context, Todo_Task task) {
-    // 컨트롤러 초기화 및 현재 값 설정
     final titleController = TextEditingController(text: task.title);
     final memoController = TextEditingController(text: task.memo ?? '');
     final locationController = TextEditingController(text: task.location ?? '');
 
-    // 시간 변환
     TimeOfDay startTime = _parseTimeString(task.time ?? '');
     TimeOfDay endTime = _parseTimeString(task.endTime ?? '');
 
-    // 날짜 및 설정 변수
     DateTime taskDate = task.date;
     DateTime? dueDate = task.dueDate;
     bool isImportant = task.isImportant;
     bool isUrgent = task.isUrgent;
     int importanceLevel = task.importance;
     int urgencyLevel = task.urgency;
+    List<int> selectedReminders = List.from(task.reminderMinutesBefore ?? []);
 
     showDialog(
       context: context,
@@ -910,7 +899,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                           IconButton(
                             icon: const Icon(Icons.edit),
                             onPressed: () {
-                              // 수정 모드로 전환 (다이얼로그 내에서 바로 수정 가능)
                               if (titleController.text.isEmpty) {
                                 _showSnackBar(context, '제목을 입력해주세요');
                                 return;
@@ -921,19 +909,18 @@ class TodoListScreenState extends State<TodoListScreen> {
                               final String formattedEnd =
                                   '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
-                              // If notification settings changed, handle notification updates
-                              if (task.isImportant != isImportant ||
-                                  task.time != formattedStart ||
-                                  task.dueDate != dueDate) {
+                              // 변경 감지 후 알림 재설정
+                              final hasNotificationChange =
+                                  task.isImportant != isImportant ||
+                                      task.time != formattedStart ||
+                                      task.dueDate != dueDate ||
+                                      !const ListEquality().equals(task.reminderMinutesBefore, selectedReminders);
 
-                                // If previously had notifications, cancel them
-                                if (task.notificationId != null) {
-                                  _notificationService.cancelNotification(task.notificationId!);
-                                  _notificationService.cancelNotification(task.notificationId! + 1000); // Due date notification
-                                }
+                              if (hasNotificationChange && task.notificationId != null) {
+                                _notificationService.cancelNotification(task.notificationId!);
+                                _notificationService.cancelNotification(task.notificationId! + 1000);
                               }
 
-                              // 기존 객체 업데이트
                               task.title = titleController.text;
                               task.time = formattedStart;
                               task.endTime = formattedEnd;
@@ -944,8 +931,8 @@ class TodoListScreenState extends State<TodoListScreen> {
                               task.importance = importanceLevel;
                               task.urgency = urgencyLevel;
                               task.dueDate = dueDate;
+                              task.reminderMinutesBefore = isImportant ? selectedReminders : [];
 
-                              // Schedule new notifications if needed
                               if (isImportant) {
                                 _scheduleNotificationsForTask(task);
                               }
@@ -998,7 +985,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                                   startTime = pickedTime;
                                 });
                               }, label: '시작 시간'),
-
                               const SizedBox(height: 20),
 
                               _buildTimePicker(context, endTime, (pickedTime) {
@@ -1006,7 +992,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                                   endTime = pickedTime;
                                 });
                               }, label: '종료 시간'),
-
                               const SizedBox(height: 20),
 
                               _buildImportanceSelector(setState, importanceLevel, (level) {
@@ -1014,15 +999,11 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              _buildDueDatePicker(
-                                  context,
-                                  dueDate,
-                                      (pickedDate) {
-                                    setState(() {
-                                      dueDate = pickedDate;
-                                    });
-                                  }),
-
+                              _buildDueDatePicker(context, dueDate, (pickedDate) {
+                                setState(() {
+                                  dueDate = pickedDate;
+                                });
+                              }),
                               const SizedBox(height: 20),
 
                               _buildSwitchRow('알림 설정', isImportant, (value) {
@@ -1030,6 +1011,33 @@ class TodoListScreenState extends State<TodoListScreen> {
                                   isImportant = value;
                                 });
                               }),
+
+                              // ✅ 사용자 알림 반복 선택
+                              if (isImportant) ...[
+                                const SizedBox(height: 16),
+                                const Text('알림 반복 시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 10,
+                                  children: [5, 10, 15, 30, 60].map((minute) {
+                                    final isSelected = selectedReminders.contains(minute);
+                                    return ChoiceChip(
+                                      label: Text('$minute분 전'),
+                                      selected: isSelected,
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          if (selected) {
+                                            selectedReminders.add(minute);
+                                          } else {
+                                            selectedReminders.remove(minute);
+                                          }
+                                        });
+                                      },
+                                      selectedColor: Colors.purple.shade200,
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
 
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
@@ -1079,6 +1087,7 @@ class TodoListScreenState extends State<TodoListScreen> {
       setState(() {});
     });
   }
+
 
 // 3. 시간 문자열을 TimeOfDay로 변환하는 유틸리티 함수 추가
   TimeOfDay _parseTimeString(String timeString) {
@@ -1144,6 +1153,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     bool isUrgent = false;
     int importanceLevel = 1;
     int urgencyLevel = 1;
+    List<int> selectedReminders = []; // ✅ 사용자 선택 알림 시간
 
     showDialog(
       context: context,
@@ -1231,22 +1241,49 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                            _buildDueDatePicker(
-                              context,
-                              selectedDueDate,
-                                  (pickedDate) {
-                                setState(() {
-                                  selectedDueDate = pickedDate;
-                                });
-                              }),
+                              _buildDueDatePicker(
+                                  context,
+                                  selectedDueDate,
+                                      (pickedDate) {
+                                    setState(() {
+                                      selectedDueDate = pickedDate;
+                                    });
+                                  }),
 
-                            const SizedBox(height: 20),
+                              const SizedBox(height: 20),
 
                               _buildSwitchRow('알림 설정', isImportant, (value) {
                                 setState(() {
                                   isImportant = value;
                                 });
                               }),
+
+                              // ✅ 알림 설정이 true일 때만 반복 시간 선택 보이기
+                              if (isImportant) ...[
+                                const SizedBox(height: 16),
+                                const Text('알림 반복 시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 10,
+                                  children: [5, 10, 15, 30, 60].map((minute) {
+                                    final isSelected = selectedReminders.contains(minute);
+                                    return ChoiceChip(
+                                      label: Text('$minute분 전'),
+                                      selected: isSelected,
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          if (selected) {
+                                            selectedReminders.add(minute);
+                                          } else {
+                                            selectedReminders.remove(minute);
+                                          }
+                                        });
+                                      },
+                                      selectedColor: Colors.purple.shade200,
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
 
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
@@ -1289,10 +1326,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         urgency: urgencyLevel,
                                         isCompleted: false,
                                         color: _getFixedColorForTask(titleController.text),
-                                        dueDate: selectedDueDate, // ✅ 마감일 추가
+                                        dueDate: selectedDueDate,
+                                        reminderMinutesBefore: isImportant ? selectedReminders : [],
                                       );
 
-                                      // Schedule notifications if notifications are enabled
                                       if (isImportant) {
                                         _scheduleNotificationsForTask(newTask);
                                       }
@@ -1337,6 +1374,7 @@ class TodoListScreenState extends State<TodoListScreen> {
       setState(() {});
     });
   }
+
 
 
   // TextField 생성 메서드
