@@ -36,9 +36,13 @@ class TaskDataService {
     currentUserId = userId;
   }
 
-// Firestore에서 데이터 로드
+// loadTasksFromFirestore 함수 수정
   Future<void> loadTasksFromFirestore(String userId) async {
     setUserId(userId);
+
+    // 데이터를 로드하기 전에 기존 데이터 초기화
+    todoTasksByDate.clear();
+    plannerTasksByDate.clear();
 
     // Todo 데이터 로드
     try {
@@ -72,7 +76,15 @@ class TaskDataService {
         if (!todoTasksByDate.containsKey(dateKey)) {
           todoTasksByDate[dateKey] = [];
         }
-        todoTasksByDate[dateKey]!.add(task);
+
+        // 중복 체크: 동일한 제목과 날짜의 태스크가 있는지 확인
+        bool isDuplicate = todoTasksByDate[dateKey]!.any((t) =>
+        t.title == task.title && t.date.day == task.date.day &&
+            t.date.month == task.date.month && t.date.year == task.date.year);
+
+        if (!isDuplicate) {
+          todoTasksByDate[dateKey]!.add(task);
+        }
       }
 
       // Planner 데이터 로드
@@ -106,8 +118,18 @@ class TaskDataService {
         if (!plannerTasksByDate.containsKey(dateKey)) {
           plannerTasksByDate[dateKey] = [];
         }
-        plannerTasksByDate[dateKey]!.add(task);
+
+        // 중복 체크: 동일한 제목과 날짜의 태스크가 있는지 확인
+        bool isDuplicate = plannerTasksByDate[dateKey]!.any((t) =>
+        t.title == task.title && t.date.day == task.date.day &&
+            t.date.month == task.date.month && t.date.year == task.date.year);
+
+        if (!isDuplicate) {
+          plannerTasksByDate[dateKey]!.add(task);
+        }
       }
+
+      print('Firestore 데이터 로드 완료: Todo ${todoTasksByDate.length}, Planner ${plannerTasksByDate.length}');
     } catch (e) {
       print('Firestore 데이터 로드 오류: $e');
     }
@@ -198,24 +220,38 @@ class TaskDataService {
     }
   }
 
-// 특정 날짜의 Planner 작업 모두 삭제
+  // 특정 날짜의 Planner 작업 모두 삭제 (최종 수정 버전)
   Future<void> clearPlannerTasksForDate(DateTime date) async {
     if (currentUserId == null) return;
 
     final dateKey = dateToKey(date);
 
     try {
+      // 1. 먼저 로컬 캐시 데이터 삭제 (중요!)
+      plannerTasksByDate[dateKey] = [];
+
+      // 2. Firestore에서 해당 날짜의 문서 검색
+      final dateStr = date.toIso8601String();
       final plannerQuery = await plannerCollection
           .where('userId', isEqualTo: currentUserId)
-          .where('date', isEqualTo: date.toIso8601String())
+          .where('date', isEqualTo: dateStr)
           .get();
 
-      for (var doc in plannerQuery.docs) {
-        await doc.reference.delete();
+      // 3. Firestore 문서 삭제
+      if (plannerQuery.docs.isNotEmpty) {
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+        for (var doc in plannerQuery.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
       }
 
-      // 로컬 캐시도 삭제
-      plannerTasksByDate.remove(dateKey);
+      // 4. 로컬 캐시가 확실히 비워졌는지 한 번 더 확인
+      if (plannerTasksByDate.containsKey(dateKey)) {
+        plannerTasksByDate[dateKey] = [];
+      }
+
+      print('Planner Tasks for $dateKey 삭제 완료');
     } catch (e) {
       print('Planner Tasks 삭제 오류: $e');
     }
@@ -287,8 +323,44 @@ class TaskDataService {
     }
   }
 
+  // Firestore에서 Task 삭제하는 함수
+  Future<void> removeTaskFromFirestore(Todo_Task task) async {
+    if (currentUserId == null) return;
 
-  void removeTask(Todo_Task task) {
+    try {
+      // Todo 컬렉션 확인
+      final todoQuery = await todoCollection
+          .where('userId', isEqualTo: currentUserId)
+          .where('title', isEqualTo: task.title)
+          .where('date', isEqualTo: task.date.toIso8601String())
+          .get();
+
+      // Todo 데이터 삭제
+      for (var doc in todoQuery.docs) {
+        await doc.reference.delete();
+      }
+
+      // Planner 컬렉션 확인
+      final plannerQuery = await plannerCollection
+          .where('userId', isEqualTo: currentUserId)
+          .where('title', isEqualTo: task.title)
+          .where('date', isEqualTo: task.date.toIso8601String())
+          .get();
+
+      // Planner 데이터 삭제
+      for (var doc in plannerQuery.docs) {
+        await doc.reference.delete();
+      }
+
+      print('${task.title} 삭제 완료');
+    } catch (e) {
+      print('Task 삭제 오류: $e');
+    }
+  }
+
+// 기존 removeTask 함수 수정
+  Future<void> removeTask(Todo_Task task) async {
+    // 로컬 데이터 삭제
     final dateKey = dateToKey(task.date);
     if (todoTasksByDate.containsKey(dateKey)) {
       todoTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
@@ -296,6 +368,9 @@ class TaskDataService {
     if (plannerTasksByDate.containsKey(dateKey)) {
       plannerTasksByDate[dateKey]!.removeWhere((t) => t.title == task.title);
     }
+
+    // Firestore에서도 삭제
+    await removeTaskFromFirestore(task);
   }
 
   // 진행률 계산
