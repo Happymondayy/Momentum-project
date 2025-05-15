@@ -7,6 +7,8 @@ import 'package:momentum_planner/Login/find_password_page.dart';
 import 'package:momentum_planner/Login/signup_page.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 
+import 'find_ID_page.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
 
@@ -170,16 +172,16 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 60),
+              const SizedBox(height: 40),
               const Text(
                 'FocusMate',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 35,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
                 ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 40),
               _buildTextField(_emailController, '이메일을 입력하세요'),
               const SizedBox(height: 16),
               _buildTextField(_passwordController, '비밀번호를 입력하세요', isPassword: true),
@@ -203,18 +205,46 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              TextButton(
-                onPressed: _loginWithGoogle,
-                child: const Text(
-                  'Google로 로그인',
-                  style: TextStyle(color: Colors.black87),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: GestureDetector(
+                  onTap: _loginWithGoogle,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'Google로 로그인',
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 40),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildLink('아이디 찾기', () {}),
+                  _buildLink('아이디 찾기', () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => FindIdPage()),
+                    );
+                  }),
                   _buildLink('비밀번호 찾기', () {
                     Navigator.push(
                       context,

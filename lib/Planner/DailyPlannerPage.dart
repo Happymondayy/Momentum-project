@@ -315,12 +315,6 @@ class TaskDataService {
     // Firestore에 저장
     savePlannerTaskToFirestore(task);
 
-    // 🔔 알림 예약
-    final plannerPageState = WidgetsBinding.instance.renderViewElement?.findAncestorStateOfType<_DailyPlannerPageState>();
-    if (plannerPageState != null) {
-      plannerPageState.scheduleStartTimeNotification(task);     // 시작 시간 알림
-      plannerPageState.scheduleDueDateNotifications(task);      // 마감 알림
-    }
   }
 
   // Firestore에서 Task 삭제하는 함수
@@ -565,6 +559,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
+
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
     final now = DateTime.now();
@@ -592,15 +587,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // 새 일정 추가 버튼
-                IconButton(
-                  onPressed: () {
-                    // 새 일정 추가 기능 (필요시 구현)
-                    // _showAddPlannerTaskDialog(context, selectedDate);
-                  },
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
-                  tooltip: '일정 추가',
-                ),
                 // 일정 전체 삭제 버튼
                 IconButton(
                   onPressed: () {
@@ -608,6 +594,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
+                        backgroundColor: Colors.white, // 배경색을 흰색으로 설정
                         title: const Text('일정 초기화'),
                         content: const Text('이 날짜의 모든 일정을 삭제하시겠습니까?'),
                         actions: [
@@ -659,11 +646,11 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
               return Container(
                 decoration: BoxDecoration(
-                  color: isCurrentHour ? Colors.blue.withOpacity(0.05) : null,
+                  color: isCurrentHour ? Colors.purple.withOpacity(0.05) : null, // 보라색으로 변경
                   border: isCurrentHour
                       ? Border(
                     left: BorderSide(
-                      color: Colors.blue.shade400,
+                      color: Colors.purple.shade400, // 보라색으로 변경
                       width: 3,
                     ),
                   )
@@ -692,7 +679,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.normal,
-                              color: isCurrentHour ? Colors.blue.shade700 : Colors.grey.shade600,
+                              color: isCurrentHour ? Colors.purple.shade700 : Colors.grey.shade600, // 보라색으로 변경
                             ),
                           ),
                           if (isCurrentHour)
@@ -701,7 +688,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                               width: 6,
                               height: 6,
                               decoration: BoxDecoration(
-                                color: Colors.blue.shade700,
+                                color: Colors.purple.shade700, // 보라색으로 변경
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -759,7 +746,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-// TodoTask 카드 위젯
+// TodoTask 카드 위젯 - 레이아웃 변경
   Widget _buildTodoTaskCard(dynamic task) {
     final start = _parseTimeToDateTime(task.time);
     final end = _parseTimeToDateTime(task.endTime);
@@ -825,9 +812,11 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 상단 제목 및 체크박스 영역
+                // 제목과 시간 영역 (가로로 배치)
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 제목
                     Expanded(
                       child: Text(
                         task.title,
@@ -840,7 +829,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                       ),
                     ),
 
+                    // 시간 표시
+                    if (timeRange.isNotEmpty)
+                      Text(
+                        timeRange,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isCompleted ? Colors.grey : Colors.black54,
+                        ),
+                      ),
+
                     // 체크박스
+                    const SizedBox(width: 8),
                     Transform.scale(
                       scale: 1.1,
                       child: Checkbox(
@@ -848,7 +848,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        activeColor: taskColor,
+                        activeColor: Colors.purple.shade400, // 보라색으로 변경
                         onChanged: (bool? value) {
                           setState(() {
                             _taskDataService.updateTaskStatus(task, value ?? false);
@@ -860,119 +860,112 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                   ],
                 ),
 
-                // 시간 표시
-                if (timeRange.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: isCompleted ? Colors.grey : taskColor,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          timeRange,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isCompleted ? Colors.grey : Colors.black54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                const SizedBox(height: 8),
 
-                // 메모 표시
-                if (task.memo != null && task.memo!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.grey.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        task.memo!,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isCompleted ? Colors.grey : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // 위치 정보
-                if (task.location != null && task.location!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.location_on,
-                          size: 14,
-                          color: isCompleted ? Colors.grey : Colors.indigo,
-                        ),
-                        const SizedBox(width: 4),
+                // 메모와 위치 정보 (가로로 배치)
+                if (task.memo != null && task.memo!.isNotEmpty || task.location != null && task.location!.isNotEmpty)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 메모 표시
+                      if (task.memo != null && task.memo!.isNotEmpty)
                         Expanded(
-                          child: Text(
-                            task.location!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isCompleted ? Colors.grey : Colors.indigo,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.grey.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              task.memo!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isCompleted ? Colors.grey : Colors.black87,
+                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+
+                      const SizedBox(width: 8),
+
+                      // 위치 정보
+                      if (task.location != null && task.location!.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.05), // 보라색으로 변경
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.purple.withOpacity(0.2), // 보라색으로 변경
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 14,
+                                color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                task.location!,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
 
-                // 마감일 표시
+                const SizedBox(height: 8),
+
+                // 마감일 표시 (하단에 배치)
                 if (task.dueDate != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: daysLeft != null && daysLeft < 0
-                            ? Colors.red.withOpacity(0.1)
-                            : daysLeft != null && daysLeft == 0
-                            ? Colors.orange.withOpacity(0.1)
-                            : Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.event,
-                            size: 14,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: daysLeft != null && daysLeft < 0
+                          ? Colors.red.withOpacity(0.1)
+                          : daysLeft != null && daysLeft == 0
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.purple.withOpacity(0.1), // 보라색으로 변경
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.event,
+                          size: 14,
+                          color: daysLeft != null && daysLeft < 0
+                              ? Colors.red
+                              : daysLeft != null && daysLeft == 0
+                              ? Colors.orange
+                              : Colors.purple, // 보라색으로 변경
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          dueStatus ?? DateFormat('MM/dd').format(task.dueDate!),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: daysLeft != null && daysLeft <= 1 ? FontWeight.bold : FontWeight.normal,
                             color: daysLeft != null && daysLeft < 0
                                 ? Colors.red
                                 : daysLeft != null && daysLeft == 0
                                 ? Colors.orange
-                                : Colors.blue,
+                                : Colors.purple, // 보라색으로 변경
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            dueStatus ?? DateFormat('MM/dd').format(task.dueDate!),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: daysLeft != null && daysLeft <= 1 ? FontWeight.bold : FontWeight.normal,
-                              color: daysLeft != null && daysLeft < 0
-                                  ? Colors.red
-                                  : daysLeft != null && daysLeft == 0
-                                  ? Colors.orange
-                                  : Colors.blue,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -982,45 +975,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       ),
     );
   }
-
-  Future<void> scheduleDueDateNotifications(Todo_Task task) async {
-    if (task.dueDate == null) return;
-
-    // ✅ NotificationService에 위임
-    await NotificationService().scheduleDeadlineNotification(
-      task.hashCode,
-      task.title,
-      task.dueDate!,
-    );
-  }
-
-  Future<void> scheduleStartTimeNotification(Todo_Task task) async {
-    if (task.time == null || task.time!.isEmpty) return;
-
-    final timeParts = task.time!.split(':');
-    if (timeParts.length != 2) return;
-
-    final int hour = int.tryParse(timeParts[0]) ?? 0;
-    final int minute = int.tryParse(timeParts[1]) ?? 0;
-
-    final scheduleTime = DateTime(
-      task.date.year,
-      task.date.month,
-      task.date.day,
-      hour,
-      minute,
-    );
-
-    // ✅ NotificationService에 위임
-    await NotificationService().scheduleStartNotification(
-      task.hashCode,
-      task.title,
-      scheduleTime,
-    );
-  }
-
-
-
 
 
   DateTime? _parseTimeToDateTime(String? time) {
@@ -1209,9 +1163,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           }
 
           _taskDataService.addPlannerTask(task);
-          await scheduleStartTimeNotification(task);        // 시간 알림 예약
-          await scheduleDueDateNotifications(task);         // D-Day 알림 예약 (이미 있는 경우)
           taskScheduled = true; // 태스크를 스케줄링 완료로 표시 (추가)
+
         } else {
           // 슬롯이 차있으면 30분 후로 이동
           final nextTime = _advanceTime(currentHour, currentMinute, 30);

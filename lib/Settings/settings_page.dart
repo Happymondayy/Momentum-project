@@ -84,6 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: const Text('닉네임 변경'),
           content: TextField(
             controller: controller,
@@ -98,6 +99,15 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () async {
                 String newNickname = controller.text.trim();
                 if (newNickname.isNotEmpty) {
+                  bool isDuplicate = await _checkNicknameDuplicate(newNickname);
+                  if (isDuplicate) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.')),
+                      );
+                    }
+                    return; // 닉네임 중복이면 변경 안 함
+                  }
                   Navigator.pop(context);
                   await _updateNickname(newNickname);
                 }
@@ -109,6 +119,26 @@ class _SettingsPageState extends State<SettingsPage> {
       },
     );
   }
+
+  Future<bool> _checkNicknameDuplicate(String nickname) async {
+    final querySnapshot = await _firestore
+        .collection('user')
+        .where('nickname', isEqualTo: nickname)
+        .get();
+
+    // 현재 로그인한 사용자의 닉네임는 중복 체크 제외 (닉네임 변경 중일 때 자기 자신의 닉네임이면 중복 아님)
+    if (querySnapshot.docs.isEmpty) return false; // 중복 없음
+
+    // 중복이 있으면 중복 체크를 통과하지 못함
+    // 같은 닉네임 가진 문서가 자기 자신이라면 중복 아님
+    for (var doc in querySnapshot.docs) {
+      if (doc.id != widget.userId) {
+        return true; // 중복 있음
+      }
+    }
+    return false; // 중복 없음
+  }
+
 
   Future<void> _updateNickname(String newNickname) async {
     try {
@@ -141,11 +171,13 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) =>
           AlertDialog(
-            title: const Text('로그아웃'),
+            backgroundColor: Colors.white,
             content: const Text('로그아웃하시겠습니까?'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context),
-                  child: const Text('취소')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
+              ),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
@@ -167,11 +199,13 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) =>
           AlertDialog(
-            title: const Text('회원 탈퇴'),
-            content: const Text('정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
+            backgroundColor: Colors.white,
+            content: const Text('회원 탈퇴하시겠습니까?\n복구하실 수 없습니다.'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context),
-                  child: const Text('취소')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
+              ),
               ElevatedButton(
                 onPressed: () async {
                   try {
@@ -199,7 +233,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white70),
                 child: const Text('탈퇴하기'),
               ),
             ],
@@ -250,7 +284,7 @@ class _SettingsPageState extends State<SettingsPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Settings',
+          '설정',
           style: TextStyle(
             fontWeight: FontWeight.bold,
           ),
@@ -381,7 +415,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               Divider(height: 1, thickness: 0.5, color: Colors.grey.withOpacity(0.2)),
               ListTile(
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                leading: const Icon(Icons.delete_outlined, color: Colors.red),
                 title: const Text('회원 탈퇴'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _deleteAccount,

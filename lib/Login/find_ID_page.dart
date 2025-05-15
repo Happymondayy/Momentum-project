@@ -1,74 +1,123 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class FindIdPage extends StatelessWidget {//변경되는 상태가 없는 UI화면
+class FindIdPage extends StatefulWidget {
   const FindIdPage({Key? key}) : super(key: key);
+
+  @override
+  State<FindIdPage> createState() => _FindIdPageState();
+}
+
+class _FindIdPageState extends State<FindIdPage> {
+  final TextEditingController _nicknameController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _findEmailByNickname() async {
+    final nickname = _nicknameController.text.trim();
+    if (nickname.isEmpty) {
+      _showMessage('닉네임을 입력하세요.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('nickname', isEqualTo: nickname)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final email = querySnapshot.docs.first['email'];
+        _showMessage('가입하신 이메일은 $email 입니다.');
+      } else {
+        _showMessage('해당 닉네임으로 등록된 계정이 없습니다.');
+      }
+    } catch (e) {
+      _showMessage('오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showMessage(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('아이디 찾기 결과'),
+        content: Text(
+          message,
+          style: TextStyle(fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,//배경색 흰색
-        elevation: 0,//그림자 없애기
-        leading: IconButton(//앱 아이콘
-          icon: const Icon(Icons.arrow_back, color: Colors.black),//검정색 뒤로 가기 아이콘(<-)
-          onPressed: () => Navigator.pop(context),//뒤로 가기 버튼을 누르면 이전 화면으로 돌아감
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           '아이디 찾기',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.w500),
         ),
-        centerTitle: true,//타이틀을 중앙 정렬
+        centerTitle: true,
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),//화면의 좌우 여백을 24px로 설정하여 정렬을 맞춤
-          child: Column(//세로 방향으로 정렬
-            crossAxisAlignment: CrossAxisAlignment.stretch,//모든 요소를 가로로 꽉 차게 배치
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 60),//여백 추가
+              const SizedBox(height: 60),
               const Text(
                 'FocusMate',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 60),//아래 여백 추가
-              // 이름 입력 필드
-              Container(//이름 입력 필드를 감싸는 스타일 적용
-                decoration: BoxDecoration(//배경색과 둥근 모서리 적용
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: TextField(//사용자가 이름을 입력할 수 있는 입력창
-                    decoration: InputDecoration(
-                      hintText: '이름을 입력하세요',
-                      border: InputBorder.none,//입력창 테두리를 없앰
-                      hintStyle: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),//입력 필드 간 간격 추가
-              // 전화번호 입력 필드
+              const SizedBox(height: 50),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: TextField(
-                    keyboardType: TextInputType.phone,//전화번호 입력 시 숫자 키보드 표시
+                    controller: _nicknameController,
                     decoration: InputDecoration(
-                      hintText: '전화번호를 입력하세요',
+                      hintText: '닉네임을 입력하세요',
                       border: InputBorder.none,
                       hintStyle: TextStyle(color: Colors.grey[600]),
                     ),
@@ -76,40 +125,33 @@ class FindIdPage extends StatelessWidget {//변경되는 상태가 없는 UI화�
                 ),
               ),
               const SizedBox(height: 24),
-              // 아이디 찾기 버튼
-              ElevatedButton(//버튼 클릭 시
-                onPressed: () {
-                  // 아이디 찾기 기능 구현
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFCFCFFF),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _findEmailByNickname,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFCFCFFF),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 2,
                   ),
-                ),
-                child: const Text(
-                  '아이디 찾기',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                    '아이디 찾기',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              // 로그인 화면으로 돌아가기
               TextButton(
-                onPressed: () {
-                  Navigator.pop(context);//로그인 화면으로 돌아감
-                },
+                onPressed: () => Navigator.pop(context),
                 child: Text(
                   '로그인 화면으로 돌아가기',
-                  style: TextStyle(
-                    color: Colors.grey[800],
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,//중앙 정렬
+                  style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
