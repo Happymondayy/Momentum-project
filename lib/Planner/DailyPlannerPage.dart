@@ -412,6 +412,7 @@ class DailyPlannerPage extends StatefulWidget {
 
 class _DailyPlannerPageState extends State<DailyPlannerPage> {
   late String userId; // 나중에 초기화할 변수
+  final NotificationService _notificationService = NotificationService();
 
   @override
   void didChangeDependencies() {
@@ -423,6 +424,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   bool isPlannerView = true; // true for planner, false for todo list
   DateTime selectedDate = DateTime.now();
+  bool isLoading = false;
   TodoListScreenState? todoListScreenState;
   final TaskDataService _taskDataService = TaskDataService();
   double progressPercentage = 0.0;
@@ -562,6 +564,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
+    print('tasks length: ${tasks.length}');
+    for(var task in tasks) {
+      print('task time: ${task.time}');
+    }
     final now = DateTime.now();
     final isToday = selectedDate.year == now.year &&
         selectedDate.month == now.month &&
@@ -854,6 +860,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             _taskDataService.updateTaskStatus(task, value ?? false);
                             updateProgress();
                           });
+                          if (value == true) {
+                            _notificationService.showTaskCompletedNotification(task.title);
+                          }
                         },
                       ),
                     ),
@@ -1067,177 +1076,292 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     });
   }
 
+  String? _normalizeTime(String? time) {
+    if (time == null) return null;
+    final parts = time.split(':');
+    if (parts.length != 2) return time;
+    final hour = parts[0].padLeft(2, '0');
+    final minute = parts[1].padLeft(2, '0');
+    return '$hour:$minute'; // 항상 HH:mm 형태로 반환
+  }
+
+
+
   void _generateAIPlanner() async {
+    // Show loading indicator while processing
+    setState(() {
+      isLoading = true; // Add this variable to your state
+    });
+
     final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
 
-    // Firebase에서 Calendar Event 가져오기
+    // Firebase에서 Calendar Event 가져오기 (시간 포함)
     final eventsSnapshot = await FirebaseFirestore.instance.collection('events').get();
-    List<Todo_Task> calendarTasks = [];
-    List<Map<String, int>> occupiedTimes = []; // 예약된 시간 슬롯 저장
+    List<Map<String, dynamic>> calendarEvents = [];
 
     for (var doc in eventsSnapshot.docs) {
       final data = doc.data();
       final startDate = DateTime.parse(data['startDate']);
-
       if (startDate.year == selectedDate.year &&
           startDate.month == selectedDate.month &&
           startDate.day == selectedDate.day) {
-        if (data['startTime'] != null) {
-          int hour = data['startTime']['hour'];
-          int minute = data['startTime']['minute'];
-          occupiedTimes.add({'hour': hour, 'minute': minute});
-        }
-
-        calendarTasks.add(
-          Todo_Task(
-            title: data['title'],
-            date: selectedDate,
-            time: data['startTime'] != null
-                ? '${data['startTime']['hour'].toString().padLeft(2, '0')}:${data['startTime']['minute'].toString().padLeft(2, '0')}'
-                : null,
-            isImportant: true,
-            isUrgent: false,
-            importance: 3,
-            urgency: 2,
-          ),
-        );
+        calendarEvents.add({
+          'title': data['title'],
+          'startTime': data['startTime'] != null
+              ? '${data['startTime']['hour'].toString().padLeft(2, '0')}:${data['startTime']['minute'].toString().padLeft(2, '0')}'
+              : null,
+          'endTime': data['endTime'] != null
+              ? '${data['endTime']['hour'].toString().padLeft(2, '0')}:${data['endTime']['minute'].toString().padLeft(2, '0')}'
+              : null,
+        });
       }
     }
 
-    final allTasks = [...todoTasks, ...calendarTasks];
+    final allTasksData = todoTasks.map((task) => {
+      'title': task.title,
+      'importance': task.importance ?? 1,
+      'urgency': task.urgency ?? 1,
+      'dueDate': task.dueDate != null ? task.dueDate!.toIso8601String().split('T').first : "없음",
+    }).toList();
 
-    if (allTasks.isEmpty) {
+    if (allTasksData.isEmpty && calendarEvents.isEmpty) {
+      setState(() {
+        isLoading = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오늘 생성할 투두/일정이 없습니다!')),
+        const SnackBar(content: Text('오늘 생성할 투두/일정이 없습니다!')),
       );
       return;
     }
 
-    // API에서 우선순위 가져오기
-    Map<String, int> priorities = await _getPriorityFromAI(allTasks);
+    // AI에게 일정 + 투두 보내서 시간 배정 포함 스케줄 요청
+    final aiSchedule = await _getScheduleFromAI(allTasksData, calendarEvents);
 
-    // 우선순위 정렬
-    allTasks.sort((a, b) {
-      int aPriority = priorities[a.title] ?? 0;
-      int bPriority = priorities[b.title] ?? 0;
-      return bPriority.compareTo(aPriority);
-    });
+    if (aiSchedule.isEmpty) {
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI 스케줄링 실패 또는 결과가 없습니다!')),
+      );
+      return;
+    }
 
-    // 시간 슬롯 매핑 시작
-    int currentHour = 9; // 오전 9시부터 시작 (기본값 수정)
-    int currentMinute = 0;
-
-    // 기존의 플래너 태스크 초기화 (추가)
+    // 기존 스케줄 초기화
     final dateKey = _taskDataService.dateToKey(selectedDate);
     _taskDataService.plannerTasksByDate[dateKey] = [];
 
-    for (var task in allTasks) {
-      // 이미 시간이 있는 작업은 건너뛰기
-      if (task.time != null && task.time!.isNotEmpty) {
-        _taskDataService.addPlannerTask(task); // 이미 시간이 있는 작업도 추가 (추가)
-        continue;
-      }
+    // AI가 준 스케줄대로 Todo_Task 생성 및 저장
+    for (var item in aiSchedule) {
+      final int priority = item['priority'] ?? 1;
 
-      bool isUrgentTask = task.isUrgent || (task.urgency != null && task.urgency >= 4);
-      bool taskScheduled = false; // 태스크가 스케줄링됐는지 확인 (추가)
+      // Generate unique ID for new tasks if not provided
+      String taskId = item['id'] ?? DateTime.now().millisecondsSinceEpoch.toString() + '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
 
-      while (currentHour < 24 && !taskScheduled) { // 조건 추가 (수정)
-        // 현재 시간 슬롯이 비어있는지 확인
-        if (!_isSlotOccupied(currentHour, currentMinute, occupiedTimes)) {
-          // 슬롯 배정
-          task.time =
-          '${currentHour.toString().padLeft(2, '0')}:${currentMinute.toString().padLeft(2, '0')}';
+      final task = Todo_Task(
+        id: taskId,
+        title: item['title'] ?? '제목 없음',
+        date: selectedDate,
+        time: _normalizeTime(item['time']),
+        endTime: _normalizeTime(item['endTime']),
+        importance: priority,
+        urgency: priority,
+        isImportant: priority >= 2,
+        isUrgent: priority >= 3,
+        description: item['description'],
+        memo: item['memo'],
+        location: item['location'],
+        isCompleted: false,
+        color: null,
+        dueDate: item['dueDate'] != null ? DateTime.parse(item['dueDate']) : null,
+        notificationId: null,
+        reminderMinutesBefore: null,
+      );
 
-          // 예약된 시간 기록
-          occupiedTimes.add({'hour': currentHour, 'minute': currentMinute});
+      _taskDataService.addPlannerTask(task);
 
-          // 긴급한 작업은 30분 차지, 보통 작업은 1시간 차지
-          if (isUrgentTask) {
-            final nextTime = _advanceTime(currentHour, currentMinute, 30);
-            currentHour = nextTime['hour']!;
-            currentMinute = nextTime['minute']!;
-          } else {
-            final nextTime = _advanceTime(currentHour, currentMinute, 60);
-            currentHour = nextTime['hour']!;
-            currentMinute = nextTime['minute']!;
-          }
-
-          _taskDataService.addPlannerTask(task);
-          taskScheduled = true; // 태스크를 스케줄링 완료로 표시 (추가)
-
-        } else {
-          // 슬롯이 차있으면 30분 후로 이동
-          final nextTime = _advanceTime(currentHour, currentMinute, 30);
-          currentHour = nextTime['hour']!;
-          currentMinute = nextTime['minute']!;
-        }
-      }
+      // Debug logs to verify task creation
+      print('Added planner task: ${task.title} at ${task.time}');
     }
 
-    // 전체 UI 갱신 (수정)
+    // Save changes to storage/database if needed
+    for (final task in _taskDataService.plannerTasksByDate[dateKey] ?? []) {
+      await _taskDataService.savePlannerTaskToFirestore(task);
+    }
+
+    // Ensure UI gets rebuilt with the new data
     setState(() {
       updateProgress();
-      // 강제로 빌더를 다시 호출하도록 isPlannerView를 재설정
+      isLoading = false;
+
+      // Reset planner view to force rebuild
       isPlannerView = false;
-      isPlannerView = true;
+      Future.delayed(const Duration(milliseconds: 100), () {
+        setState(() {
+          isPlannerView = true;
+        });
+      });
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
+      const SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
     );
   }
 
-  // AI 모델에서 우선순위 계산 API 호출
-  Future<Map<String, int>> _getPriorityFromAI(List<Todo_Task> allTasks) async {
-    try {
-      final List<Map<String, dynamic>> tasksData = allTasks.map((task) {
-        return {
-          'title': task.title,
-          'importance': task.importance,
-          'urgency': task.urgency,
-        };
-      }).toList();
+  Future<List<dynamic>> _getScheduleFromAI(
+      List<Map<String, dynamic>> tasks,
+      List<Map<String, dynamic>> calendar) async {
 
-      final response = await http.post(
-        Uri.parse('$apiUrl/priority'),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode({'tasks': tasksData}),
-      );
+    // 디버깅
+    print('Tasks sent to server: $tasks');
+    print('Calendar sent to server: $calendar');
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        Map<String, int> priorityList = {};
-        for (var task in responseData['tasks']) {
-          priorityList[task['title']] = task['priority'];
+    // 서버 URL 결정 (다양한 환경 지원)
+    const List<String> possibleUrls = [
+      'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
+      'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
+      'http://127.0.0.1:5001',      // 로컬호스트
+      'http://localhost:5001'       // 로컬호스트 (이름)
+    ];
+
+    // 요청 데이터 준비
+    final requestBody = json.encode({
+      'tasks': tasks,
+      'calendar': calendar,
+    });
+
+    print('Request body: $requestBody');
+
+    // 각 URL에 시도
+    for (String url in possibleUrls) {
+      try {
+        print('Trying connection to: $url/schedule');
+
+        final response = await http
+            .post(
+          Uri.parse('$url/schedule'),
+          headers: {"Content-Type": "application/json"},
+          body: requestBody,
+        )
+            .timeout(const Duration(seconds: 10));
+
+        print('Response from $url - Status code: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+
+          // 응답 데이터 구조 확인
+          if (data is Map && data.containsKey('schedule')) {
+            final schedule = data['schedule'];
+
+            if (schedule != null && schedule is List) {
+              print('Successfully received schedule with ${schedule.length} items');
+              return schedule;
+            } else {
+              print('Server returned empty or invalid schedule format');
+            }
+          } else {
+            print('Invalid response format: $data');
+          }
         }
-        return priorityList;
-      } else {
-        throw Exception('Failed to load priority');
+      } catch (e) {
+        print('Error with URL $url: $e');
       }
-    } catch (e) {
-      print("Error fetching priority data: $e");
-      return {};
     }
+
+    // 모든 연결 시도 실패 시 로컬 시뮬레이션
+    print("All connection attempts failed. Using fallback local scheduling.");
+    return _generateLocalSchedule(tasks, calendar);
   }
 
-  // 시간 전진 함수
-  Map<String, int> _advanceTime(int currentHour, int currentMinute, int minutes) {
-    currentMinute += minutes;
-    while (currentMinute >= 60) {
-      currentMinute -= 60;
-      currentHour += 1;
+// 로컬 대체 스케줄링 함수
+  List<Map<String, dynamic>> _generateLocalSchedule(
+      List<Map<String, dynamic>> tasks,
+      List<Map<String, dynamic>> calendar) {
+
+    List<Map<String, dynamic>> schedule = [];
+    Set<int> occupiedHours = {};
+
+    // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
+    for (var event in calendar) {
+      if (event['startTime'] != null) {
+        final startHour = int.parse(event['startTime'].split(':')[0]);
+        final endHour = event['endTime'] != null
+            ? int.parse(event['endTime'].split(':')[0])
+            : startHour + 1;
+
+        // 시간대 차지 표시
+        for (int h = startHour; h <= endHour; h++) {
+          occupiedHours.add(h);
+        }
+
+        schedule.add({
+          'id': 'cal_${schedule.length}',
+          'title': '(일정) ${event['title']}',
+          'time': event['startTime'],
+          'endTime': event['endTime'] ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
+          'priority': 3, // 최우선
+          'description': '캘린더 일정',
+          'memo': '',
+          'location': event['location'] ?? '',
+        });
+      }
     }
-    if (currentHour >= 24) {
-      currentHour = 0;
+
+    // 2. 작업 중요도/긴급도 기준 정렬
+    tasks.sort((a, b) {
+      final aScore = (a['importance'] ?? 1) + (a['urgency'] ?? 1);
+      final bScore = (b['importance'] ?? 1) + (b['urgency'] ?? 1);
+      return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
+    });
+
+    // 3. 남은 시간대에 작업 배치
+    int startHour = 9; // 오전 9시부터 시작
+
+    for (var task in tasks) {
+      // 하루 업무 시간 9시-18시로 제한
+      if (startHour >= 18) break;
+
+      // 사용 가능한 시간 찾기
+      while (occupiedHours.contains(startHour)) {
+        startHour++;
+        if (startHour >= 18) break;
+      }
+
+      if (startHour >= 18) break;
+
+      // 중요도/긴급도에 따른 우선순위 설정
+      final importance = task['importance'] ?? 1;
+      final urgency = task['urgency'] ?? 1;
+      final priority = importance > urgency ? importance : urgency;
+
+      schedule.add({
+        'id': 'task_${schedule.length}',
+        'title': task['title'],
+        'time': '${startHour.toString().padLeft(2, '0')}:00',
+        'endTime': '${(startHour + 1).toString().padLeft(2, '0')}:00',
+        'priority': priority,
+        'description': '중요도: $importance, 긴급도: $urgency',
+        'memo': '',
+        'location': '',
+        'dueDate': task['dueDate'],
+      });
+
+      occupiedHours.add(startHour);
+      startHour++;
     }
-    return {'hour': currentHour, 'minute': currentMinute};
+
+    // 시간순 정렬
+    schedule.sort((a, b) {
+      if (a['time'] == null) return 1;
+      if (b['time'] == null) return -1;
+      return a['time'].compareTo(b['time']);
+    });
+
+    return schedule;
   }
 
-  // 슬롯이 이미 예약됐는지 확인
-  bool _isSlotOccupied(int hour, int minute, List<Map<String, int>> occupied) {
-    return occupied.any((slot) =>
-    slot['hour'] == hour && slot['minute'] == minute);
-  }
 }
 
 // 개선된 월 선택기 위젯

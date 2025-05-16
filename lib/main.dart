@@ -1,4 +1,4 @@
-// main.dart
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/screens/diary_screen.dart';
@@ -18,8 +18,10 @@ import 'dart:async';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 알림 및 권한 초기화
   await NotificationService().init();
+  await NotificationService().scheduleDailyGoalCheck(999);
+  await NotificationService().scheduleDailyRoutineReminder(998);
+  await NotificationService().scheduleDailyRoutineReminder(997);
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -37,8 +39,41 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final NotificationService notificationService = NotificationService();
+
+  // 네비게이터 키로 어디서든 네비게이션 가능하게 함
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // NotificationService 초기화 (중복되면 안 될 수 있으니 주의)
+    notificationService.init();
+    final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
+    // 알림 클릭 시 콜백 등록
+    notificationService.setOnNotificationClickListener((payload) {
+      print('Notification clicked with payload: $payload');
+
+      if (payload == 'go_todolist') {
+        // 예: 투두리스트 페이지로 이동
+        navigatorKey.currentState?.pushNamed(
+          'Planner/DailyPlannerPage',
+          arguments: {'userId': currentUserId ?? ''},
+        );
+      }
+      // 다른 payload에 따라 화면 이동 처리 추가 가능
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +84,7 @@ class MyApp extends StatelessWidget {
         fontFamily: 'NotoSansKR',
       ),
       debugShowCheckedModeBanner: false,
-      //home: NotificationTestPage(),
+      navigatorKey: navigatorKey, // 네비게이터 키 지정 필수!
       home: SplashScreen(),
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;

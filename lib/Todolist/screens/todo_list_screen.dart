@@ -726,7 +726,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                     scale: 0.9,
                     child: Checkbox(
                       value: task.isCompleted,
-                      onChanged: (bool? value) {
+                      onChanged: (bool? value) async{
                         setState(() {
                           if (!task.isCompleted && value == true && task.notificationId != null) {
                             _notificationService.cancelNotification(task.notificationId!);
@@ -738,6 +738,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                             widget.onTaskStatusChanged!();
                           }
                         });
+                        // 완료 상태가 true라면 완료 축하 알림 호출
+                        if (value == true) {
+                          await _notificationService.showTaskCompletedNotification(task.title);
+                        }
                       },
                     ),
                   ),
