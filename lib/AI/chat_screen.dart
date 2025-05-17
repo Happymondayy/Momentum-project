@@ -1,4 +1,6 @@
 
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'chat_service.dart';
@@ -86,11 +88,15 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
-      // AI 서버 호출 (수정: AIAdviceService 사용)
+      // 중요: 여기에서 데이터 형식 표준화 로직 추가
+      List<Map<String, dynamic>> sanitizedCalendar = _sanitizeCalendarData(widget.calendarData);
+      List<Map<String, dynamic>> sanitizedTasks = _sanitizeTaskData(widget.todoData);
+
+      // AI 서버 호출
       final aiResponse = await AIAdviceService.chatWithAssistant(
         message: text,
-        calendar: widget.calendarData,
-        tasks: widget.todoData,
+        calendar: sanitizedCalendar,
+        tasks: sanitizedTasks,
         history: _chatHistory,
       );
 
@@ -98,7 +104,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _chatHistory.add({"role": "user", "content": text});
       _chatHistory.add({"role": "assistant", "content": aiResponse});
 
-      // 응답이 너무 길면 기록 정리 (선택사항)
+      // 응답이 너무 길면 기록 정리
       if (_chatHistory.length > 10) {
         _chatHistory = _chatHistory.sublist(_chatHistory.length - 10);
       }
@@ -109,13 +115,86 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } catch (e) {
       print("AI 응답 처리 중 오류: $e");
+
+      // 오류가 발생했을 때 일정과 기본 정보를 바탕으로 대체 응답 생성
+      String fallbackResponse = _generateFallbackResponse(text);
+
       setState(() {
         _isTyping = false;
-        _addBotMessage("죄송합니다. 응답을 처리하는 중에 오류가 발생했습니다. 다시 시도해 주세요.");
+        _addBotMessage(fallbackResponse);
       });
     }
 
     _scrollToBottom();
+  }
+
+// 데이터 형식 표준화 함수들
+  List<Map<String, dynamic>> _sanitizeCalendarData(List<Map<String, dynamic>> calendar) {
+    return calendar.map((event) {
+      return {
+        "id": event["id"] ?? "cal_${DateTime.now().millisecondsSinceEpoch}",
+        "title": event["title"] ?? "무제",
+        "date": event["date"] ?? DateTime.now().toString().split(' ')[0],
+        "startTime": event["startTime"],
+        "endTime": event["endTime"],
+        "location": event["location"] ?? "",
+        "description": event["description"] ?? "",
+      };
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _sanitizeTaskData(List<Map<String, dynamic>> tasks) {
+    return tasks.map((task) {
+      return {
+        "id": task["id"] ?? "task_${DateTime.now().millisecondsSinceEpoch}",
+        "title": task["title"] ?? "무제 할 일",
+        "dueDate": task["dueDate"] ?? "없음",
+        "importance": task["importance"]?.toString() ?? "1",
+        "urgency": task["urgency"]?.toString() ?? "1",
+        "isCompleted": task["isCompleted"] ?? false,
+      };
+    }).toList();
+  }
+
+// 오류 발생 시 대체 응답 생성 함수
+  String _generateFallbackResponse(String userMessage) {
+    // 간단한 키워드 기반 응답
+    final lowerMessage = userMessage.toLowerCase();
+
+    // '오늘 뭐해야 좋을까?' 같은 질문에 대한 처리
+    if (lowerMessage.contains('뭐해') ||
+        lowerMessage.contains('뭐 해') ||
+        lowerMessage.contains('할까') ||
+        lowerMessage.contains('좋을까')) {
+
+      // 일정이 있는지 확인
+      if (widget.calendarData.isNotEmpty) {
+        String response = "오늘 일정을 확인해보니 다음과 같은 일정이 있어요:\n\n";
+        for (int i = 0; i < min(3, widget.calendarData.length); i++) {
+          response += "- ${widget.calendarData[i]['title']}\n";
+        }
+        response += "\n이 일정들을 우선 처리하는 것이 좋을 것 같아요.";
+        return response;
+      }
+
+      // 할 일이 있는지 확인
+      else if (widget.todoData.isNotEmpty) {
+        String response = "오늘 할 일 목록을 확인해보니 다음과 같은 할 일이 있어요:\n\n";
+        for (int i = 0; i < min(3, widget.todoData.length); i++) {
+          response += "- ${widget.todoData[i]['title']}\n";
+        }
+        response += "\n이 할 일들을 처리하는 것이 좋을 것 같아요.";
+        return response;
+      }
+
+      // 일정과 할 일이 모두 없는 경우
+      else {
+        return "오늘은 특별히 예정된 일정이나 할 일이 없네요. 취미 활동을 하거나, 독서, 운동 등 자기계발 시간을 가져보는 건 어떨까요?";
+      }
+    }
+
+    // 기본 응답
+    return "죄송합니다. 지금은 서버 연결에 문제가 있어 자세한 답변을 드리기 어렵습니다. 잠시 후 다시 시도해주세요.";
   }
 
   void _addUserMessage(String text) {
