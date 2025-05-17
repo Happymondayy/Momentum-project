@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:momentum_planner/AI/chat_screen.dart';
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/screens/diary_screen.dart';
 import 'package:momentum_planner/Login/find_ID_page.dart';
@@ -118,6 +119,16 @@ class _MyAppState extends State<MyApp> {
             return MaterialPageRoute(
               builder: (_) => SettingsPage(userId: args?['userId'] ?? ''),
             );
+          case 'AI/chat_screen':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => ChatScreen(
+                userId: args?['userId'] ?? '',
+                calendarData: args?['calendarData'] ?? [],
+                todoData: args?['todoData'] ?? [],
+              ),
+            );
+
           default:
             return null;
         }

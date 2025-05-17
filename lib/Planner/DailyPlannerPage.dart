@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
+import '../AI/chat_screen.dart';
 import '../main.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
@@ -424,6 +425,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   bool isPlannerView = true; // true for planner, false for todo list
   DateTime selectedDate = DateTime.now();
+  List<Map<String, dynamic>> calendarEvents = [];
   bool isLoading = false;
   TodoListScreenState? todoListScreenState;
   final TaskDataService _taskDataService = TaskDataService();
@@ -523,8 +525,33 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ),
       ),
       floatingActionButton: _buildFloatingActionButton(),
-      bottomNavigationBar: BottomNav(initialIndex: 1, userId: widget.userId),
+      bottomNavigationBar: BottomNav(
+        initialIndex: 1,
+        userId: widget.userId,
+        onNavigate: (index) {
+          if (index == 4) {
+            final todoItems = _taskDataService.getTodoTasksForDate(selectedDate);
+            final todoDataMaps = todoItems.map((task) => task.toMap()).toList();
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(
+                  calendarData: calendarEvents,
+                  todoData: todoDataMaps,
+                  userId: widget.userId,
+                ),
+              ),
+            );
+
+            return false; // 기본 네비게이션 막기
+          }
+          return true;
+        },
+      ),
     );
+
+
   }
 
   Widget _buildHeaderWithToggle() {
@@ -1078,12 +1105,51 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   String? _normalizeTime(String? time) {
     if (time == null) return null;
+
+    // AM/PM 형식 처리
+    bool isPM = false;
+    if (time.contains('PM')) {
+      isPM = true;
+      time = time.replaceAll('PM', '').trim();
+    } else if (time.contains('AM')) {
+      time = time.replaceAll('AM', '').trim();
+    }
+
     final parts = time.split(':');
     if (parts.length != 2) return time;
-    final hour = parts[0].padLeft(2, '0');
-    final minute = parts[1].padLeft(2, '0');
-    return '$hour:$minute'; // 항상 HH:mm 형태로 반환
+
+    // 시간 값 파싱 및 유효성 검사
+    int hour;
+    try {
+      hour = int.parse(parts[0]);
+
+      // AM/PM 형식인 경우 24시간제로 변환
+      if (isPM && hour < 12) {
+        hour += 12; // PM일 경우 12를 더함 (PM 12시는 예외)
+      } else if (!isPM && hour == 12) {
+        hour = 0; // AM 12시는 0시로 변환
+      }
+
+      // 시간 범위 유효성 검사: 0-23 범위로 제한
+      hour = hour.clamp(0, 23);
+    } catch (e) {
+      hour = 9; // 기본값 설정
+    }
+
+    // 분 값 파싱 및 유효성 검사
+    int minute;
+    try {
+      minute = int.parse(parts[1]);
+      // 분 범위 유효성 검사: 0-59 범위로 제한
+      minute = minute.clamp(0, 59);
+    } catch (e) {
+      minute = 0; // 기본값 설정
+    }
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
+
+
 
 
 
@@ -1122,6 +1188,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       'importance': task.importance ?? 1,
       'urgency': task.urgency ?? 1,
       'dueDate': task.dueDate != null ? task.dueDate!.toIso8601String().split('T').first : "없음",
+      'time': task.time, // 시작 시간 추가
+      'endTime': task.endTime, // 종료 시간 추가
     }).toList();
 
     if (allTasksData.isEmpty && calendarEvents.isEmpty) {
@@ -1173,7 +1241,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         location: item['location'],
         isCompleted: false,
         color: null,
-        dueDate: item['dueDate'] != null ? DateTime.parse(item['dueDate']) : null,
+        dueDate: (item['dueDate'] != null && item['dueDate'] != "없음" && item['dueDate'].toString().isNotEmpty)
+            ? DateTime.tryParse(item['dueDate']) ?? null
+            : null,
         notificationId: null,
         reminderMinutesBefore: null,
       );
@@ -1275,7 +1345,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     return _generateLocalSchedule(tasks, calendar);
   }
 
-// 로컬 대체 스케줄링 함수
+  // _generateLocalSchedule 함수 수정
   List<Map<String, dynamic>> _generateLocalSchedule(
       List<Map<String, dynamic>> tasks,
       List<Map<String, dynamic>> calendar) {
@@ -1286,21 +1356,45 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
     for (var event in calendar) {
       if (event['startTime'] != null) {
-        final startHour = int.parse(event['startTime'].split(':')[0]);
-        final endHour = event['endTime'] != null
-            ? int.parse(event['endTime'].split(':')[0])
-            : startHour + 1;
+        // 시간 정규화
+        final normalizedStartTime = _normalizeTime(event['startTime']);
+        final normalizedEndTime = _normalizeTime(event['endTime']);
+
+        int startHour;
+        try {
+          startHour = int.parse(normalizedStartTime!.split(':')[0]);
+          startHour = startHour.clamp(0, 23); // 범위 확인
+        } catch (e) {
+          startHour = 9; // 기본값
+        }
+
+        int endHour;
+        if (normalizedEndTime != null) {
+          try {
+            endHour = int.parse(normalizedEndTime.split(':')[0]);
+            endHour = endHour.clamp(0, 23); // 범위 확인
+          } catch (e) {
+            endHour = startHour + 1; // 기본값
+          }
+        } else {
+          endHour = startHour + 1;
+        }
+
+        // 시간이 뒤바뀐 경우 수정
+        if (endHour < startHour) {
+          endHour = startHour + 1;
+        }
 
         // 시간대 차지 표시
         for (int h = startHour; h <= endHour; h++) {
-          occupiedHours.add(h);
+          occupiedHours.add(h.clamp(0, 23));
         }
 
         schedule.add({
           'id': 'cal_${schedule.length}',
           'title': '(일정) ${event['title']}',
-          'time': event['startTime'],
-          'endTime': event['endTime'] ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
+          'time': normalizedStartTime,
+          'endTime': normalizedEndTime ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
           'priority': 3, // 최우선
           'description': '캘린더 일정',
           'memo': '',
@@ -1316,20 +1410,76 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
     });
 
-    // 3. 남은 시간대에 작업 배치
+    // 3. 먼저 사용자가 지정한 시간이 있는 작업 추가
+    for (var task in tasks) {
+      // 사용자가 지정한 시간이 있는지 확인
+      final userTime = task['time'];
+
+      if (userTime != null && userTime.toString().isNotEmpty) {
+        // 시간 정규화
+        final normalizedTime = _normalizeTime(userTime.toString());
+        final normalizedEndTime = _normalizeTime(task['endTime']?.toString());
+
+        // 시작 시간의 시간대만 추출
+        int startHour;
+        try {
+          startHour = int.parse(normalizedTime!.split(':')[0]);
+          startHour = startHour.clamp(0, 23); // 범위 확인
+        } catch (e) {
+          startHour = 9; // 기본값
+        }
+
+        // 종료 시간 설정
+        String endTime;
+        if (normalizedEndTime != null && normalizedEndTime.isNotEmpty) {
+          endTime = normalizedEndTime;
+        } else {
+          // 기본 종료 시간은 시작 + 1시간
+          endTime = '${((startHour + 1) % 24).toString().padLeft(2, '0')}:00';
+        }
+
+        // 시간대 차지 표시
+        occupiedHours.add(startHour);
+
+        // 중요도/긴급도에 따른 우선순위 설정
+        final importance = task['importance'] ?? 1;
+        final urgency = task['urgency'] ?? 1;
+        final priority = importance > urgency ? importance : urgency;
+
+        schedule.add({
+          'id': 'task_${schedule.length}',
+          'title': task['title'],
+          'time': normalizedTime,
+          'endTime': endTime,
+          'priority': priority,
+          'description': '중요도: $importance, 긴급도: $urgency',
+          'memo': '',
+          'location': '',
+          'dueDate': task['dueDate'],
+        });
+
+        // 이미 처리된 작업은 표시
+        task['_processed'] = true;
+      }
+    }
+
+    // 4. 남은 시간대에 시간이 지정되지 않은 작업 배치
     int startHour = 9; // 오전 9시부터 시작
 
     for (var task in tasks) {
-      // 하루 업무 시간 9시-18시로 제한
-      if (startHour >= 18) break;
+      // 이미 처리된 작업은 건너뛰기
+      if (task['_processed'] == true) continue;
+
+      // 하루 업무 시간 9시-21시로 제한
+      if (startHour >= 21) break;
 
       // 사용 가능한 시간 찾기
       while (occupiedHours.contains(startHour)) {
         startHour++;
-        if (startHour >= 18) break;
+        if (startHour >= 21) break;
       }
 
-      if (startHour >= 18) break;
+      if (startHour >= 21) break;
 
       // 중요도/긴급도에 따른 우선순위 설정
       final importance = task['importance'] ?? 1;
@@ -1356,7 +1506,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     schedule.sort((a, b) {
       if (a['time'] == null) return 1;
       if (b['time'] == null) return -1;
-      return a['time'].compareTo(b['time']);
+      return a['time'].toString().compareTo(b['time'].toString());
     });
 
     return schedule;

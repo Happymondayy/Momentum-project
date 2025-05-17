@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class ChatService {
-  // 서버 주소 설정
-  static const String baseUrl = 'http://192.168.219.110:5001';
+class AIAdviceService {
+  // 서버 주소는 환경에 맞게 변경 필요
+  static const String baseUrl = "http://192.168.219.110:5001"; // Flask 서버 주소
 
   // 디버깅용 - 데이터 출력
   static void _printDebugData(String endpoint, Map<String, dynamic> data) {
@@ -11,56 +11,60 @@ class ChatService {
     print('데이터: ${jsonEncode(data)}');
   }
 
-  // 캘린더 및 할일 데이터로 AI 스케줄 생성 요청
-  static Future<List<Map<String, dynamic>>> generateSchedule({
+  // 조언 받기 API 호출
+  static Future<List<Map<String, dynamic>>> getAdvice({
     required List<Map<String, dynamic>> calendar,
     required List<Map<String, dynamic>> tasks,
+    String? date,
   }) async {
     try {
       // 요청할 데이터 준비
       final requestData = {
         "calendar": calendar,
         "tasks": tasks,
+        "date": date ?? DateTime.now().toString().split(' ')[0], // YYYY-MM-DD 형식
+        "preferences": {} // 나중에 사용자 설정 추가 가능
       };
 
       // 디버깅
-      _printDebugData('/schedule', requestData);
+      _printDebugData('/advice', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/schedule'),
+        Uri.parse('$baseUrl/advice'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('스케줄 응답: $data');
-        return List<Map<String, dynamic>>.from(data ?? []);
+        print('조언 응답: $data');
+        return List<Map<String, dynamic>>.from(data['messages'] ?? []);
       } else {
-        print("서버 오류(스케줄): ${response.statusCode} - ${response.body}");
-        return [];
+        print("서버 오류(조언): ${response.statusCode} - ${response.body}");
+        return [{"text": "조언을 불러오는데 실패했습니다.", "type": "alert"}];
       }
     } catch (e) {
-      print("통신 오류(스케줄): $e");
-      return [];
+      print("통신 오류(조언): $e");
+      return [{"text": "서버 연결에 실패했습니다.", "type": "alert"}];
     }
   }
 
-  // 챗봇과 대화
-  static Future<String> analyzeTasks({
+  // 챗봇 대화 API 호출
+  static Future<String> chatWithAssistant({
+    required String message,
     required List<Map<String, dynamic>> calendar,
-    required List<Map<String, dynamic>> todo,
-    required String userMessage,
+    required List<Map<String, dynamic>> tasks,
+    List<Map<String, dynamic>>? history,
   }) async {
     try {
       // 요청할 데이터 준비
       final requestData = {
-        "message": userMessage,
+        "message": message,
         "context": {
           "calendar": calendar,
-          "tasks": todo,
+          "tasks": tasks,
         },
-        "history": [] // 기존 대화 내역이 필요한 경우 전달
+        "history": history ?? []
       };
 
       // 디버깅
@@ -75,7 +79,7 @@ class ChatService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('챗봇 응답: $data');
-        return data['response'] ?? "AI로부터 응답이 없습니다.";
+        return data['response'] ?? "응답이 없습니다.";
       } else {
         print("서버 오류(챗봇): ${response.statusCode} - ${response.body}");
         return "서버 오류: ${response.statusCode}";

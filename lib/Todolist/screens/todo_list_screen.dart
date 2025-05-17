@@ -7,8 +7,8 @@ import 'notification_service.dart';
 import 'package:collection/collection.dart';
 
 class Todo_Task {
-  String id; // Firestore 문서 ID를 저장할 필드 추가
-  String title; // 제목
+  String id;
+  String title;
   String? description;
   String? time;
   String? endTime;
@@ -23,10 +23,10 @@ class Todo_Task {
   DateTime? dueDate;
   bool isCompleted;
   int? notificationId;
-  List<int>? reminderMinutesBefore; // 알림을 몇 분 전에 울릴지
+  List<int>? reminderMinutesBefore;
 
   Todo_Task({
-    this.id = '', // 기본값 빈 문자열
+    this.id = '',
     required this.title,
     this.description,
     this.time,
@@ -44,6 +44,28 @@ class Todo_Task {
     this.notificationId,
     this.reminderMinutesBefore,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'time': time,
+      'endTime': endTime,
+      'date': date.toIso8601String(),
+      'isImportant': isImportant,
+      'isUrgent': isUrgent,
+      'memo': memo,
+      'location': location,
+      'importance': importance,
+      'urgency': urgency,
+      'isCompleted': isCompleted,
+      'color': color != null ? color!.value : null, // Color는 int로 저장
+      'dueDate': dueDate?.toIso8601String(),
+      'notificationId': notificationId,
+      'reminderMinutesBefore': reminderMinutesBefore,
+    };
+  }
 
   // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
   factory Todo_Task.fromFirestore(DocumentSnapshot doc) {
@@ -1255,7 +1277,8 @@ class TodoListScreenState extends State<TodoListScreen> {
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
     TimeOfDay startTime = TimeOfDay.now();
-    TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1);
+    int nextHour = (startTime.hour + 1) % 24;
+    TimeOfDay endTime = TimeOfDay(hour: nextHour, minute: startTime.minute);
 
     bool isImportant = false;
     bool isUrgent = false;
