@@ -7,8 +7,8 @@ import 'notification_service.dart';
 import 'package:collection/collection.dart';
 
 class Todo_Task {
-  String id; // Firestore 문서 ID를 저장할 필드 추가
-  String title; // 제목
+  String id;
+  String title;
   String? description;
   String? time;
   String? endTime;
@@ -23,10 +23,10 @@ class Todo_Task {
   DateTime? dueDate;
   bool isCompleted;
   int? notificationId;
-  List<int>? reminderMinutesBefore; // 알림을 몇 분 전에 울릴지
+  List<int>? reminderMinutesBefore;
 
   Todo_Task({
-    this.id = '', // 기본값 빈 문자열
+    this.id = '',
     required this.title,
     this.description,
     this.time,
@@ -44,6 +44,28 @@ class Todo_Task {
     this.notificationId,
     this.reminderMinutesBefore,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'time': time,
+      'endTime': endTime,
+      'date': date.toIso8601String(),
+      'isImportant': isImportant,
+      'isUrgent': isUrgent,
+      'memo': memo,
+      'location': location,
+      'importance': importance,
+      'urgency': urgency,
+      'isCompleted': isCompleted,
+      'color': color != null ? color!.value : null, // Color는 int로 저장
+      'dueDate': dueDate?.toIso8601String(),
+      'notificationId': notificationId,
+      'reminderMinutesBefore': reminderMinutesBefore,
+    };
+  }
 
   // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
   factory Todo_Task.fromFirestore(DocumentSnapshot doc) {
@@ -113,13 +135,15 @@ class ProgressScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     int totalTasks = tasks.length;
-    int completedTasks = tasks.where((task) => task.isCompleted).length;
+    int completedTasks = tasks
+        .where((task) => task.isCompleted)
+        .length;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 15),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0FFE8),
+        color: const Color(0xFFF6F0FA),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -132,15 +156,18 @@ class ProgressScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Your Progress Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Your Progress Now',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 10),
-          _buildProgressBar(context, progressPercentage, completedTasks, totalTasks),
+          _buildProgressBar(
+              context, progressPercentage, completedTasks, totalTasks),
         ],
       ),
     );
   }
 
-  Widget _buildProgressBar(BuildContext context, double progressPercentage, int completedTasks, int totalTasks) {
+  Widget _buildProgressBar(BuildContext context, double progressPercentage,
+      int completedTasks, int totalTasks) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -152,13 +179,19 @@ class ProgressScreen extends StatelessWidget {
                 children: [
                   Container(
                     height: 10,
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(5)),
+                    decoration: BoxDecoration(color: Colors.white,
+                        borderRadius: BorderRadius.circular(5)),
                   ),
                   Container(
                     height: 10,
-                    width: MediaQuery.of(context).size.width * (progressPercentage / 100) * 0.7,
+                    width: MediaQuery
+                        .of(context)
+                        .size
+                        .width * (progressPercentage / 100) * 0.7,
                     decoration: BoxDecoration(
-                      color: progressPercentage == 100 ? Colors.green : const Color(0xFFECDBF9),
+                      color: progressPercentage == 100
+                          ? const Color(0xFFD1B3F3) // ✅ 파스텔 연보라색
+                          : const Color(0xFFECDBF9), // 기본 진행색
                       borderRadius: BorderRadius.circular(5),
                     ),
                   ),
@@ -166,11 +199,17 @@ class ProgressScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 15),
-            Text('${progressPercentage.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(
+              '${progressPercentage.toStringAsFixed(1)}%',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
           ],
         ),
         const SizedBox(height: 6),
-        Text('$completedTasks/$totalTasks Task Complete', style: const TextStyle(fontSize: 13, color: Colors.black)),
+        Text(
+          '$completedTasks/$totalTasks Task Complete',
+          style: const TextStyle(fontSize: 13, color: Colors.black),
+        ),
       ],
     );
   }
@@ -678,7 +717,6 @@ class TodoListScreenState extends State<TodoListScreen> {
     }
   }
 
-  // 1. _buildTaskItem 함수를 수정하여 GestureDetector로 감싸기
   Widget _buildTaskItem(Todo_Task task) {
     return GestureDetector(
       onTap: () {
@@ -703,18 +741,45 @@ class TodoListScreenState extends State<TodoListScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 제목 + 이모지 + 체크박스 + 삭제 아이콘
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  Transform.scale(
+                    scale: 0.9,
+                    child: Checkbox(
+                      value: task.isCompleted,
+                      onChanged: (bool? value) async{
+                        setState(() {
+                          if (!task.isCompleted && value == true && task.notificationId != null) {
+                            _notificationService.cancelNotification(task.notificationId!);
+                            _notificationService.cancelNotification(task.notificationId! + 1000);
+                          }
+                          task.isCompleted = value ?? false;
+                          calculateProgress();
+                          if (widget.onTaskStatusChanged != null) {
+                            widget.onTaskStatusChanged!();
+                          }
+                        });
+                        // 완료 상태가 true라면 완료 축하 알림 호출
+                        if (value == true) {
+                          await _notificationService.showTaskCompletedNotification(task.title);
+                        }
+                      },
+                    ),
+                  ),
                   Expanded(
                     child: Row(
                       children: [
                         Flexible(
                           child: Text(
                             task.title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
+                              color: task.isCompleted ? Colors.grey : Colors.black,
+                              decoration: task.isCompleted
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -725,32 +790,27 @@ class TodoListScreenState extends State<TodoListScreen> {
                       ],
                     ),
                   ),
-                  Transform.scale(
-                    scale: 1.2,
-                    child: Checkbox(
-                      value: task.isCompleted,
-                      onChanged: (bool? value) {
-                        setState(() {
-                          // If task is being marked as completed, cancel notifications
-                          if (!task.isCompleted && value == true && task.notificationId != null) {
-                            _notificationService.cancelNotification(task.notificationId!);
-                            _notificationService.cancelNotification(task.notificationId! + 1000); // Cancel due date notification
-                          }
-                          task.isCompleted = value ?? false;
-                          calculateProgress();
-                          if (widget.onTaskStatusChanged != null) {
-                            widget.onTaskStatusChanged!();
-                          }
-                        });
-                      },
+                  if (task.time != null && task.time!.isNotEmpty) ...[
+                    Text(
+                      task.endTime != null && task.endTime!.isNotEmpty
+                          ? '${task.time!} - ${task.endTime!}'
+                          : task.time!,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   GestureDetector(
                     onTap: () {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
+                          backgroundColor: Colors.white, // 연보라 말고 흰색으로 명시
                           title: const Text('삭제 확인'),
                           content: const Text('이 일정을 삭제하시겠습니까?'),
                           actions: [
@@ -760,10 +820,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                // If task has notifications, cancel them
                                 if (task.notificationId != null) {
                                   _notificationService.cancelNotification(task.notificationId!);
-                                  _notificationService.cancelNotification(task.notificationId! + 1000); // Cancel due date notification
+                                  _notificationService.cancelNotification(task.notificationId! + 1000);
                                 }
                                 setState(() {
                                   _taskDataService.removeTask(task);
@@ -777,65 +836,66 @@ class TodoListScreenState extends State<TodoListScreen> {
                         ),
                       );
                     },
-                    child: const Icon(Icons.delete, color: Colors.redAccent, size: 24),
+                    child: const Icon(Icons.delete, color: Colors.purpleAccent, size: 24),
                   ),
                 ],
               ),
 
-              // 시작 - 종료 시간
-              if ((task.time != null && task.time!.isNotEmpty) || (task.endTime != null && task.endTime!.isNotEmpty)) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _buildTimeRange(task),
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-              ],
+              const SizedBox(height: 6),
 
-              // 위치
-              if (task.location != null && task.location!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+              if ((task.memo != null && task.memo!.isNotEmpty) ||
+                  (task.location != null && task.location!.isNotEmpty)) ...[
                 Row(
                   children: [
-                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      task.location!,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  ],
-                ),
-              ],
-
-              // 메모
-              if (task.memo != null && task.memo!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.notes, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        task.memo!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
+                    if (task.memo != null && task.memo!.isNotEmpty)
+                      Expanded(
+                        child: Text(
+                          task.memo!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: task.isCompleted ? Colors.grey[500] : Colors.grey[800],
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
+                    if (task.location != null && task.location!.isNotEmpty) ...[
+                      if (task.memo != null && task.memo!.isNotEmpty)
+                        const SizedBox(width: 8),
+                      Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 2),
+                      Text(
+                        task.location!,
+                        style: TextStyle(
+                          color: task.isCompleted ? Colors.grey[400] : Colors.grey[600],
+                          fontSize: 13,
+                          decoration: task.isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
-              // 마감일
+
               if (task.dueDate != null) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Colors.deepOrange),
+                    Icon(Icons.calendar_today, size: 16, color: task.isCompleted ? Colors.grey : Colors.deepOrange),
                     const SizedBox(width: 4),
                     Text(
                       '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
-                      style: const TextStyle(fontSize: 14, color: Colors.deepOrange),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.deepOrange,
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
                     ),
                   ],
                 ),
@@ -846,6 +906,8 @@ class TodoListScreenState extends State<TodoListScreen> {
       ),
     );
   }
+
+
 
   void showTaskDetailDialog(BuildContext context, Todo_Task task) {
     final titleController = TextEditingController(text: task.title);
@@ -865,11 +927,17 @@ class TodoListScreenState extends State<TodoListScreen> {
 
     showDialog(
       context: context,
+      barrierColor: Colors.black54,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              insetPadding: EdgeInsets.zero,
+              insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24.0),
+              ),
               child: Container(
                 width: MediaQuery.of(context).size.width,
                 child: Column(
@@ -879,76 +947,28 @@ class TodoListScreenState extends State<TodoListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                        color: Colors.white,
+                        border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
                       ),
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
+                            icon: const Icon(Icons.close, color: Color(0xFF5F6368)),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
                           const Expanded(
                             child: Text(
                               '일정 상세 정보',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF202124),
+                                letterSpacing: 0.15,
+                              ),
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () {
-                              if (titleController.text.isEmpty) {
-                                _showSnackBar(context, '제목을 입력해주세요');
-                                return;
-                              }
-
-                              final String formattedStart =
-                                  '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
-                              final String formattedEnd =
-                                  '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
-
-                              // 변경 감지 후 알림 재설정
-                              final hasNotificationChange =
-                                  task.isImportant != isImportant ||
-                                      task.time != formattedStart ||
-                                      task.dueDate != dueDate ||
-                                      !const ListEquality().equals(task.reminderMinutesBefore, selectedReminders);
-
-                              if (hasNotificationChange && task.notificationId != null) {
-                                _notificationService.cancelNotification(task.notificationId!);
-                                _notificationService.cancelNotification(task.notificationId! + 1000);
-                              }
-
-                              task.title = titleController.text;
-                              task.time = formattedStart;
-                              task.endTime = formattedEnd;
-                              task.isImportant = isImportant;
-                              task.isUrgent = isUrgent;
-                              task.memo = memoController.text;
-                              task.location = locationController.text;
-                              task.importance = importanceLevel;
-                              task.urgency = urgencyLevel;
-                              task.dueDate = dueDate;
-                              task.reminderMinutesBefore = isImportant ? selectedReminders : [];
-
-                              if (isImportant) {
-                                _scheduleNotificationsForTask(task);
-                              }
-
-                              Navigator.of(context).pop();
-                              setState(() {
-                                calculateProgress();
-                              });
-
-                              if (widget.onTaskStatusChanged != null) {
-                                widget.onTaskStatusChanged!();
-                              }
-
-                              _showSnackBar(context, '일정이 수정되었습니다');
-                            },
-                          ),
+                          const SizedBox(width: 48),
                         ],
                       ),
                     ),
@@ -957,7 +977,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                     Flexible(
                       child: SingleChildScrollView(
                         child: Padding(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.all(20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -970,6 +990,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                     _showSnackBar(context, '제목을 입력해주세요');
                                   }
                                 },
+                                prefixIcon: Icon(Icons.title, color: Color(0xFF5F6368)),
                               ),
                               const SizedBox(height: 20),
 
@@ -980,18 +1001,25 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              _buildTimePicker(context, startTime, (pickedTime) {
-                                setState(() {
-                                  startTime = pickedTime;
-                                });
-                              }, label: '시작 시간'),
-                              const SizedBox(height: 20),
-
-                              _buildTimePicker(context, endTime, (pickedTime) {
-                                setState(() {
-                                  endTime = pickedTime;
-                                });
-                              }, label: '종료 시간'),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildTimePicker(context, startTime, (pickedTime) {
+                                      setState(() {
+                                        startTime = pickedTime;
+                                      });
+                                    }, label: '시작 시간'),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildTimePicker(context, endTime, (pickedTime) {
+                                      setState(() {
+                                        endTime = pickedTime;
+                                      });
+                                    }, label: '종료 시간'),
+                                  ),
+                                ],
+                              ),
                               const SizedBox(height: 20),
 
                               _buildImportanceSelector(setState, importanceLevel, (level) {
@@ -1012,63 +1040,165 @@ class TodoListScreenState extends State<TodoListScreen> {
                                 });
                               }),
 
-                              // ✅ 사용자 알림 반복 선택
+                              // ✅ 알림 설정이 true일 때만 반복 시간 선택 보이기
                               if (isImportant) ...[
                                 const SizedBox(height: 16),
-                                const Text('알림 반복 시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Text('알림 반복 시간',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF5F6368),
+                                      )
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 10,
-                                  children: [5, 10, 15, 30, 60].map((minute) {
-                                    final isSelected = selectedReminders.contains(minute);
-                                    return ChoiceChip(
-                                      label: Text('$minute분 전'),
-                                      selected: isSelected,
-                                      onSelected: (selected) {
-                                        setState(() {
-                                          if (selected) {
-                                            selectedReminders.add(minute);
-                                          } else {
-                                            selectedReminders.remove(minute);
-                                          }
-                                        });
-                                      },
-                                      selectedColor: Colors.purple.shade200,
-                                    );
-                                  }).toList(),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Wrap(
+                                    spacing: 10,
+                                    children: [5, 10, 15, 30, 60].map((minute) {
+                                      final isSelected = selectedReminders.contains(minute);
+                                      return ChoiceChip(
+                                        label: Text('$minute분 전'),
+                                        selected: isSelected,
+                                        onSelected: (selected) {
+                                          setState(() {
+                                            if (selected) {
+                                              selectedReminders.add(minute);
+                                            } else {
+                                              selectedReminders.remove(minute);
+                                            }
+                                          });
+                                        },
+                                        selectedColor: Color(0xFFD2C5E8),
+                                        backgroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(24),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ),
                               ],
+
+                              const SizedBox(height: 20),
 
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
                                   isUrgent = value;
                                 });
                               }),
+
                               const SizedBox(height: 20),
 
-                              _buildTextField(memoController, '메모', '메모', null, maxLines: 3),
+                              _buildTextField(
+                                memoController,
+                                '메모',
+                                '메모를 입력하세요.',
+                                null,
+                                maxLines: 3,
+                                prefixIcon: Icon(Icons.note, color: Color(0xFF5F6368)),
+                              ),
                               const SizedBox(height: 20),
 
-                              _buildTextField(locationController, '위치', '위치', null),
+                              _buildTextField(
+                                locationController,
+                                '위치',
+                                '위치를 입력하세요.',
+                                null,
+                                prefixIcon: Icon(Icons.location_on, color: Color(0xFF5F6368)),
+                              ),
                               const SizedBox(height: 30),
 
                               Center(
-                                child: SizedBox(
-                                  width: 150,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.grey.shade400,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(25),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 150,
+                                      child: ElevatedButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.grey.shade300,
+                                          foregroundColor: Color(0xFF5F6368),
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const Text('취소'),
                                       ),
                                     ),
-                                    child: const Text('닫기'),
-                                  ),
+                                    const SizedBox(width: 16),
+                                    SizedBox(
+                                      width: 150,
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          if (titleController.text.isEmpty) {
+                                            _showSnackBar(context, '제목을 입력해주세요');
+                                            return;
+                                          }
+
+                                          final String formattedStart =
+                                              '${startTime.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime.hourOfPeriod.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
+                                          final String formattedEnd =
+                                              '${endTime.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime.hourOfPeriod.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+
+                                          // 변경 감지 후 알림 재설정
+                                          final hasNotificationChange =
+                                              task.isImportant != isImportant ||
+                                                  task.time != formattedStart ||
+                                                  task.dueDate != dueDate ||
+                                                  !const ListEquality().equals(task.reminderMinutesBefore, selectedReminders);
+
+                                          if (hasNotificationChange && task.notificationId != null) {
+                                            _notificationService.cancelNotification(task.notificationId!);
+                                            _notificationService.cancelNotification(task.notificationId! + 1000);
+                                          }
+
+                                          task.title = titleController.text;
+                                          task.time = formattedStart;
+                                          task.endTime = formattedEnd;
+                                          task.isImportant = isImportant;
+                                          task.isUrgent = isUrgent;
+                                          task.memo = memoController.text;
+                                          task.location = locationController.text;
+                                          task.importance = importanceLevel;
+                                          task.urgency = urgencyLevel;
+                                          task.dueDate = dueDate;
+                                          task.reminderMinutesBefore = isImportant ? selectedReminders : [];
+
+                                          if (isImportant) {
+                                            _scheduleNotificationsForTask(task);
+                                          }
+
+                                          Navigator.of(context).pop();
+                                          setState(() {
+                                            calculateProgress();
+                                          });
+
+                                          if (widget.onTaskStatusChanged != null) {
+                                            widget.onTaskStatusChanged!();
+                                          }
+
+                                          _showSnackBar(context, '일정이 수정되었습니다');
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Color(0xFF9575CD),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const Text('수정하기'),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -1147,7 +1277,8 @@ class TodoListScreenState extends State<TodoListScreen> {
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
     TimeOfDay startTime = TimeOfDay.now();
-    TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1);
+    int nextHour = (startTime.hour + 1) % 24;
+    TimeOfDay endTime = TimeOfDay(hour: nextHour, minute: startTime.minute);
 
     bool isImportant = false;
     bool isUrgent = false;
@@ -1157,11 +1288,17 @@ class TodoListScreenState extends State<TodoListScreen> {
 
     showDialog(
       context: context,
+      barrierColor: Colors.black54,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              insetPadding: EdgeInsets.zero,
+              insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24.0),
+              ),
               child: Container(
                 width: MediaQuery.of(context).size.width,
                 child: Column(
@@ -1171,21 +1308,25 @@ class TodoListScreenState extends State<TodoListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Colors.black12)),
+                        color: Colors.white,
+                        border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
                       ),
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
+                            icon: const Icon(Icons.close, color: Color(0xFF5F6368)),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
                           const Expanded(
                             child: Text(
                               '새 Todolist 추가',
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF202124),
+                                letterSpacing: 0.15,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 48),
@@ -1197,7 +1338,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                     Flexible(
                       child: SingleChildScrollView(
                         child: Padding(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.all(20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1210,6 +1351,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                     _showSnackBar(context, '제목을 입력해주세요');
                                   }
                                 },
+                                prefixIcon: Icon(Icons.title, color: Color(0xFF5F6368)),
                               ),
                               const SizedBox(height: 20),
 
@@ -1220,19 +1362,25 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              _buildTimePicker(context, startTime, (pickedTime) {
-                                setState(() {
-                                  startTime = pickedTime;
-                                });
-                              }, label: '시작 시간'),
-
-                              const SizedBox(height: 20),
-
-                              _buildTimePicker(context, endTime, (pickedTime) {
-                                setState(() {
-                                  endTime = pickedTime;
-                                });
-                              }, label: '종료 시간'),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildTimePicker(context, startTime, (pickedTime) {
+                                      setState(() {
+                                        startTime = pickedTime;
+                                      });
+                                    }, label: '시작 시간'),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildTimePicker(context, endTime, (pickedTime) {
+                                      setState(() {
+                                        endTime = pickedTime;
+                                      });
+                                    }, label: '종료 시간'),
+                                  ),
+                                ],
+                              ),
 
                               const SizedBox(height: 20),
 
@@ -1248,7 +1396,8 @@ class TodoListScreenState extends State<TodoListScreen> {
                                     setState(() {
                                       selectedDueDate = pickedDate;
                                     });
-                                  }),
+                                  }
+                              ),
 
                               const SizedBox(height: 20),
 
@@ -1261,41 +1410,73 @@ class TodoListScreenState extends State<TodoListScreen> {
                               // ✅ 알림 설정이 true일 때만 반복 시간 선택 보이기
                               if (isImportant) ...[
                                 const SizedBox(height: 16),
-                                const Text('알림 반복 시간', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Text('알림 반복 시간',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF5F6368),
+                                      )
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 10,
-                                  children: [5, 10, 15, 30, 60].map((minute) {
-                                    final isSelected = selectedReminders.contains(minute);
-                                    return ChoiceChip(
-                                      label: Text('$minute분 전'),
-                                      selected: isSelected,
-                                      onSelected: (selected) {
-                                        setState(() {
-                                          if (selected) {
-                                            selectedReminders.add(minute);
-                                          } else {
-                                            selectedReminders.remove(minute);
-                                          }
-                                        });
-                                      },
-                                      selectedColor: Colors.purple.shade200,
-                                    );
-                                  }).toList(),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Wrap(
+                                    spacing: 10,
+                                    children: [5, 10, 15, 30, 60].map((minute) {
+                                      final isSelected = selectedReminders.contains(minute);
+                                      return ChoiceChip(
+                                        label: Text('$minute분 전'),
+                                        selected: isSelected,
+                                        onSelected: (selected) {
+                                          setState(() {
+                                            if (selected) {
+                                              selectedReminders.add(minute);
+                                            } else {
+                                              selectedReminders.remove(minute);
+                                            }
+                                          });
+                                        },
+                                        selectedColor: Color(0xFFD2C5E8),
+                                        backgroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(24),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ),
                               ],
+
+                              const SizedBox(height: 20),
 
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
                                   isUrgent = value;
                                 });
                               }),
+
                               const SizedBox(height: 20),
 
-                              _buildTextField(memoController, '메모', '메모', null, maxLines: 3),
+                              _buildTextField(
+                                memoController,
+                                '메모',
+                                '메모',
+                                null,
+                                maxLines: 3,
+                                prefixIcon: Icon(Icons.note, color: Color(0xFF5F6368)),
+                              ),
                               const SizedBox(height: 20),
 
-                              _buildTextField(locationController, '위치', '위치', null),
+                              _buildTextField(
+                                locationController,
+                                '위치',
+                                '위치',
+                                null,
+                                prefixIcon: Icon(Icons.location_on, color: Color(0xFF5F6368)),
+                              ),
                               const SizedBox(height: 30),
 
                               Center(
@@ -1347,12 +1528,13 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       _showSnackBar(context, '일정이 저장되었습니다');
                                     },
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF9575CD),
+                                      backgroundColor: Color(0xFF9575CD),
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(vertical: 12),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(25),
+                                        borderRadius: BorderRadius.circular(24),
                                       ),
+                                      elevation: 0,
                                     ),
                                     child: const Text('저장'),
                                   ),
@@ -1375,24 +1557,50 @@ class TodoListScreenState extends State<TodoListScreen> {
     });
   }
 
-
-
-  // TextField 생성 메서드
-  Widget _buildTextField(TextEditingController controller, String label, String hint, Function(String)? validator, {int maxLines = 1}) {
+// 텍스트필드 위젯 개선
+  Widget _buildTextField(
+      TextEditingController controller,
+      String label,
+      String hint,
+      Function(String)? validator, {
+        int maxLines = 1,
+        Widget? prefixIcon,
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
-        TextField(
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        SizedBox(height: 8),
+        TextFormField(
           controller: controller,
+          maxLines: maxLines,
           decoration: InputDecoration(
             hintText: hint,
-            border: UnderlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(vertical: 8),
+            hintStyle: TextStyle(color: Color(0xFF9AA0A6)),
+            prefixIcon: prefixIcon,
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFFDADCE0), width: 0.5),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFF9575CD), width: 1.5),
+            ),
           ),
-          maxLines: maxLines,
-          onChanged: validator,
+          validator: validator != null ? (value) {
+            validator(value ?? '');
+            return null;
+          } : null,
         ),
       ],
     );
