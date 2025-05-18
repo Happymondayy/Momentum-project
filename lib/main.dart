@@ -1,5 +1,11 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/screens/diary_screen.dart';
 import 'package:momentum_planner/Login/find_ID_page.dart';
@@ -10,18 +16,20 @@ import 'package:momentum_planner/Survey/survey_screen.dart';
 import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 import 'package:momentum_planner/Settings/settings_page.dart';
 import 'package:momentum_planner/Todolist/screens/notification_service.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'Todolist/screens/notification_test_page.dart';
+
 import 'firebase_options.dart';
-import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await NotificationService().init();
-  await NotificationService().scheduleDailyGoalCheck(999);
-  await NotificationService().scheduleDailyRoutineReminder(998);
-  await NotificationService().scheduleDailyRoutineReminder(997);
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    await NotificationService().init();
+    await NotificationService().scheduleDailyGoalCheck(999);
+    await NotificationService().scheduleDailyRoutineReminder(998);
+    await NotificationService().scheduleDailyRoutineReminder(997);
+  } else {
+    print("⚠️ 웹에서는 알림 기능을 비활성화합니다.");
+  }
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -48,31 +56,27 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final NotificationService notificationService = NotificationService();
-
-  // 네비게이터 키로 어디서든 네비게이션 가능하게 함
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
 
-    // NotificationService 초기화 (중복되면 안 될 수 있으니 주의)
-    notificationService.init();
-    final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      notificationService.init();
+      final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
-    // 알림 클릭 시 콜백 등록
-    notificationService.setOnNotificationClickListener((payload) {
-      print('Notification clicked with payload: $payload');
+      notificationService.setOnNotificationClickListener((payload) {
+        print('Notification clicked with payload: $payload');
 
-      if (payload == 'go_todolist') {
-        // 예: 투두리스트 페이지로 이동
-        navigatorKey.currentState?.pushNamed(
-          'Planner/DailyPlannerPage',
-          arguments: {'userId': currentUserId ?? ''},
-        );
-      }
-      // 다른 payload에 따라 화면 이동 처리 추가 가능
-    });
+        if (payload == 'go_todolist') {
+          navigatorKey.currentState?.pushNamed(
+            'Planner/DailyPlannerPage',
+            arguments: {'userId': currentUserId ?? ''},
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -84,7 +88,7 @@ class _MyAppState extends State<MyApp> {
         fontFamily: 'NotoSansKR',
       ),
       debugShowCheckedModeBanner: false,
-      navigatorKey: navigatorKey, // 네비게이터 키 지정 필수!
+      navigatorKey: navigatorKey,
       home: SplashScreen(),
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;
