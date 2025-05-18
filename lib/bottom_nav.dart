@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:momentum_planner/Planner/DailyPlannerPage.dart';
 import 'package:momentum_planner/Settings/settings_page.dart';
 
 class BottomNav extends StatefulWidget {
   // 현재 화면에 따라 초기 인덱스를 설정하기 위한 생성자 추가
   final int initialIndex;
   final String userId; // 사용자 ID 추가
-  final Function(int)? onNavigate; // 네비게이션 이벤트를 처리하는 콜백 함수 추가
 
-  const BottomNav({
-    Key? key,
-    this.initialIndex = 0,
-    required this.userId,
-    this.onNavigate,
-  }) : super(key: key);
+  const BottomNav({Key? key, this.initialIndex = 0, required this.userId}) : super(key: key);
 
   @override
   State<BottomNav> createState() => _BottomNavState();
@@ -30,12 +25,6 @@ class _BottomNavState extends State<BottomNav> {
 
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
-
-    // onNavigate 콜백이 제공되었고, false를 반환하면 기본 네비게이션을 실행하지 않음
-    if (widget.onNavigate != null) {
-      bool continueNavigation = widget.onNavigate!(index);
-      if (!continueNavigation) return;
-    }
 
     setState(() {
       _selectedIndex = index;
@@ -88,11 +77,6 @@ class _BottomNavState extends State<BottomNav> {
           );
         }
         break;
-
-      case 4: // AI 비서
-        print('AI 비서 탭으로 이동: userId = ${widget.userId}');
-        // 이 부분은 onNavigate 콜백에서 처리하므로 여기서는 코드를 작성하지 않습니다.
-        break;
     }
   }
 
@@ -123,10 +107,6 @@ class _BottomNavState extends State<BottomNav> {
         BottomNavigationBarItem(
           icon: Icon(Icons.person),
           label: '',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.assistant),
-          label: 'AI 비서',
         ),
       ],
     );

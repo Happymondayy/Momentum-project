@@ -635,70 +635,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // calendar_screen에서 사용할 수정된 _deleteEvent 함수
   void _deleteEvent(Event event) async {
     try {
-      // Firestore에서 이벤트 삭제
       await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
-
-      // 상태 업데이트 - 로컬 상태도 즉시 업데이트
-      if (mounted) {
-        setState(() {
-          // 필요한 경우 로컬 이벤트 리스트에서도 제거
-          // _events.removeWhere((e) => e.id == event.id);
-        });
-
-        // 삭제 성공 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정이 삭제되었습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      print('Event deleted successfully');
+      Navigator.pop(context); // 다이얼로그 닫기
     } catch (e) {
-      print("Error deleting event: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정 삭제 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      print('Error deleting event: $e');
     }
+    // No need to update state here as the Firestore listener will handle it
   }
 
-  void _deleteTodo(TodoItem todo) async {
+  Future<void> _deleteTodo(TodoItem todo) async {
     try {
-      // Firestore에서 이벤트 삭제
       await FirebaseFirestore.instance.collection('todos').doc(todo.id).delete();
-
-      // 상태 업데이트 - 로컬 상태도 즉시 업데이트
-      if (mounted) {
-        setState(() {
-          // 필요한 경우 로컬 이벤트 리스트에서도 제거
-          // _todos.removeWhere((e) => e.id == todo.id);
-        });
-
-        // 삭제 성공 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정이 삭제되었습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      print('Todo deleted successfully');
+      Navigator.pop(context); // 다이얼로그 닫기
     } catch (e) {
-      print("Error deleting event: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정 삭제 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      print('Error deleting todo: $e');
     }
+    // No need to update state here as the Firestore listener will handle it
   }
 }

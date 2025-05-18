@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:momentum_planner/Calendar/models/event.dart';
-import 'package:momentum_planner/Calendar/services/notification_service_calendar.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
@@ -34,9 +32,6 @@ class _EventDialogState extends State<EventDialog> {
   final TextEditingController _customReminderController = TextEditingController();
   final TextEditingController _repeatCustomDaysController = TextEditingController();
 
-  // 알림 서비스 인스턴스
-  final NotificationServiceCalendar _notificationService = NotificationServiceCalendar();
-
   late DateTime _startDate;
   late DateTime _endDate;
   TimeOfDay _startTime = TimeOfDay(hour: 9, minute: 0);
@@ -53,7 +48,6 @@ class _EventDialogState extends State<EventDialog> {
   int? _customReminderMinutes;
 
   bool _titleError = false;
-  String? _previousReminder; // 기존 알림 설정 저장 변수
 
   // Check if required fields are filled
   bool get _isFormValid => _titleController.text.trim().isNotEmpty;
@@ -62,14 +56,9 @@ class _EventDialogState extends State<EventDialog> {
   void initState() {
     super.initState();
 
-    // 알림 서비스 초기화
-    _notificationService.init();
-
     // Initialize with the existing event data if editing
     if (widget.event != null) {
       _initializeWithEvent(widget.event!);
-      // 기존 알림 설정 저장
-      _previousReminder = widget.event!.reminder;
     } else {
       // Default values for new event
       _startDate = widget.selectedDay;
@@ -111,36 +100,20 @@ class _EventDialogState extends State<EventDialog> {
       _repeatCustomDaysController.text = event.repeatCustomDays.toString();
     }
 
-    // 알림 설정 로딩 로직 개선
     if (event.reminder != null) {
       _hasReminder = true;
+      _reminderOption = event.reminder;
 
-      // 알림 옵션 확인 - 표준 옵션 먼저 검사
-      final standardOptions = ['1분 전', '5분 전', '10분 전', '30분 전', '1시간 전'];
-      if (standardOptions.contains(event.reminder)) {
-        _reminderOption = event.reminder;
-        print('표준 알림 옵션 로드됨: $_reminderOption');
-      }
-      // 커스텀 알림 시간인 경우 (숫자 + "분 전" 형식)
-      else if (event.reminder!.endsWith('분 전')) {
+      // Extract custom reminder minutes if it's a custom reminder
+      if (event.reminder!.endsWith('분 전')) {
         final minutes = event.reminder!.split('분 전')[0].trim();
         if (int.tryParse(minutes) != null) {
           _reminderOption = '기타';
           _customReminderMinutes = int.parse(minutes);
           _customReminderController.text = minutes;
-          print('커스텀 알림 옵션 로드됨: $_customReminderMinutes분 전');
-        } else {
-          // 파싱 실패 시 기본값
-          _reminderOption = '10분 전';
-          print('알 수 없는 알림 형식, 기본값으로 설정: $_reminderOption');
         }
-      } else {
-        // 알 수 없는 형식이면 기본값
-        _reminderOption = '10분 전';
-        print('알 수 없는 알림 형식, 기본값으로 설정: $_reminderOption');
       }
     }
-
   }
 
   @override
@@ -154,108 +127,23 @@ class _EventDialogState extends State<EventDialog> {
     super.dispose();
   }
 
-  // 알림 예약 메서드
-  Future<void> _scheduleNotification(Event event) async {
-    try {
-      if (event.isAllDay == true) {
-        return;
-      }
-
-      if (event.reminder != null) {
-        // 권한 요청
-        final status = await Permission.notification.request();
-        if (status.isGranted) {
-          // 정확한 알림 권한 요청 (Android 12+)
-          await _notificationService.requestExactAlarmPermissionIfNeeded();
-
-          // 이벤트 시작 시간 계산
-          DateTime eventStartDateTime = DateTime(
-            event.startDate.year,
-            event.startDate.month,
-            event.startDate.day,
-            event.startTime!.hour,
-            event.startTime!.minute,
-          );
-
-          // 안전한 알림 ID 생성 (이벤트 ID 해시)
-          final notificationId = event.id.hashCode.abs();
-
-          print('⏰ 알림 예약: ID=${notificationId}, 이벤트=${event.title}, 시작=${eventStartDateTime}');
-
-          // 알림 예약
-          await _notificationService.scheduleReminderNotification(
-            id: notificationId,
-            title: event.title,
-            startDateTime: eventStartDateTime,
-            reminder: event.reminder!,
-            customMinutes: _customReminderMinutes,
-          );
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('알림이 설정되었습니다'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('알림 권한이 필요합니다. 설정에서 권한을 허용해주세요.'),
-                duration: Duration(seconds: 3),
-                action: SnackBarAction(
-                  label: '설정',
-                  onPressed: () {
-                    openAppSettings();
-                  },
-                ),
-              ),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      print('알림 설정 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('알림 설정 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  // 알림 취소 메서드
-  Future<void> _cancelNotification(String eventId) async {
-    final notificationId = eventId.hashCode.abs();
-    await _notificationService.cancelNotification(notificationId);
-    print('🗑️ 알림 취소: ID=${notificationId}');
-  }
-
-  // _validateAndSave 메소드 수정
-  void _validateAndSave() async {
+  void _validateAndSave() {
     if (_titleController.text.trim().isEmpty) {
       setState(() {
         _titleError = true;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('필수 항목칸을 채워주세요.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('필수 항목칸을 채워주세요.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
       return;
     }
 
     final event = Event(
       userId: widget.currentUserId,
-      id: widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use existing ID if editing
       title: _titleController.text,
       description: _descriptionController.text,
       startDate: _startDate,
@@ -272,124 +160,10 @@ class _EventDialogState extends State<EventDialog> {
       reminder: _getReminderValue(),
     );
 
-    try {
-      // 알림 관련 처리
-      await _handleNotificationChanges(event);
+    // Call the onSave callback with the event object
+    widget.onSave(event);
 
-      // Call the onSave callback with the event object
-      widget.onSave(event);
-
-      // 약간의 지연 후 다이얼로그 닫기
-      await Future.delayed(Duration(milliseconds: 100));
-
-      // 다이얼로그 닫기 (추가 안전 장치)
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      print('일정 저장 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정 저장 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  // 알림 설정 변경 처리 메서드
-  Future<void> _handleNotificationChanges(Event newEvent) async {
-    // 기존 이벤트가 있는 경우
-    if (widget.isEditing && widget.event != null) {
-      // 기존에 알림이 있었는데 없어진 경우 또는 변경된 경우
-      if (_previousReminder != null) {
-        // 알림 취소
-        await _cancelNotification(widget.event!.id);
-      }
-    }
-
-    // 새 알림 설정이 있는 경우 예약
-    if (newEvent.reminder != null) {
-      await _scheduleNotification(newEvent);
-    }
-  }
-
-// _deleteEvent() 메서드 수정
-  void _deleteEvent() {
-    // 삭제 전 확인 다이얼로그 표시
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('일정 삭제'),
-          content: Text('이 일정을 삭제하시겠습니까?'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(); // 확인 다이얼로그만 닫기
-              },
-              child: Text('취소', style: TextStyle(color: Colors.grey[700])),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop(); // 확인 다이얼로그 먼저 닫기
-
-                // 삭제 작업 수행
-                await _performDelete();
-              },
-              child: Text('삭제', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // 실제 삭제 작업을 수행하는 수정된 메서드
-  Future<void> _performDelete() async {
-    if (widget.onDelete == null || widget.event == null) {
-      // 삭제할 수 없는 경우 메인 다이얼로그만 닫기
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-      return;
-    }
-
-    try {
-      // 알림 취소
-      if (widget.event!.reminder != null) {
-        await _cancelNotification(widget.event!.id);
-      }
-
-      // 삭제 콜백 호출 - 이 부분에서 실제 Firestore 삭제가 일어남
-      widget.onDelete!(widget.event!);
-
-      // 삭제 작업 완료 후 잠시 대기
-      await Future.delayed(Duration(milliseconds: 200));
-
-      // Navigator를 root로 확실히 돌아가기
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-    } catch (e) {
-      print('이벤트 삭제 중 오류 발생: $e');
-
-      if (mounted) {
-        // 오류 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정 삭제 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-        // 오류가 발생해도 다이얼로그는 닫기
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
+    Navigator.pop(context);
   }
 
   String _getFormattedTimeWithAmPm(TimeOfDay time) {
@@ -892,6 +666,35 @@ class _EventDialogState extends State<EventDialog> {
       return '$_customReminderMinutes분 전';
     }
     return _reminderOption;
+  }
+
+  void _deleteEvent() {
+    // 삭제 전 확인 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('일정 삭제'),
+          content: Text('이 일정을 삭제하시겠습니까?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('취소', style: TextStyle(color: Colors.grey[700])),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // 확인 다이얼로그 닫기
+                if (widget.onDelete != null && widget.event != null) {
+                  widget.onDelete!(widget.event!);
+                }
+                Navigator.pop(context); // 이벤트 다이얼로그 닫기
+              },
+              child: Text('삭제', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

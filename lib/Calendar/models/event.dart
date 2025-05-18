@@ -17,7 +17,6 @@ class Event {
   final int? repeatCustomDays;
   final bool isAllDay;
   final String? reminder;
-  bool isReminderScheduled;
 
   Event({
     required this.userId,
@@ -36,7 +35,6 @@ class Event {
     this.repeatCustomDays,
     this.isAllDay = false,
     this.reminder,
-    this.isReminderScheduled = false,
   });
 
   // Create a copy of this event with optional modified fields
@@ -57,7 +55,6 @@ class Event {
     int? repeatCustomDays,
     bool? isAllDay,
     String? reminder,
-    bool? isReminderScheduled,
   }) {
     return Event(
       userId: userId ?? this.userId,
@@ -76,8 +73,6 @@ class Event {
       repeatCustomDays: repeatCustomDays ?? this.repeatCustomDays,
       isAllDay: isAllDay ?? this.isAllDay,
       reminder: reminder ?? this.reminder,
-      isReminderScheduled: isReminderScheduled ?? this.isReminderScheduled,
-
     );
   }
 
@@ -110,7 +105,6 @@ class Event {
       'repeatCustomDays': repeatCustomDays,
       'isAllDay': isAllDay,
       'reminder': reminder,
-      'isReminderScheduled': isReminderScheduled,
     };
   }
 
@@ -143,7 +137,6 @@ class Event {
       repeatCustomDays: map['repeatCustomDays'],
       isAllDay: map['isAllDay'] ?? false,
       reminder: map['reminder'],
-      isReminderScheduled: map['isReminderScheduled'] ?? false,
     );
   }
 
