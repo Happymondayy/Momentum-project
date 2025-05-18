@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:momentum_planner/Calendar/models/todo_item.dart';
+import 'package:momentum_planner/Calendar/services/notification_service_todolist.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class TodoDialog extends StatefulWidget {
   final DateTime selectedDay;
@@ -31,6 +33,9 @@ class _TodoDialogState extends State<TodoDialog> {
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _repeatCustomDaysController = TextEditingController();
 
+  // 알림 서비스 인스턴스
+  final NotificationServiceTodolist _notificationService = NotificationServiceTodolist();
+
   late DateTime _date;
   TimeOfDay? _startTime = TimeOfDay(hour: 9, minute: 0);
   TimeOfDay? _endTime = TimeOfDay(hour: 10, minute: 0);
@@ -50,6 +55,7 @@ class _TodoDialogState extends State<TodoDialog> {
   bool _isCompleted = false;
 
   bool _titleError = false;
+  String? _previousReminder; // 기존 알림 설정 저장 변수
 
   // Check if required fields are filled
   bool get _isFormValid => _titleController.text.trim().isNotEmpty;
@@ -57,6 +63,9 @@ class _TodoDialogState extends State<TodoDialog> {
   @override
   void initState() {
     super.initState();
+
+    // 알림 서비스 초기화
+    _notificationService.init();
 
     if (widget.todo != null) {
       _initializeWithTodo(widget.todo!);
@@ -99,17 +108,33 @@ class _TodoDialogState extends State<TodoDialog> {
       _repeatCustomDaysController.text = todo.repeatCustomDays.toString();
     }
 
+    // 알림 설정 로딩 로직 개선
     if (todo.reminder != null) {
       _hasReminder = true;
-      _reminderOption = todo.reminder;
 
-      if (todo.reminder!.endsWith('분 전')) {
+      // 알림 옵션 확인 - 표준 옵션 먼저 검사
+      final standardOptions = ['1분 전', '5분 전', '10분 전', '30분 전', '1시간 전'];
+      if (standardOptions.contains(todo.reminder)) {
+        _reminderOption = todo.reminder;
+        print('표준 알림 옵션 로드됨: $_reminderOption');
+      }
+      // 커스텀 알림 시간인 경우 (숫자 + "분 전" 형식)
+      else if (todo.reminder!.endsWith('분 전')) {
         final minutes = todo.reminder!.split('분 전')[0].trim();
         if (int.tryParse(minutes) != null) {
           _reminderOption = '기타';
           _customReminderMinutes = int.parse(minutes);
           _customReminderController.text = minutes;
+          print('커스텀 알림 옵션 로드됨: $_customReminderMinutes분 전');
+        } else {
+          // 파싱 실패 시 기본값
+          _reminderOption = '10분 전';
+          print('알 수 없는 알림 형식, 기본값으로 설정: $_reminderOption');
         }
+      } else {
+        // 알 수 없는 형식이면 기본값
+        _reminderOption = '10분 전';
+        print('알 수 없는 알림 형식, 기본값으로 설정: $_reminderOption');
       }
     }
   }
@@ -124,7 +149,89 @@ class _TodoDialogState extends State<TodoDialog> {
     super.dispose();
   }
 
-  void _validateAndSave() {
+  // 알림 예약 메서드
+  Future<void> _scheduleNotification(TodoItem todo) async {
+    try {
+      if (todo.isAllDay == true) {
+        return;
+      }
+
+      if (todo.reminder != null) {
+        // 권한 요청
+        final status = await Permission.notification.request();
+        if (status.isGranted) {
+          // 정확한 알림 권한 요청 (Android 12+)
+          await _notificationService.requestExactAlarmPermissionIfNeeded();
+
+          // 이벤트 시작 시간 계산
+          DateTime todoStartDateTime = DateTime(
+            todo.date.year,
+            todo.date.month,
+            todo.date.day,
+            todo.startTime!.hour,
+            todo.startTime!.minute,
+          );
+
+          // 안전한 알림 ID 생성 (todo ID 해시)
+          final notificationId = todo.id.hashCode.abs();
+
+          print('⏰ 알림 예약: ID=${notificationId}, 이벤트=${todo.title}, 시작=${todoStartDateTime}');
+
+          // 알림 예약
+          await _notificationService.scheduleReminderNotification(
+            id: notificationId,
+            title: todo.title,
+            startDateTime: todoStartDateTime,
+            reminder: todo.reminder!,
+            customMinutes: _customReminderMinutes,
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('알림이 설정되었습니다'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('알림 권한이 필요합니다. 설정에서 권한을 허용해주세요.'),
+                duration: Duration(seconds: 3),
+                action: SnackBarAction(
+                  label: '설정',
+                  onPressed: () {
+                    openAppSettings();
+                  },
+                ),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('알림 설정 중 오류 발생: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('알림 설정 중 오류가 발생했습니다.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // 알림 취소 메서드
+  Future<void> _cancelNotification(String todoId) async {
+    final notificationId = todoId.hashCode.abs();
+    await _notificationService.cancelNotification(notificationId);
+    print('🗑️ 알림 취소: ID=${notificationId}');
+  }
+
+  void _validateAndSave() async{
     if (_titleController.text.trim().isEmpty) {
       setState(() {
         _titleError = true;
@@ -158,10 +265,48 @@ class _TodoDialogState extends State<TodoDialog> {
       isCompleted: _isCompleted,
     );
 
-    // Call the onSave callback with the todo object
-    widget.onSave(todo);
+    try {
+      // 알림 관련 처리
+      await _handleNotificationChanges(todo);
 
-    Navigator.pop(context);
+      // Call the onSave callback with the event object
+      widget.onSave(todo);
+
+      // 약간의 지연 후 다이얼로그 닫기
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // 다이얼로그 닫기 (mounted 확인)
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print('Todo 저장 중 오류 발생: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Todo 저장 중 오류가 발생했습니다.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // 알림 설정 변경 처리 메서드
+  Future<void> _handleNotificationChanges(TodoItem newTodo) async {
+    // 기존 이벤트가 있는 경우
+    if (widget.isEditing && widget.todo != null) {
+      // 기존에 알림이 있었는데 없어진 경우 또는 변경된 경우
+      if (_previousReminder != null) {
+        // 알림 취소
+        await _cancelNotification(widget.todo!.id);
+      }
+    }
+
+    // 새 알림 설정이 있는 경우 예약
+    if (newTodo.reminder != null) {
+      await _scheduleNotification(newTodo);
+    }
   }
 
   String _getFormattedTimeWithAmPm(TimeOfDay time) {
@@ -184,22 +329,23 @@ class _TodoDialogState extends State<TodoDialog> {
     // 삭제 전 확인 다이얼로그 표시
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: Text('일정 삭제'),
-          content: Text('이 일정을 삭제하시겠습니까?'),
+          title: Text('Todo 삭제'),
+          content: Text('이 Todo를 삭제하시겠습니까?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // 확인 다이얼로그만 닫기
+              },
               child: Text('취소', style: TextStyle(color: Colors.grey[700])),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.pop(context); // 확인 다이얼로그 닫기
-                if (widget.onDelete != null && widget.todo != null) {
-                  widget.onDelete!(widget.todo!);
-                }
-                Navigator.pop(context); // 이벤트 다이얼로그 닫기
+              onPressed: () async {
+                Navigator.of(dialogContext).pop(); // 확인 다이얼로그 먼저 닫기
+
+                // 삭제 작업 수행
+                await _performDelete();
               },
               child: Text('삭제', style: TextStyle(color: Colors.red)),
             ),
@@ -207,6 +353,50 @@ class _TodoDialogState extends State<TodoDialog> {
         );
       },
     );
+  }
+
+  // 실제 삭제 작업을 수행하는 수정된 메서드
+  Future<void> _performDelete() async {
+    if (widget.onDelete == null || widget.todo == null) {
+      // 삭제할 수 없는 경우 메인 다이얼로그만 닫기
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
+    try {
+      // 알림 취소
+      if (widget.todo!.reminder != null) {
+        await _cancelNotification(widget.todo!.id);
+      }
+
+      // 삭제 콜백 호출 - 이 부분에서 실제 Firestore 삭제가 일어남
+      widget.onDelete!(widget.todo!);
+
+      // 삭제 작업 완료 후 잠시 대기
+      await Future.delayed(Duration(milliseconds: 200));
+
+      // Navigator를 root로 확실히 돌아가기
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+    } catch (e) {
+      print('이벤트 삭제 중 오류 발생: $e');
+
+      if (mounted) {
+        // 오류 메시지 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('일정 삭제 중 오류가 발생했습니다.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        // 오류가 발생해도 다이얼로그는 닫기
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
   }
 
   Widget _buildDateSelector() {
@@ -348,6 +538,7 @@ class _TodoDialogState extends State<TodoDialog> {
       ],
     );
   }
+
   Widget _buildTimeSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

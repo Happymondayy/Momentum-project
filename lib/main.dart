@@ -14,12 +14,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'Todolist/screens/notification_test_page.dart';
 import 'firebase_options.dart';
 import 'dart:async';
+import 'package:momentum_planner/Calendar/services/notification_service_calendar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ 알림 및 권한 초기화
   await NotificationService().init();
+  await NotificationServiceCalendar().init(); // 캘린더 일정 미리 알림 설정
 
   try {
     if (Firebase.apps.isEmpty) {
