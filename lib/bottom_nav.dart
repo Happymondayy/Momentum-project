@@ -47,10 +47,14 @@ class _BottomNavState extends State<BottomNav> {
 
       case 1: // Planner
         print('Planner 탭으로 이동: userId = ${widget.userId}');
-        Navigator.pushReplacementNamed(
+        Navigator.pushReplacement(
           context,
-          'Planner/DailyPlannerPage',
-          arguments: {'userId': widget.userId},
+          MaterialPageRoute(
+            builder: (context) => DailyPlannerPage(
+              userId: widget.userId,
+              calendarData: _calendarData,
+            ),
+          ),
         );
         break;
 

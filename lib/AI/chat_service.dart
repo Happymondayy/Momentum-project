@@ -41,7 +41,7 @@ class ChatService {
   }
 
   // 오프라인 응답 생성 (서버/API 연결 실패시 사용)
-  Map<String, dynamic> generateOfflineResponse(String message) {
+  Map<String, dynamic> generateOfflineResponse(String message, [List<Map<String, dynamic>>? calendar, List<Map<String, dynamic>>? tasks]) {
     // 사용자 메시지 중 키워드 분석
     message = message.toLowerCase();
 
@@ -61,6 +61,79 @@ class ChatService {
     }
     else if (message.contains("일정") && message.contains("추가")) {
       response["response"] = "일정을 추가하려면 제목, 날짜, 시간 정보가 필요합니다. 예: '내일 3시에 미팅 일정 추가해줘' (오프라인 모드)";
+    }
+    // 수정 코드: "오늘 할 일" 질문 처리 추가
+    else if (message.contains("오늘") &&
+        (message.contains("할 일") || message.contains("일정") || message.contains("뭐") ||
+            message.contains("해야") || message.contains("브리핑"))) {
+
+      // 오늘 날짜 정보
+      String responseMsg = "오늘의 일정과 할 일을 알려드릴게요.\n\n";
+
+      // calendar와 tasks가 넘어왔는지 확인
+      if (calendar != null && tasks != null) {
+        // 오늘 일정/할 일 확인
+        final todayEvents = calendar.where((event) =>
+        event['date'] == today ||
+            (event['date'] != null && event['date'].toString().startsWith(today))
+        ).toList();
+
+        final todayTodos = tasks.where((todo) =>
+        todo['date'] == today ||
+            (todo['date'] != null && todo['date'].toString().startsWith(today))
+        ).toList();
+
+        if (todayEvents.isEmpty && todayTodos.isEmpty) {
+          responseMsg = "오늘은 등록된 일정이 없네요. 새로운 일정을 추가하시겠어요?";
+        } else {
+          // 캘린더 일정 요약
+          if (todayEvents.isNotEmpty) {
+            responseMsg += "📅 캘린더 일정:\n";
+            for (var event in todayEvents) {
+              String timeInfo = "";
+              if (event['startTime'] != null) {
+                if (event['startTime'] is Map) {
+                  final hour = event['startTime']['hour'] ?? 0;
+                  final minute = event['startTime']['minute'] ?? 0;
+                  timeInfo = " (${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')})";
+                } else if (event['startTime'] is String && event['startTime'].toString().isNotEmpty) {
+                  timeInfo = " (${event['startTime']})";
+                }
+              }
+              responseMsg += "• ${event['title']}$timeInfo\n";
+            }
+            responseMsg += "\n";
+          }
+
+          // 할 일 요약
+          if (todayTodos.isNotEmpty) {
+            responseMsg += "📝 오늘의 할 일:\n";
+            int completedCount = 0;
+
+            for (var todo in todayTodos) {
+              if (todo['isCompleted'] == true) {
+                completedCount++;
+              }
+
+              String completedMark = todo['isCompleted'] == true ? "✓ " : "";
+              String timeInfo = "";
+              if (todo['time'] != null && todo['time'].toString().isNotEmpty) {
+                timeInfo = " (${todo['time']})";
+              }
+              responseMsg += "• $completedMark${todo['title']}$timeInfo\n";
+            }
+
+            // 완료율 표시
+            final completionRate = todayTodos.isEmpty ? 0 : (completedCount / todayTodos.length * 100).round();
+            responseMsg += "\n현재 완료율: $completionRate%";
+          }
+        }
+      } else {
+        // 데이터가 없는 경우
+        responseMsg = "현재 오프라인 모드에서는 상세한 일정 정보를 제공할 수 없습니다. 인터넷 연결을 확인해주세요.";
+      }
+
+      response["response"] = responseMsg;
     }
     else if (message.contains("추천") || message.contains("빈 시간")) {
       // 기본 추천 제공

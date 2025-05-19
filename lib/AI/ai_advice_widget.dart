@@ -26,11 +26,11 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
   bool isLoading = true;
 
 
-  static final List<String> possibleServerUrls = [
-    'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
-    'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
-    'http://127.0.0.1:5001',      // 로컬호스트
-    'http://localhost:5001'       // 로컬호스트 (이름)
+  static const List<String> possibleUrls = [
+    'https://railwavve-production-68d4.up.railway.app',       // 안드로이드 에뮬레이터
+    'https://railwavve-production-68d4.up.railway.app/', // 서버 실제 IP (로컬 네트워크)
+    'https://railwavve-production-68d4.up.railway.app/',      // 로컬호스트
+    'https://railwavve-production-68d4.up.railway.app/'       // 로컬호스트 (이름)
   ];
 
   @override
@@ -187,7 +187,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
       _printDebugData('/dashboard_message', requestData);
 
       final response = await http.post(
-        Uri.parse('$possibleServerUrls/dashboard_message'),
+        Uri.parse('$possibleUrls/dashboard_message'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -231,7 +231,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
       _printDebugData('/advice', requestData);
 
       final response = await http.post(
-        Uri.parse('$possibleServerUrls/advice'),
+        Uri.parse('$possibleUrls/advice'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -1028,7 +1028,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
 
       // 각 URL에 시도
       Exception? lastException;
-      for (final serverUrl in possibleServerUrls) {
+      for (final serverUrl in possibleUrls) {
         try {
           final endpointUrl = "$serverUrl/chatbot";
           final response = await http.post(

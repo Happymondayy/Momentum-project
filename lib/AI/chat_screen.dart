@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/AI/chat_service.dart';
 import 'package:momentum_planner/AI/ai_advice_service.dart';
@@ -36,9 +38,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = Uuid();
 
+  late String userId;
+
   @override
   void initState() {
     super.initState();
+    userId = widget.userId; // 여기서 초기화
+    print('📌 userId 받은 값: $userId');
+
     _initializeChatService();
   }
 
@@ -72,7 +79,9 @@ class _ChatScreenState extends State<ChatScreen> {
         print('닉네임 로드 오류: $e');
       }
 
-      _addSystemMessage("${nickname}님 안녕하세요! FocusMate입니다. 무엇을 도와드릴까요?");
+      // 오늘 일정 요약
+      String briefingMessage = await _generateDailyBriefing(nickname);
+      _addSystemMessage(briefingMessage);
     } catch (e) {
       print('초기화 오류: $e');
 
@@ -104,6 +113,299 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       _addSystemMessage("안녕하세요! 현재 오프라인 모드로 작동 중입니다. 제한된 기능만 사용 가능합니다.");
+    }
+  }
+
+  Future<String> _generateDailyBriefing(String nickname) async {
+    final now = DateTime.now();
+    final today = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    // 오늘 캘린더 일정 가져오기
+    final todayEvents = widget.calendarData.where((event) {
+      return event['date'] == today || (event['date'] != null && event['date'].startsWith(today));
+    }).toList();
+
+    // 오늘 할 일 목록 가져오기
+    final todayTasks = widget.todoData.where((task) {
+      return task['date'] == today || (task['date'] != null && task['date'].startsWith(today));
+    }).toList();
+
+    // 미완료 할 일 개수 계산
+    final incompleteTasks = todayTasks.where((task) => task['isCompleted'] != true).length;
+
+    // 브리핑 메시지 생성
+    String message = "${nickname}님, 안녕하세요! FocusMate입니다.\n\n";
+
+    // 날짜 정보 추가
+    message += "오늘은 ${now.year}년 ${now.month}월 ${now.day}일 ";
+
+    // 요일 구하기
+    final weekdays = ["월", "화", "수", "목", "금", "토", "일"];
+    final weekday = weekdays[now.weekday - 1];
+    message += "$weekday요일입니다.\n\n";
+
+    // 일정 요약
+    if (todayEvents.isNotEmpty) {
+      message += "📅 오늘 일정 (${todayEvents.length}개):\n";
+      for (int i = 0; i < min(3, todayEvents.length); i++) {
+        final event = todayEvents[i];
+        String timeInfo = "";
+        if (event['startTime'] != null && event['startTime'] is Map) {
+          final startHour = event['startTime']['hour'] ?? 0;
+          final startMinute = event['startTime']['minute'] ?? 0;
+          timeInfo = "${startHour.toString().padLeft(2, '0')}:${startMinute.toString().padLeft(2, '0')}";
+        }
+
+        message += "- ${event['title']}${timeInfo.isNotEmpty ? ' ($timeInfo)' : ''}\n";
+      }
+
+      if (todayEvents.length > 3) {
+        message += "  외 ${todayEvents.length - 3}개 일정이 있습니다.\n";
+      }
+
+      message += "\n";
+    } else {
+      message += "📅 오늘은 일정이 없습니다.\n\n";
+    }
+
+    // 할 일 요약
+    if (todayTasks.isNotEmpty) {
+      message += "📝 오늘 할 일 (${todayTasks.length}개 중 ${todayTasks.length - incompleteTasks}개 완료):\n";
+
+      // 완료되지 않은 일부터 표시
+      final notCompletedTasks = todayTasks.where((task) => task['isCompleted'] != true).toList();
+      for (int i = 0; i < min(3, notCompletedTasks.length); i++) {
+        final task = notCompletedTasks[i];
+        message += "- ${task['title']}\n";
+      }
+
+      if (notCompletedTasks.length > 3) {
+        message += "  외 ${notCompletedTasks.length - 3}개 미완료 항목이 있습니다.\n";
+      }
+
+      message += "\n";
+    } else {
+      message += "📝 오늘은 할 일이 없습니다.\n\n";
+    }
+
+    message += "무엇을 도와드릴까요?";
+
+    return message;
+  }
+
+  // 추천 일정 대화상자 표시 함수 (기존 코드 수정)
+  void _showPlannerGeneratingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF9D8CFF)),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  '추천 일정 생성 중...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '현재 일정과 할 일을 분석하여\n최적의 추천 일정을 생성하고 있습니다.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // AI 일정 생성 수행
+    _generateAIScheduleRecommendation();
+  }
+
+// AI 일정 추천 생성 함수
+  Future<void> _generateAIScheduleRecommendation() async {
+    try {
+      // 현재 시간 가져오기
+      final now = DateTime.now();
+      final formattedDate = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+      // 오늘 일정 가져오기
+      final todayCalendarEvents = widget.calendarData.where((event) =>
+      event['date'] == formattedDate || (event['date'] != null && event['date'].startsWith(formattedDate))
+      ).toList();
+
+      // 오늘 할 일 가져오기
+      final todayTodoTasks = widget.todoData.where((task) =>
+      task['date'] == formattedDate || (task['date'] != null && task['date'].startsWith(formattedDate))
+      ).toList();
+
+      // 서버에 일정 추천 요청 준비
+      final response = await _chatService.chatWithAssistant(
+        message: "오늘 내 시간을 효율적으로 사용할 수 있는 최적의 일정을 추천해주세요. 빈 시간에 할만한 활동과 함께 시간표를 짜주세요.",
+        calendar: todayCalendarEvents,
+        tasks: todayTodoTasks,
+        history: [],
+        action: "recommend_schedule",
+      );
+
+      // 다이얼로그 닫기
+      Navigator.pop(context);
+
+      // 추천 결과 표시
+      if (response.containsKey('response')) {
+        _addSystemMessage(response['response']);
+
+        // 액션이 있으면 처리
+        if (response.containsKey('actions') && response['actions'] is List && response['actions'].isNotEmpty) {
+          final actions = response['actions'] as List;
+          setState(() {
+            _messages.add({
+              'role': 'assistant',
+              'content': '추천된 일정을 적용하시겠습니까?',
+              'actions': actions,
+            });
+          });
+        }
+      } else {
+        _addSystemMessage("죄송합니다. 추천 일정을 생성하는 중 오류가 발생했습니다.");
+      }
+    } catch (e) {
+      print('추천 일정 생성 오류: $e');
+
+      // 다이얼로그가 열려있으면 닫기
+      Navigator.of(context, rootNavigator: true).pop();
+
+      _addSystemMessage("추천 일정을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    }
+  }
+
+
+// Todo 항목 추가 함수
+  Future<void> _addTodo(Map<String, dynamic> todoData) async {
+    try {
+      // 필수 필드 확인
+      if (todoData['title'] == null || todoData['title'].toString().isEmpty) {
+        _addSystemMessage("할 일 추가에 실패했습니다. 제목이 필요합니다.");
+        return;
+      }
+
+      // 날짜 처리
+      String dateStr = todoData['date'] ?? DateTime.now().toString().split(' ')[0];
+      DateTime date;
+      try {
+        date = DateTime.parse(dateStr);
+      } catch (e) {
+        // 날짜 형식이 잘못된 경우 오늘 날짜 사용
+        date = DateTime.now();
+      }
+
+      // todo 문서 데이터 준비
+      final data = {
+        'userId': widget.userId,
+        'title': todoData['title'],
+        'date': date.toIso8601String(),
+        'time': todoData['time'] ?? '',
+        'endTime': todoData['endTime'] ?? '',
+        'importance': todoData['importance'] ?? 1,
+        'urgency': todoData['urgency'] ?? 1,
+        'isCompleted': false,
+        'memo': todoData['memo'] ?? '',
+        'location': todoData['location'] ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      // Firestore에 저장
+      await FirebaseFirestore.instance.collection('todos').add(data);
+
+      // 부모에게 알림 (UI 업데이트)
+      setState(() {
+        widget.todoData.add({
+          'id': DateTime.now().millisecondsSinceEpoch.toString(),
+          'title': todoData['title'],
+          'date': dateStr,
+          'time': todoData['time'] ?? '',
+          'endTime': todoData['endTime'] ?? '',
+          'importance': todoData['importance'] ?? 1,
+          'urgency': todoData['urgency'] ?? 1,
+          'isCompleted': false,
+          'memo': todoData['memo'] ?? '',
+          'location': todoData['location'] ?? '',
+        });
+      });
+
+      _addSystemMessage("'${todoData['title']}' 할 일이 추가되었습니다.");
+    } catch (e) {
+      print('할 일 추가 오류: $e');
+      _addSystemMessage("할 일 추가 중 오류가 발생했습니다: $e");
+    }
+  }
+
+// Todo 항목 삭제 함수
+  Future<void> _deleteTodo(Map<String, dynamic> todoData) async {
+    try {
+      String? todoId;
+      String title = todoData['title'] ?? '';
+
+      // ID로 삭제
+      if (todoData['id'] != null) {
+        todoId = todoData['id'].toString();
+      }
+      // 제목으로 찾아서 삭제
+      else if (title.isNotEmpty) {
+        // 원본 todoData에서 제목으로 검색
+        for (var todo in widget.todoData) {
+          if (todo['title'] == title) {
+            todoId = todo['id'].toString();
+            break;
+          }
+        }
+      }
+
+      if (todoId == null || todoId.isEmpty) {
+        _addSystemMessage("삭제할 할 일을 찾을 수 없습니다.");
+        return;
+      }
+
+      // Firestore에서 삭제
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('todos')
+          .where('userId', isEqualTo: widget.userId)
+          .where('title', isEqualTo: title)
+          .get();
+
+      for (var doc in querySnapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      // 로컬 데이터 업데이트
+      setState(() {
+        widget.todoData.removeWhere((todo) =>
+        todo['id'] == todoId || todo['title'] == title
+        );
+      });
+
+      _addSystemMessage("'$title' 할 일이 삭제되었습니다.");
+    } catch (e) {
+      print('할 일 삭제 오류: $e');
+      _addSystemMessage("할 일 삭제 중 오류가 발생했습니다: $e");
     }
   }
 
@@ -281,7 +583,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // 액션 처리 함수
+// 액션 처리 함수
   void _processActions(List<dynamic> actions) {
     try {
       // 여기서 각 액션 유형에 따라 처리
@@ -290,22 +592,62 @@ class _ChatScreenState extends State<ChatScreen> {
           final actionType = action['action'];
           final actionData = action['data'];
 
-          if (actionType == 'add_task') {
+          switch (actionType) {
+            case 'add_task':
             // 일정 추가 로직
-            print('일정 추가 액션: $actionData');
-            _addEvent(actionData);
-          }
-          else if (actionType == 'delete_task') {
-            // 일정 삭제 로직
-            print('일정 삭제 액션: $actionData');
-            _deleteEvent(actionData);
-          }
-          else if (actionType == 'recommend_task') {
-            // 일정 추천 로직
-            print('일정 추천 액션: $actionData');
+              print('일정 추가 액션: $actionData');
+              _addEvent(actionData);
+              break;
 
-            // 추천 확인 대화상자 표시
-            _showRecommendationDialog(actionData);
+            case 'delete_task':
+            // 일정 삭제 로직
+              print('일정 삭제 액션: $actionData');
+              _deleteEvent(actionData);
+              break;
+
+            case 'recommend_task':
+            // 일정 추천 로직
+              print('일정 추천 액션: $actionData');
+
+              // 추천 확인 대화상자 표시
+              _showRecommendationDialog(actionData);
+              break;
+
+            case 'view_calendar':
+            // 캘린더 보기 로직
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('캘린더 화면으로 이동합니다...')),
+              );
+
+              // 메인 캘린더 화면으로 이동
+              Future.delayed(Duration(seconds: 1), () {
+                Navigator.pushReplacementNamed(
+                  context,
+                  'Calendar/screens/calendar_screen',
+                  arguments: {'userId': widget.userId},
+                );
+              });
+              break;
+
+            case 'view_tasks':
+            // 할 일 목록 보기 로직
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('플래너 화면으로 이동합니다...')),
+              );
+
+              // 플래너 화면으로 이동
+              Future.delayed(Duration(seconds: 1), () {
+                Navigator.pushReplacementNamed(
+                  context,
+                  'Planner/DailyPlannerPage',
+                  arguments: {'userId': widget.userId},
+                );
+              });
+              break;
+
+            default:
+              print('정의되지 않은 액션 타입: $actionType');
+              break;
           }
         }
       }

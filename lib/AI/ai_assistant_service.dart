@@ -118,16 +118,16 @@ class AIAssistantService {
         'isCompleted': task.isCompleted,
       }).toList();
 
-      // URL 목록 정의 (클래스 상단에 이미 정의되어 있으면 이 부분은 생략)
-      final List<String> possibleServerUrls = [
-        'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
-        'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
-        'http://127.0.0.1:5001',      // 로컬호스트
-        'http://localhost:5001'       // 로컬호스트 (이름)
+      const List<String> possibleUrls = [
+        'https://railwavve-production-68d4.up.railway.app',       // 안드로이드 에뮬레이터
+        'https://railwavve-production-68d4.up.railway.app/', // 서버 실제 IP (로컬 네트워크)
+        'https://railwavve-production-68d4.up.railway.app/',      // 로컬호스트
+        'https://railwavve-production-68d4.up.railway.app/'       // 로컬호스트 (이름)
       ];
 
+
       // 각 URL에 시도
-      for (final serverUrl in possibleServerUrls) {
+      for (final serverUrl in possibleUrls) {
         try {
           final url = Uri.parse('$serverUrl/schedule');
           print('서버 연결 시도: $url');

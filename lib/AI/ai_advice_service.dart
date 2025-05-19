@@ -1,18 +1,22 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AIAdviceService {
 // 대신 가능한 URL 목록 정의:
-  static final List<String> possibleServerUrls = [
-    'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
-    'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
-    'http://127.0.0.1:5001',      // 로컬호스트
-    'http://localhost:5001'       // 로컬호스트 (이름)
+  static const List<String> possibleUrls = [
+    'https://railwavve-production-68d4.up.railway.app',       // 안드로이드 에뮬레이터
+    'https://railwavve-production-68d4.up.railway.app/', // 서버 실제 IP (로컬 네트워크)
+    'https://railwavve-production-68d4.up.railway.app/',      // 로컬호스트
+    'https://railwavve-production-68d4.up.railway.app/'       // 로컬호스트 (이름)
   ];
 
 // API 엔드포인트 접미사 정의
   static const String geminiEndpointPath = "/gemini";
+
+  static String _apiKey = 'AIzaSyB3Gx-qcHLpyBNsuH4UQ-JKRSDeisoo5-c';
+  static String get _apiUrl => 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
 // getGeminiUrl() 헬퍼 메서드 추가
   static String getGeminiEndpoint(String baseUrl) {
@@ -142,81 +146,730 @@ class AIAdviceService {
     return options;
   }
 
+  Map<String, dynamic> generateOfflineResponse(String message) {
+    // 캘린더 및 할 일 목록이 없는 경우를 대비한 빈 리스트
+    final List<Map<String, dynamic>> emptyCalendar = [];
+    final List<Map<String, dynamic>> emptyTasks = [];
 
-// Gemini API를 통한 AI 어시스턴트와 대화
-  static Future<Map<String, dynamic>> chatWithAssistant({
+    return _getFallbackResponse(message, emptyCalendar, emptyTasks);
+  }
+
+  // 숫자 패딩 헬퍼 메서드 추가
+  static String _padZero(int number) {
+    return number.toString().padLeft(2, '0');
+  }
+
+  // 챗봇에서의 일정 추가/삭제 요청 처리 개선
+  Future<Map<String, dynamic>> chatWithAssistant({
     required String message,
     required List<Map<String, dynamic>> calendar,
     required List<Map<String, dynamic>> tasks,
     required List<Map<String, dynamic>> history,
-    String? date,
     String? action,
   }) async {
     try {
-      // 사용자 닉네임 가져오기
-      final nickname = await getUserNickname();
+      // API 키 확인
+      if (_apiKey.isEmpty) {
+        return generateOfflineResponse(message);
+      }
 
-      // 요청할 데이터 준비
-      final requestData = {
-        "message": message,
-        "calendar": calendar,
-        "tasks": tasks,
-        "history": history,
-        "date": date ?? DateTime.now().toString().split(' ')[0], // YYYY-MM-DD 형식
-        "preferences": {}, // 나중에 사용자 설정 추가 가능
-        "nickname": nickname,
-        "action": action // 선택한 액션 유형 (말풍선 선택 시)
-      };
+      // 일정 추가/삭제 요청 분석
+      final bool isAddRequest = _isAddEventRequest(message);
+      final bool isDeleteRequest = _isDeleteEventRequest(message);
 
-      // 디버깅
-      _printDebugData('/gemini', requestData);
+      // 현재 날짜 및 시간
+      final now = DateTime.now();
+      final formattedDate = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
 
-      // 각 URL에 시도하기
-      Exception? lastException;
-      for (final serverUrl in possibleServerUrls) {
-        try {
-          final geminiEndpoint = "$serverUrl/gemini";
-          print('서버 연결 시도: $geminiEndpoint');
-
-          final response = await http.post(
-            Uri.parse(geminiEndpoint),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode(requestData),
-          ).timeout(const Duration(seconds: 5)); // 5초 시간제한 추가
-
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            print('Gemini 응답: $data');
-
-            // 기본 응답 구조 확인
-            if (!data.containsKey('response')) {
-              return {
-                "response": "죄송합니다. 서버 응답에 문제가 있습니다. 다시 시도해주세요.",
-                "actions": []
-              };
-            }
-
-            return {
-              "response": data['response'],
-              "actions": List<Map<String, dynamic>>.from(data['actions'] ?? []),
-            };
-          } else {
-            print("서버 오류($serverUrl): ${response.statusCode} - ${response.body}");
-          }
-        } catch (e) {
-          lastException = e as Exception?;
-          print("$serverUrl 연결 시도 실패: $e");
-          // 다음 URL 시도를 위해 계속 진행
+      // 일정 추가/삭제 요청인 경우, 적절한 액션 생성
+      if (isAddRequest) {
+        final extractedData = _extractEventData(message);
+        if (extractedData != null) {
+          return {
+            "response": "네, '${extractedData['title']}' 일정을 ${extractedData['date'] ?? '오늘'} ${extractedData['time'] ?? ''} 추가할게요.",
+            "actions": [
+              {
+                "action": "add_task",
+                "data": extractedData
+              }
+            ]
+          };
+        }
+      } else if (isDeleteRequest) {
+        final eventTitle = _extractEventTitle(message);
+        if (eventTitle != null && eventTitle.isNotEmpty) {
+          return {
+            "response": "'$eventTitle' 일정을 삭제할게요. 확인해주세요.",
+            "actions": [
+              {
+                "action": "delete_task",
+                "data": {
+                  "title": eventTitle
+                }
+              }
+            ]
+          };
         }
       }
 
-      // 모든 URL이 실패한 경우
-      print("서버 오류(Gemini): 모든 연결 시도 실패. 마지막 오류: $lastException");
-      return _getFallbackResponse(message, calendar, tasks);
-    } catch (e) {
-      print("통신 오류(Gemini): $e");
-      return _getFallbackResponse(message, calendar, tasks);
+      // 일정/할일 조회 요청 처리
+      if (_isTodayScheduleRequest(message)) {
+        return _generateTodayScheduleResponse(calendar, tasks);
+      }
+
+      // 시간 추천 요청 처리
+      if (_isTimeRecommendationRequest(message)) {
+        return await _generateTimeRecommendationResponse(calendar, tasks);
+      }
+
+      // 대화 기록 형식화 - user와 model 역할만 사용
+      final List<Map<String, dynamic>> formattedHistory = [];
+      for (var msg in history) {
+        final role = msg['role'] == 'user' ? 'user' : 'model';
+        formattedHistory.add({
+          "role": role,
+          "parts": [{"text": msg['content']}]
+        });
+      }
+
+      // 초기 프롬프트
+      final initialPrompt = '''
+당신은 일정 관리 앱의 AI 비서입니다. 사용자의 일정과 할 일을 관리하고, 시간 관리에 도움을 주며, 일정을 추천합니다.
+
+오늘 날짜: $formattedDate
+
+사용자의 캘린더 일정:
+${jsonEncode(calendar)}
+
+사용자의 할 일 목록:
+${jsonEncode(tasks)}
+
+사용자의 메시지에 대한 응답으로 일정 관리와 관련된 작업을 수행할 수 있습니다:
+1. 일정 추가: 사용자가 일정 추가를 요청하면, 일정의 세부 정보를 확인하고 추가합니다.
+2. 일정 삭제: 사용자가 일정 삭제를 요청하면, 삭제할 일정을 확인하고 삭제합니다.
+3. 일정 추천: 사용자의 빈 시간에 맞는 일정을 추천합니다.
+4. 시간 관리 조언: 사용자의 일정을 분석하여 효율적인 시간 관리 조언을 제공합니다.
+
+응답은 항상 다음과 같은 JSON 형식을 포함해야 합니다:
+{
+  "response": "사용자에게 보여줄 텍스트 응답",
+  "actions": [
+    {
+      "action": "액션 타입 (add_task, delete_task, recommend_task 등)",
+      "data": {
+        // 액션에 필요한 데이터 (일정 제목, 날짜, 시간 등)
+      }
     }
+  ]
+}
+
+액션 타입:
+- add_task: 새 일정 추가 (필수 필드: title, date)
+- delete_task: 일정 삭제 (필수 필드: title 또는 id)
+- recommend_task: 일정 추천 (필수 필드: title, description)
+- add_recommended_task: 추천 일정 추가 (필수 필드: index)
+
+사용자가 "오늘 할 일"이나 "내 일정" 등을 물으면 구체적으로 답변하고, 절대 스스로 생각해보라고 하지 마세요.
+항상 친절하고 도움이 되도록 대화하며, 한국어로 응답하세요.
+''';
+
+      // 대화 설정
+      List<Map<String, dynamic>> conversationContents = [];
+
+      // 비어있지 않은 대화 기록이 있는 경우에만 기존 대화 추가
+      if (formattedHistory.isNotEmpty) {
+        conversationContents.addAll(formattedHistory);
+      } else {
+        // 첫 대화면 초기 설명 추가
+        conversationContents.add({
+          "role": "user",
+          "parts": [{"text": "안녕하세요. 도움이 필요합니다."}]
+        });
+
+        conversationContents.add({
+          "role": "model",
+          "parts": [{"text": initialPrompt}]
+        });
+      }
+
+      // 사용자 메시지 추가
+      conversationContents.add({
+        "role": "user",
+        "parts": [{"text": message}]
+      });
+
+      // API 요청 데이터
+      final requestData = {
+        "contents": conversationContents,
+        "generationConfig": {
+          "temperature": 0.7,
+          "topK": 40,
+          "topP": 0.95,
+          "maxOutputTokens": 2048,
+        }
+      };
+
+      // API 요청 보내기 (타임아웃 설정)
+      final response = await http.post(
+        Uri.parse('$_apiUrl?key=$_apiKey'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(requestData),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final text = responseData['candidates'][0]['content']['parts'][0]['text'];
+
+        // JSON 부분 추출 및 파싱
+        try {
+          // JSON 부분만 추출
+          final jsonStart = text.indexOf('{');
+          final jsonEnd = text.lastIndexOf('}') + 1;
+
+          if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            final jsonString = text.substring(jsonStart, jsonEnd);
+            final Map<String, dynamic> parsedResponse = Map<String, dynamic>.from(json.decode(jsonString));
+
+            // 액션 필드가 없으면 빈 배열 추가
+            if (!parsedResponse.containsKey('actions')) {
+              parsedResponse['actions'] = <Map<String, dynamic>>[];
+            } else {
+              // actions가 있으면 형식 확인 및 변환
+              final actions = parsedResponse['actions'];
+              if (actions is List) {
+                parsedResponse['actions'] = List<Map<String, dynamic>>.from(
+                    actions.map((action) => Map<String, dynamic>.from(action))
+                );
+              }
+            }
+
+            return parsedResponse;
+          } else {
+            // JSON이 없는 경우 텍스트만 반환
+            return {
+              "response": text,
+              "actions": <Map<String, dynamic>>[]
+            };
+          }
+        } catch (e) {
+          print('JSON 파싱 오류: $e');
+          print('원본 텍스트: $text');
+
+          // 파싱 오류 시 텍스트만 반환
+          return {
+            "response": text,
+            "actions": <Map<String, dynamic>>[]
+          };
+        }
+      }
+
+      print('API 응답 오류: ${response.statusCode}, ${response.body}');
+      throw Exception('API 요청 실패: ${response.statusCode}');
+    } catch (e) {
+      print('AI 응답 처리 중 오류: $e');
+      return generateOfflineResponse(message);
+    }
+  }
+
+// 오늘의 일정/할일 요청인지 확인하는 함수
+  bool _isTodayScheduleRequest(String message) {
+    final lowerMessage = message.toLowerCase();
+    return lowerMessage.contains('오늘 일정') ||
+        lowerMessage.contains('오늘의 일정') ||
+        lowerMessage.contains('오늘 할 일') ||
+        lowerMessage.contains('오늘의 할 일') ||
+        lowerMessage.contains('오늘 뭐해') ||
+        lowerMessage.contains('오늘 뭐 해야') ||
+        lowerMessage.contains('오늘 해야 할 일') ||
+        (lowerMessage.contains('내 일정') && lowerMessage.contains('알려'));
+  }
+
+// 시간 추천 요청인지 확인하는 함수
+  bool _isTimeRecommendationRequest(String message) {
+    final lowerMessage = message.toLowerCase();
+    return lowerMessage.contains('시간 추천') ||
+        lowerMessage.contains('언제가 좋을까') ||
+        lowerMessage.contains('추천 일정') ||
+        lowerMessage.contains('뭐 하면 좋을까') ||
+        lowerMessage.contains('시간표 짜');
+  }
+
+// 일정 추가 요청인지 확인하는 함수
+  bool _isAddEventRequest(String message) {
+    final lowerMessage = message.toLowerCase();
+    return (lowerMessage.contains('일정') || lowerMessage.contains('할 일') || lowerMessage.contains('이벤트') || lowerMessage.contains('약속')) &&
+        (lowerMessage.contains('추가') || lowerMessage.contains('만들') || lowerMessage.contains('저장') || lowerMessage.contains('등록') || lowerMessage.contains('넣어'));
+  }
+
+// 일정 삭제 요청인지 확인하는 함수
+  bool _isDeleteEventRequest(String message) {
+    final lowerMessage = message.toLowerCase();
+    return (lowerMessage.contains('일정') || lowerMessage.contains('할 일') || lowerMessage.contains('이벤트') || lowerMessage.contains('약속')) &&
+        (lowerMessage.contains('삭제') || lowerMessage.contains('지워') || lowerMessage.contains('취소') || lowerMessage.contains('제거') || lowerMessage.contains('없애'));
+  }
+
+// 메시지에서 일정 제목 추출하는 함수
+  String? _extractEventTitle(String message) {
+    // 메시지에서 일정 제목 추출 시도
+    // "OOO 일정을 삭제해줘" 패턴
+    final titleBeforePattern = RegExp(r'([가-힣a-zA-Z0-9\s]+)\s*(일정|할 일|이벤트|약속).*?(?:삭제|지워|취소|제거|없애)');
+    final titleBeforeMatch = titleBeforePattern.firstMatch(message);
+
+    if (titleBeforeMatch != null && titleBeforeMatch.group(1) != null) {
+      return titleBeforeMatch.group(1)!.trim();
+    }
+
+    // "OOO 삭제해줘" 패턴
+    final simplePattern = RegExp(r'([가-힣a-zA-Z0-9\s]+)(?:삭제|지워|취소|제거|없애)');
+    final simpleMatch = simplePattern.firstMatch(message);
+
+    if (simpleMatch != null && simpleMatch.group(1) != null) {
+      return simpleMatch.group(1)!.trim();
+    }
+
+    // "일정 삭제해줘 OOO" 패턴
+    final titleAfterPattern = RegExp(r'(?:일정|할 일|이벤트|약속).*?(?:삭제|지워|취소|제거|없애).*?(?:해|해줘|해주세요|할래).*?([가-힣a-zA-Z0-9\s]+)');
+    final titleAfterMatch = titleAfterPattern.firstMatch(message);
+
+    if (titleAfterMatch != null && titleAfterMatch.group(1) != null) {
+      return titleAfterMatch.group(1)!.trim();
+    }
+
+    return null;
+  }
+
+// 메시지에서 일정 데이터 추출하는 함수
+  Map<String, dynamic>? _extractEventData(String message) {
+    final Map<String, dynamic> eventData = {
+      'title': '',
+      'date': DateTime.now().toString().split(' ')[0], // 기본값: 오늘
+      'time': null,
+      'endTime': null,
+      'description': '',
+      'location': '',
+    };
+
+    // 제목 추출
+    final titlePattern = RegExp(r'(?:제목[은는이가]?\s*[:\s]\s*)?([가-힣a-zA-Z0-9\s]+)(?:일정|할 일)?(?:을|를)?\s*(?:추가|만들|저장|등록)');
+    final titleMatch = titlePattern.firstMatch(message);
+
+    if (titleMatch != null && titleMatch.group(1) != null) {
+      eventData['title'] = titleMatch.group(1)!.trim();
+    } else {
+      // 제목이 없으면 기본 추출 시도
+      final words = message.split(' ');
+      for (int i = 0; i < words.length; i++) {
+        if (words[i].contains('일정') || words[i].contains('할') && i > 0) {
+          eventData['title'] = words[i-1];
+          break;
+        }
+      }
+    }
+
+    // 날짜 추출
+    final datePatterns = [
+      RegExp(r'(\d{4}년\s*\d{1,2}월\s*\d{1,2}일)'), // YYYY년 MM월 DD일
+      RegExp(r'(\d{1,2}월\s*\d{1,2}일)'),          // MM월 DD일
+      RegExp(r'(\d{4}-\d{2}-\d{2})'),             // YYYY-MM-DD
+      RegExp(r'(\d{4}/\d{2}/\d{2})'),             // YYYY/MM/DD
+      RegExp(r'(오늘|내일|모레)'),                   // 상대적 날짜
+    ];
+
+    for (final pattern in datePatterns) {
+      final match = pattern.firstMatch(message);
+      if (match != null && match.group(1) != null) {
+        final dateStr = match.group(1)!;
+
+        if (dateStr == '오늘') {
+          final now = DateTime.now();
+          eventData['date'] = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+        } else if (dateStr == '내일') {
+          final tomorrow = DateTime.now().add(const Duration(days: 1));
+          eventData['date'] = "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
+        } else if (dateStr == '모레') {
+          final dayAfterTomorrow = DateTime.now().add(const Duration(days: 2));
+          eventData['date'] = "${dayAfterTomorrow.year}-${dayAfterTomorrow.month.toString().padLeft(2, '0')}-${dayAfterTomorrow.day.toString().padLeft(2, '0')}";
+        } else if (dateStr.contains('년') && dateStr.contains('월') && dateStr.contains('일')) {
+          // YYYY년 MM월 DD일 형식 처리
+          final yearMatch = RegExp(r'(\d{4})년').firstMatch(dateStr);
+          final monthMatch = RegExp(r'(\d{1,2})월').firstMatch(dateStr);
+          final dayMatch = RegExp(r'(\d{1,2})일').firstMatch(dateStr);
+
+          if (yearMatch != null && monthMatch != null && dayMatch != null) {
+            final year = int.parse(yearMatch.group(1)!);
+            final month = int.parse(monthMatch.group(1)!);
+            final day = int.parse(dayMatch.group(1)!);
+            eventData['date'] = "$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}";
+          }
+        } else if (dateStr.contains('월') && dateStr.contains('일')) {
+          // MM월 DD일 형식 처리 (현재 연도 사용)
+          final monthMatch = RegExp(r'(\d{1,2})월').firstMatch(dateStr);
+          final dayMatch = RegExp(r'(\d{1,2})일').firstMatch(dateStr);
+
+          if (monthMatch != null && dayMatch != null) {
+            final year = DateTime.now().year;
+            final month = int.parse(monthMatch.group(1)!);
+            final day = int.parse(dayMatch.group(1)!);
+            eventData['date'] = "$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}";
+          }
+        } else if (dateStr.contains('-')) {
+          // YYYY-MM-DD 형식 그대로 사용
+          eventData['date'] = dateStr;
+        } else if (dateStr.contains('/')) {
+          // YYYY/MM/DD 형식을 YYYY-MM-DD로 변환
+          final parts = dateStr.split('/');
+          if (parts.length == 3) {
+            eventData['date'] = "${parts[0]}-${parts[1]}-${parts[2]}";
+          }
+        }
+
+        break;
+      }
+    }
+
+    // 시간 추출
+    final timePatterns = [
+      RegExp(r'(\d{1,2})시\s*(\d{1,2})분'),      // HH시 MM분
+      RegExp(r'(\d{1,2})시'),                    // HH시
+      RegExp(r'(\d{1,2}):(\d{2})'),             // HH:MM
+      RegExp(r'(오전|오후)\s*(\d{1,2})시\s*(\d{1,2})?분?'), // 오전/오후 HH시 MM분
+    ];
+
+    for (final pattern in timePatterns) {
+      final match = pattern.firstMatch(message);
+      if (match != null) {
+        if (pattern.pattern == r'(\d{1,2})시\s*(\d{1,2})분') {
+          final hour = int.parse(match.group(1)!);
+          final minute = int.parse(match.group(2)!);
+          eventData['time'] = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        } else if (pattern.pattern == r'(\d{1,2})시') {
+          final hour = int.parse(match.group(1)!);
+          eventData['time'] = "${hour.toString().padLeft(2, '0')}:00";
+        } else if (pattern.pattern == r'(\d{1,2}):(\d{2})') {
+          final hour = int.parse(match.group(1)!);
+          final minute = int.parse(match.group(2)!);
+          eventData['time'] = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        } else if (pattern.pattern == r'(오전|오후)\s*(\d{1,2})시\s*(\d{1,2})?분?') {
+          final ampm = match.group(1);
+          final hour = int.parse(match.group(2)!);
+          final minute = match.group(3) != null ? int.parse(match.group(3)!) : 0;
+
+          int formattedHour = hour;
+          if (ampm == '오후' && hour < 12) {
+            formattedHour += 12;
+          } else if (ampm == '오전' && hour == 12) {
+            formattedHour = 0;
+          }
+
+          eventData['time'] = "${formattedHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        }
+
+        break;
+      }
+    }
+
+    // 종료 시간 추출
+    final endTimePatterns = [
+      RegExp(r'~\s*(\d{1,2})시\s*(\d{1,2})분'),     // ~ HH시 MM분
+      RegExp(r'~\s*(\d{1,2})시'),                   // ~ HH시
+      RegExp(r'~\s*(\d{1,2}):(\d{2})'),            // ~ HH:MM
+      RegExp(r'~\s*(오전|오후)\s*(\d{1,2})시\s*(\d{1,2})?분?'), // ~ 오전/오후 HH시 MM분
+    ];
+
+    for (final pattern in endTimePatterns) {
+      final match = pattern.firstMatch(message);
+      if (match != null) {
+        if (pattern.pattern == r'~\s*(\d{1,2})시\s*(\d{1,2})분') {
+          final hour = int.parse(match.group(1)!);
+          final minute = int.parse(match.group(2)!);
+          eventData['endTime'] = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        } else if (pattern.pattern == r'~\s*(\d{1,2})시') {
+          final hour = int.parse(match.group(1)!);
+          eventData['endTime'] = "${hour.toString().padLeft(2, '0')}:00";
+        } else if (pattern.pattern == r'~\s*(\d{1,2}):(\d{2})') {
+          final hour = int.parse(match.group(1)!);
+          final minute = int.parse(match.group(2)!);
+          eventData['endTime'] = "${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        } else if (pattern.pattern == r'~\s*(오전|오후)\s*(\d{1,2})시\s*(\d{1,2})?분?') {
+          final ampm = match.group(1);
+          final hour = int.parse(match.group(2)!);
+          final minute = match.group(3) != null ? int.parse(match.group(3)!) : 0;
+
+          int formattedHour = hour;
+          if (ampm == '오후' && hour < 12) {
+            formattedHour += 12;
+          } else if (ampm == '오전' && hour == 12) {
+            formattedHour = 0;
+          }
+
+          eventData['endTime'] = "${formattedHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+        }
+
+        break;
+      }
+    }
+
+    // 종료 시간이 없고 시작 시간이 있으면 기본적으로 1시간 지속으로 설정
+    if (eventData['time'] != null && eventData['endTime'] == null) {
+      final timeStr = eventData['time'] as String;
+      final parts = timeStr.split(':');
+      if (parts.length == 2) {
+        final hour = int.parse(parts[0]);
+        final minute = int.parse(parts[1]);
+        final endHour = (hour + 1) % 24;
+        eventData['endTime'] = "${endHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}";
+      }
+    }
+
+    // 위치 추출
+    final locationPattern = RegExp(r'장소[는은]?\s*([가-힣a-zA-Z0-9\s]+)');
+    final locationMatch = locationPattern.firstMatch(message);
+
+    if (locationMatch != null && locationMatch.group(1) != null) {
+      eventData['location'] = locationMatch.group(1)!.trim();
+    }
+
+    // 설명 추출
+    final descriptionPattern = RegExp(r'설명[은는]?\s*([가-힣a-zA-Z0-9\s]+)');
+    final descriptionMatch = descriptionPattern.firstMatch(message);
+
+    if (descriptionMatch != null && descriptionMatch.group(1) != null) {
+      eventData['description'] = descriptionMatch.group(1)!.trim();
+    }
+
+    // 제목이 없으면 null 반환 (필수 필드)
+    if (eventData['title'] == null || eventData['title'].toString().isEmpty) {
+      return null;
+    }
+
+    return eventData;
+  }
+
+// 오늘 일정 요약 응답 생성
+  Map<String, dynamic> _generateTodayScheduleResponse(
+      List<Map<String, dynamic>> calendar,
+      List<Map<String, dynamic>> tasks
+      ) {
+    final now = DateTime.now();
+    final today = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
+
+    // 오늘 일정 필터링
+    final todayEvents = calendar.where((event) {
+      return event['date'] == today || (event['date'] != null && event['date'].startsWith(today));
+    }).toList();
+
+    // 오늘 할 일 필터링
+    final todayTasks = tasks.where((task) {
+      return task['date'] == today || (task['date'] != null && task['date'].startsWith(today));
+    }).toList();
+
+    // 응답 생성
+    String response = "오늘 일정을 알려드릴게요.\n\n";
+
+    if (todayEvents.isEmpty && todayTasks.isEmpty) {
+      response += "오늘은 일정이나 할 일이 없네요. 여유로운 하루를 보내세요!";
+    } else {
+      if (todayEvents.isNotEmpty) {
+        response += "📅 일정 (${todayEvents.length}개):\n";
+
+        for (int i = 0; i < todayEvents.length; i++) {
+          final event = todayEvents[i];
+          String timeInfo = "";
+
+          if (event['startTime'] != null) {
+            if (event['startTime'] is Map) {
+              final startHour = event['startTime']['hour'] ?? 0;
+              final startMinute = event['startTime']['minute'] ?? 0;
+              timeInfo = "${startHour.toString().padLeft(2, '0')}:${startMinute.toString().padLeft(2, '0')}";
+
+              if (event['endTime'] != null && event['endTime'] is Map) {
+                final endHour = event['endTime']['hour'] ?? 0;
+                final endMinute = event['endTime']['minute'] ?? 0;
+                timeInfo += " ~ ${endHour.toString().padLeft(2, '0')}:${endMinute.toString().padLeft(2, '0')}";
+              }
+            } else if (event['startTime'] is String) {
+              timeInfo = event['startTime'];
+
+              if (event['endTime'] != null && event['endTime'] is String) {
+                timeInfo += " ~ ${event['endTime']}";
+              }
+            }
+          }
+
+          response += "${i+1}. ${event['title']}${timeInfo.isNotEmpty ? ' ($timeInfo)' : ''}";
+
+          if (event['location'] != null && event['location'].toString().isNotEmpty) {
+            response += " - ${event['location']}";
+          }
+
+          response += "\n";
+        }
+
+        if (todayTasks.isNotEmpty) {
+          response += "\n";
+        }
+      }
+
+      if (todayTasks.isNotEmpty) {
+        final completedTasks = todayTasks.where((task) => task['isCompleted'] == true).length;
+        response += "📝 할 일 (${completedTasks}/${todayTasks.length} 완료):\n";
+
+        // 먼저 미완료 항목
+        final incompleteTasks = todayTasks.where((task) => task['isCompleted'] != true).toList();
+        for (int i = 0; i < incompleteTasks.length; i++) {
+          final task = incompleteTasks[i];
+          response += "${i+1}. ❌ ${task['title']}";
+
+          if (task['importance'] != null || task['urgency'] != null) {
+            response += " (중요도: ${task['importance'] ?? 1}, 긴급도: ${task['urgency'] ?? 1})";
+          }
+
+          response += "\n";
+        }
+
+        // 완료된 항목
+        final completedTasksList = todayTasks.where((task) => task['isCompleted'] == true).toList();
+        for (int i = 0; i < completedTasksList.length; i++) {
+          final task = completedTasksList[i];
+          response += "${incompleteTasks.length + i + 1}. ✅ ${task['title']}\n";
+        }
+      }
+    }
+
+    return {
+      "response": response,
+      "actions": <Map<String, dynamic>>[]
+    };
+  }
+
+// 시간 추천 응답 생성
+  Future<Map<String, dynamic>> _generateTimeRecommendationResponse(
+      List<Map<String, dynamic>> calendar,
+      List<Map<String, dynamic>> tasks
+      ) async {
+    final now = DateTime.now();
+    final today = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
+
+    // 오늘 일정 필터링
+    final todayEvents = calendar.where((event) {
+      return event['date'] == today || (event['date'] != null && event['date'].startsWith(today));
+    }).toList();
+
+    // 시간대별 점유 상태 (0-23시)
+    final occupiedHours = List<bool>.filled(24, false);
+
+    // 캘린더 일정으로 점유 시간 설정
+    for (final event in todayEvents) {
+      if (event['startTime'] != null) {
+        int startHour = 0;
+        int endHour = 0;
+
+        if (event['startTime'] is Map) {
+          startHour = event['startTime']['hour'] ?? 0;
+
+          if (event['endTime'] != null && event['endTime'] is Map) {
+            endHour = event['endTime']['hour'] ?? (startHour + 1);
+          } else {
+            endHour = startHour + 1;
+          }
+        } else if (event['startTime'] is String) {
+          final timeParts = event['startTime'].toString().split(':');
+          if (timeParts.length >= 1) {
+            startHour = int.tryParse(timeParts[0]) ?? 0;
+          }
+
+          if (event['endTime'] != null && event['endTime'] is String) {
+            final endTimeParts = event['endTime'].toString().split(':');
+            if (endTimeParts.length >= 1) {
+              endHour = int.tryParse(endTimeParts[0]) ?? (startHour + 1);
+            }
+          } else {
+            endHour = startHour + 1;
+          }
+        }
+
+        // 시간대 점유 표시
+        for (int hour = startHour; hour < endHour; hour++) {
+          if (hour >= 0 && hour < 24) {
+            occupiedHours[hour] = true;
+          }
+        }
+      }
+    }
+
+    // 가용 시간대 찾기 (9AM-9PM 사이)
+    final availableTimeSlots = <Map<String, dynamic>>[];
+
+    for (int hour = 9; hour < 21; hour++) {
+      if (!occupiedHours[hour]) {
+        final slot = {
+          'hour': hour,
+          'time': '${hour.toString().padLeft(2, '0')}:00',
+          'endTime': '${(hour + 1).toString().padLeft(2, '0')}:00',
+        };
+        availableTimeSlots.add(slot);
+      }
+    }
+
+    // 결과 생성
+    String response = "";
+    List<Map<String, dynamic>> actions = [];
+
+    if (availableTimeSlots.isEmpty) {
+      response = "오늘은 9시부터 21시까지 모든 시간대가 채워져 있네요. 내일 일정을 계획해보는 것은 어떨까요? 아니면 밤이나 새벽 시간대를 활용하실 수도 있습니다.";
+    } else {
+      response = "오늘 비어있는 시간대를 찾았습니다:\n\n";
+
+      for (int i = 0; i < min(3, availableTimeSlots.length); i++) {
+        final slot = availableTimeSlots[i];
+        final hour = slot['hour'] as int;
+
+        String activitySuggestion = "";
+        String title = "";
+
+        // 시간대별 활동 추천
+        if (hour >= 9 && hour < 12) {
+          activitySuggestion = "아침 시간대는 집중력이 높은 시간입니다. 중요한 업무나 공부를 하기 좋습니다.";
+          title = "중요 업무/공부";
+        } else if (hour >= 12 && hour < 14) {
+          activitySuggestion = "점심 시간대입니다. 식사 후 가벼운 산책이나 휴식을 취하기 좋습니다.";
+          title = "점심 식사 및 휴식";
+        } else if (hour >= 14 && hour < 17) {
+          activitySuggestion = "오후 시간대입니다. 미팅이나 협업 업무를 하기 좋은 시간입니다.";
+          title = "미팅/협업 업무";
+        } else if (hour >= 17 && hour < 19) {
+          activitySuggestion = "저녁 시간대입니다. 운동이나 개인 취미 활동을 하기 좋습니다.";
+          title = "운동/취미 활동";
+        } else {
+          activitySuggestion = "늦은 시간대입니다. 간단한 정리나 내일 계획을 세우기 좋습니다.";
+          title = "계획 정리";
+        }
+
+        response += "🕒 ${slot['time']} ~ ${slot['endTime']}: $activitySuggestion\n\n";
+
+        actions.add({
+          "action": "recommend_task",
+          "data": {
+            "title": title,
+            "time": slot['time'],
+            "endTime": slot['endTime'],
+            "date": today,
+            "description": activitySuggestion,
+          }
+        });
+      }
+
+      if (availableTimeSlots.length > 3) {
+        response += "그 외에도 ${availableTimeSlots.length - 3}개의 시간대가 더 있습니다.";
+      }
+
+      response += "\n\n원하시는 시간대를 선택하시면 일정을 추가해 드릴게요. 다른 활동을 원하시면 말씀해 주세요.";
+    }
+
+    return {
+      "response": response,
+      "actions": actions
+    };
   }
 
   // 빈 시간대 감지 및 일정 추천
@@ -239,7 +892,7 @@ class AIAdviceService {
       _printDebugData('/recommend_time_slots', requestData);
 
       final response = await http.post(
-        Uri.parse('$possibleServerUrls/recommend_time_slots'),
+        Uri.parse('$possibleUrls/recommend_time_slots'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -286,7 +939,7 @@ class AIAdviceService {
       _printDebugData('/recommend_tasks', requestData);
 
       final response = await http.post(
-        Uri.parse('$possibleServerUrls/recommend_tasks'),
+        Uri.parse('$possibleUrls/recommend_tasks'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -471,7 +1124,7 @@ class AIAdviceService {
       _printDebugData('/advice', requestData);
 
       final response = await http.post(
-        Uri.parse('$possibleServerUrls/advice'),
+        Uri.parse('$possibleUrls/advice'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );

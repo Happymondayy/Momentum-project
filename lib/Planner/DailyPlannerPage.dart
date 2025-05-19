@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:momentum_planner/Todolist/screens/todo_list_screen.dart';
+import '../Calendar/models/event.dart';
 import '../main.dart';
 import 'empty_state_widget.dart';
 import 'package:momentum_planner/bottom_nav.dart';
@@ -402,8 +403,13 @@ class TaskDataService {
 
 class DailyPlannerPage extends StatefulWidget {
   final String userId;
-  const DailyPlannerPage({Key? key, required this.userId}) : super(key: key);
+  final List<Map<String, dynamic>> calendarData;
 
+  const DailyPlannerPage({
+    Key? key,
+    required this.userId,
+    this.calendarData = const [],
+  }) : super(key: key);
   @override
   State<DailyPlannerPage> createState() => _DailyPlannerPageState();
 }
@@ -417,7 +423,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args = ModalRoute
+        .of(context)
+        ?.settings
+        .arguments as Map<String, dynamic>?;
     userId = args?['userId'] ?? '';
     print('📌 userId 받은 값: $userId');
   }
@@ -463,7 +472,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             if (userPrefs is Map) {
               // 각 선호도 항목 추출
               if (userPrefs.containsKey('preferredTimeOfDay')) {
-                preferences['preferredTimeOfDay'] = userPrefs['preferredTimeOfDay'];
+                preferences['preferredTimeOfDay'] =
+                userPrefs['preferredTimeOfDay'];
               }
 
               if (userPrefs.containsKey('sleepSchedule')) {
@@ -506,6 +516,131 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  // 추가 위치: DailyPlannerPage.dart의 _DailyPlannerPageState 클래스 내부 (다른 메서드들과 같은 레벨)에 다음 메서드 추가
+
+  Widget _buildDailyReminder() {
+    // 오늘의 할 일과 일정 가져오기
+    final todayTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    final todayEvents = widget.calendarData.where((event) {
+      final eventDate = DateTime.tryParse(event['date'] ?? '');
+      return eventDate?.year == selectedDate.year &&
+          eventDate?.month == selectedDate.month &&
+          eventDate?.day == selectedDate.day;
+    }).toList();
+
+    // 할 일이나 일정이 없으면 위젯을 표시하지 않음
+    if (todayTasks.isEmpty && todayEvents.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Color(0xFFE6E0FF),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더
+          Row(
+            children: [
+              Icon(Icons.assistant, color: Color(0xFF9D8CFF)),
+              SizedBox(width: 8),
+              Text(
+                '오늘의 리마인더',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF4A4A4A),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          // 캘린더 일정 리스트
+          if (todayEvents.isNotEmpty) ...[
+            Text(
+              '📅 캘린더 일정:',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                color: Color(0xFF4A4A4A),
+              ),
+            ),
+            SizedBox(height: 4),
+            ...todayEvents.take(3).map((event) =>
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, bottom: 4),
+                  child: Text(
+                    '• ${event['title']} ${event['startTime'] != null
+                        ? '(${event['startTime']})'
+                        : ''}',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                )
+            ),
+            if (todayEvents.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 4),
+                child: Text(
+                  '외 ${todayEvents.length - 3}개 일정',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+              ),
+            SizedBox(height: 4),
+          ],
+          // 할일 리스트
+          if (todayTasks.isNotEmpty) ...[
+            Text(
+              '📝 할 일:',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                color: Color(0xFF4A4A4A),
+              ),
+            ),
+            SizedBox(height: 4),
+            ...todayTasks.take(3).map((task) =>
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, bottom: 4),
+                  child: Text(
+                    '• ${task.title}${task.time != null
+                        ? ' (${task.time})'
+                        : ''}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      decoration: task.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
+                      color: task.isCompleted ? Colors.grey : Colors.black87,
+                    ),
+                  ),
+                )
+            ),
+            if (todayTasks.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 4),
+                child: Text(
+                  '외 ${todayTasks.length - 3}개 할 일',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -607,14 +742,14 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
-    print('tasks length: ${tasks.length}');
-    for(var task in tasks) {
-      print('task time: ${task.time}');
-    }
     final now = DateTime.now();
     final isToday = selectedDate.year == now.year &&
         selectedDate.month == now.month &&
         selectedDate.day == now.day;
+
+    // 오늘의 할 일과 일정을 가져옴
+    final todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    final calendarEvents = _getEventsForSelectedDate();
 
     return SingleChildScrollView(
       child: Column(
@@ -634,8 +769,38 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               ],
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // 리마인더 표시 (새로 추가)
+                if (isToday && (todoTasks.isNotEmpty || calendarEvents.isNotEmpty))
+                  GestureDetector(
+                    onTap: _showReminderDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.notifications_active,
+                              size: 18,
+                              color: Colors.purple.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            '오늘의 리마인더',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.purple.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const Spacer(),
                 // 일정 전체 삭제 버튼
                 IconButton(
                   onPressed: () {
@@ -672,7 +837,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             ),
           ),
 
-          // 시간별 일정 목록
+          // 시간별 일정 목록 (기존 코드)
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -695,7 +860,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
               return Container(
                 decoration: BoxDecoration(
-                  color: isCurrentHour ? Colors.purple.withOpacity(0.05) : null, // 보라색으로 변경
+                  color: isCurrentHour ? Colors.purple.withOpacity(0.05) : null,
+                  // 보라색으로 변경
                   border: isCurrentHour
                       ? Border(
                     left: BorderSide(
@@ -727,8 +893,12 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                             timeLabel,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.normal,
-                              color: isCurrentHour ? Colors.purple.shade700 : Colors.grey.shade600, // 보라색으로 변경
+                              fontWeight: isCurrentHour
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isCurrentHour
+                                  ? Colors.purple.shade700
+                                  : Colors.grey.shade600, // 보라색으로 변경
                             ),
                           ),
                           if (isCurrentHour)
@@ -763,7 +933,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                           child: Wrap(
                             spacing: 8.0,
                             runSpacing: 8.0,
-                            children: hourTasks.map((task) => _buildTodoTaskCard(task)).toList(),
+                            children: hourTasks.map((task) =>
+                                _buildTodoTaskCard(task)).toList(),
                           ),
                         ),
                       ),
@@ -776,6 +947,199 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         ],
       ),
     );
+  }
+
+// 리마인더 대화상자 표시 함수 추가
+  void _showReminderDialog() {
+    final todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    final calendarEvents = _getEventsForSelectedDate();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.notifications_active, color: Colors.purple.shade700),
+            const SizedBox(width: 10),
+            const Text('오늘의 리마인더'),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (calendarEvents.isNotEmpty) ...[
+                const Text(
+                  '📅 오늘의 일정',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ...calendarEvents.map((event) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        if (event.startTime != null)
+                          Text(
+                            '시간: ${event.startTime!.format(context)} ${event.endTime != null ? '~ ${event.endTime!.format(context)}' : ''}',
+                            style: TextStyle(color: Colors.blue.shade700),
+                          ),
+                        if (event.location != null && event.location!.isNotEmpty)
+                          Text(
+                            '장소: ${event.location}',
+                            style: TextStyle(color: Colors.blue.shade700),
+                          ),
+                      ],
+                    ),
+                  ),
+                )),
+              ],
+
+              if (todoTasks.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '📝 오늘의 할 일',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ...todoTasks.map((task) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Checkbox(
+                                value: task.isCompleted,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _taskDataService.updateTaskStatus(task, value ?? false);
+                                    updateProgress();
+                                    Navigator.pop(context); // 대화상자 닫기
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            if (task.importance > 0) ...[
+                              const SizedBox(width: 32),
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Text(' ${task.importance}',
+                                  style: TextStyle(fontSize: 12, color: Colors.amber.shade800)),
+                            ],
+                            if (task.urgency > 0) ...[
+                              const SizedBox(width: 8),
+                              Icon(Icons.timer, size: 14, color: Colors.red.shade400),
+                              Text(' ${task.urgency}',
+                                  style: TextStyle(fontSize: 12, color: Colors.red.shade800)),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
+              ],
+
+              if (calendarEvents.isEmpty && todoTasks.isEmpty)
+                const Text('오늘은 특별한 일정이나 할 일이 없습니다. 편안한 하루 되세요!'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+// 선택된 날짜의 이벤트를 가져오는 헬퍼 함수
+  List<Event> _getEventsForSelectedDate() {
+    final events = <Event>[];
+
+    try {
+      // 날짜 문자열 포맷 (YYYY-MM-DD)
+      final dateStr = "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
+
+      // Firestore에서 해당 날짜의
+      FirebaseFirestore.instance
+          .collection('events')
+          .where('userId', isEqualTo: userId)
+          .where('startDate', isEqualTo: dateStr)
+          .get()
+          .then((snapshot) {
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+
+          final startTime = data['startTime'] != null
+              ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
+              : null;
+
+          final endTime = data['endTime'] != null
+              ? TimeOfDay(hour: data['endTime']['hour'], minute: data['endTime']['minute'])
+              : null;
+
+          final event = Event(
+            userId: data['userId'],
+            id: doc.id,
+            title: data['title'] ?? '',
+            description: data['description'] ?? '',
+            startDate: DateTime.parse(data['startDate']),
+            endDate: DateTime.parse(data['endDate'] ?? data['startDate']),
+            startTime: startTime,
+            endTime: endTime,
+            memo: data['memo'] ?? '',
+            location: data['location'] ?? '',
+          );
+
+          events.add(event);
+        }
+      });
+    } catch (e) {
+      print('캘린더 이벤트 로드 오류: $e');
+    }
+
+    return events;
   }
 
 // 빈 시간대 표시 위젯 - 빈칸으로 수정
@@ -812,8 +1176,11 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     String? dueStatus;
     if (task.dueDate != null) {
       final today = DateTime.now();
-      final dueDay = DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
-      final difference = dueDay.difference(DateTime(today.year, today.month, today.day)).inDays;
+      final dueDay = DateTime(
+          task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
+      final difference = dueDay
+          .difference(DateTime(today.year, today.month, today.day))
+          .inDays;
       daysLeft = difference;
 
       if (difference < 0) {
@@ -836,7 +1203,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         color: isCompleted ? Colors.grey.shade100 : taskColor.withOpacity(0.12),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isCompleted ? Colors.grey.shade300 : taskColor.withOpacity(0.5),
+          color: isCompleted ? Colors.grey.shade300 : taskColor.withOpacity(
+              0.5),
           width: 1,
         ),
         boxShadow: [
@@ -872,7 +1240,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          decoration: isCompleted ? TextDecoration.lineThrough : null,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : null,
                           color: isCompleted ? Colors.grey : Colors.black87,
                         ),
                       ),
@@ -900,11 +1270,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         activeColor: Colors.purple.shade400, // 보라색으로 변경
                         onChanged: (bool? value) {
                           setState(() {
-                            _taskDataService.updateTaskStatus(task, value ?? false);
+                            _taskDataService.updateTaskStatus(
+                                task, value ?? false);
                             updateProgress();
                           });
                           if (value == true) {
-                            _notificationService.showTaskCompletedNotification(task.title);
+                            _notificationService.showTaskCompletedNotification(
+                                task.title);
                           }
                         },
                       ),
@@ -915,7 +1287,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 const SizedBox(height: 8),
 
                 // 메모와 위치 정보 (가로로 배치)
-                if (task.memo != null && task.memo!.isNotEmpty || task.location != null && task.location!.isNotEmpty)
+                if (task.memo != null && task.memo!.isNotEmpty ||
+                    task.location != null && task.location!.isNotEmpty)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -936,7 +1309,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                               task.memo!,
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isCompleted ? Colors.grey : Colors.black87,
+                                color: isCompleted ? Colors.grey : Colors
+                                    .black87,
                               ),
                             ),
                           ),
@@ -962,14 +1336,16 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                               Icon(
                                 Icons.location_on,
                                 size: 14,
-                                color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
+                                color: isCompleted ? Colors.grey : Colors
+                                    .purple, // 보라색으로 변경
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 task.location!,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
+                                  color: isCompleted ? Colors.grey : Colors
+                                      .purple, // 보라색으로 변경
                                 ),
                               ),
                             ],
@@ -983,7 +1359,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 // 마감일 표시 (하단에 배치)
                 if (task.dueDate != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: daysLeft != null && daysLeft < 0
                           ? Colors.red.withOpacity(0.1)
@@ -1006,10 +1383,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          dueStatus ?? DateFormat('MM/dd').format(task.dueDate!),
+                          dueStatus ?? DateFormat('MM/dd').format(task
+                              .dueDate!),
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: daysLeft != null && daysLeft <= 1 ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: daysLeft != null && daysLeft <= 1
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: daysLeft != null && daysLeft < 0
                                 ? Colors.red
                                 : daysLeft != null && daysLeft == 0
@@ -1051,7 +1431,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     return null;
   }
-
 
 
   Widget _buildFloatingActionButton() {
@@ -1129,17 +1508,19 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
 
-
   void _generateAIPlanner() async {
     // Show loading indicator while processing
     setState(() {
       isLoading = true; // Add this variable to your state
     });
 
-    final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(
+        selectedDate);
 
     // Firebase에서 Calendar Event 가져오기 (시간 포함)
-    final eventsSnapshot = await FirebaseFirestore.instance.collection('events').get();
+    final eventsSnapshot = await FirebaseFirestore.instance
+        .collection('events')
+        .get();
     List<Map<String, dynamic>> calendarEvents = [];
 
     for (var doc in eventsSnapshot.docs) {
@@ -1151,20 +1532,27 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         calendarEvents.add({
           'title': data['title'],
           'startTime': data['startTime'] != null
-              ? '${data['startTime']['hour'].toString().padLeft(2, '0')}:${data['startTime']['minute'].toString().padLeft(2, '0')}'
+              ? '${data['startTime']['hour'].toString().padLeft(
+              2, '0')}:${data['startTime']['minute'].toString().padLeft(
+              2, '0')}'
               : null,
           'endTime': data['endTime'] != null
-              ? '${data['endTime']['hour'].toString().padLeft(2, '0')}:${data['endTime']['minute'].toString().padLeft(2, '0')}'
+              ? '${data['endTime']['hour'].toString().padLeft(
+              2, '0')}:${data['endTime']['minute'].toString().padLeft(2, '0')}'
               : null,
         });
       }
     }
 
-    final allTasksData = todoTasks.map((task) => {
+    final allTasksData = todoTasks.map((task) =>
+    {
       'title': task.title,
       'importance': task.importance ?? 1,
       'urgency': task.urgency ?? 1,
-      'dueDate': task.dueDate != null ? task.dueDate!.toIso8601String().split('T').first : "없음",
+      'dueDate': task.dueDate != null ? task.dueDate!
+          .toIso8601String()
+          .split('T')
+          .first : "없음",
     }).toList();
 
     if (allTasksData.isEmpty && calendarEvents.isEmpty) {
@@ -1199,7 +1587,22 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       final int priority = item['priority'] ?? 1;
 
       // Generate unique ID for new tasks if not provided
-      String taskId = item['id'] ?? DateTime.now().millisecondsSinceEpoch.toString() + '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
+      String taskId = item['id'] ?? DateTime
+          .now()
+          .millisecondsSinceEpoch
+          .toString() +
+          '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
+
+      DateTime? parsedDueDate;
+      if (item['dueDate'] != null && item['dueDate'] != '없음') {
+        try {
+          parsedDueDate = DateTime.parse(item['dueDate']);
+        } catch (e) {
+          print('날짜 파싱 오류: ${item['dueDate']} - $e');
+          // 오류 발생 시 null로 설정
+          parsedDueDate = null;
+        }
+      }
 
       final task = Todo_Task(
         id: taskId,
@@ -1216,7 +1619,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         location: item['location'],
         isCompleted: false,
         color: null,
-        dueDate: item['dueDate'] != null ? DateTime.parse(item['dueDate']) : null,
+        dueDate: parsedDueDate,
         notificationId: null,
         reminderMinutesBefore: null,
       );
@@ -1252,10 +1655,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   // 2. _generateLocalSchedule 함수 호출 오류 수정
-  Future<List<dynamic>> _getScheduleFromAI(
-      List<Map<String, dynamic>> tasks,
+  Future<List<dynamic>> _getScheduleFromAI(List<Map<String, dynamic>> tasks,
       List<Map<String, dynamic>> calendar) async {
-
     // 사용자 선호도 정보 가져오기
     Map<String, dynamic> userPreferences = await _getUserPreferences();
 
@@ -1264,13 +1665,16 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     print('Calendar sent to server: $calendar');
     print('User preferences: $userPreferences');
 
-    // 서버 URL 결정 (다양한 환경 지원)
+
     const List<String> possibleUrls = [
-      'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
-      'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
-      'http://127.0.0.1:5001',      // 로컬호스트
-      'http://localhost:5001'       // 로컬호스트 (이름)
+      'https://railwavve-production-68d4.up.railway.app',       // 안드로이드 에뮬레이터
+      'https://railwavve-production-68d4.up.railway.app/', // 서버 실제 IP (로컬 네트워크)
+      'https://railwavve-production-68d4.up.railway.app/',      // 로컬호스트
+      'https://railwavve-production-68d4.up.railway.app/'       // 로컬호스트 (이름)
     ];
+
+
+
 
     // 요청 데이터 준비
     final requestBody = json.encode({
@@ -1305,7 +1709,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             final schedule = data['schedule'];
 
             if (schedule != null && schedule is List) {
-              print('Successfully received schedule with ${schedule.length} items');
+              print('Successfully received schedule with ${schedule
+                  .length} items');
               return schedule;
             } else {
               print('Server returned empty or invalid schedule format');
@@ -1321,59 +1726,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     // 모든 연결 시도 실패 시 로컬 시뮬레이션
     print("All connection attempts failed. Using fallback local scheduling.");
-    return _generateLocalSchedule(tasks, calendar, userPreferences);  // 여기에 userPreferences 전달
+    return _generateLocalSchedule(
+        tasks, calendar, userPreferences); // 여기에 userPreferences 전달
   }
 
-  // 3. 로컬 대체 스케줄링 함수 수정 - 사용자 선호도 반영
   List<Map<String, dynamic>> _generateLocalSchedule(
       List<Map<String, dynamic>> tasks,
       List<Map<String, dynamic>> calendar,
-      Map<String, dynamic> userPreferences) {  // 매개변수 추가
-
+      Map<String, dynamic> userPreferences) {
     List<Map<String, dynamic>> schedule = [];
     Set<int> occupiedHours = {};
 
-    // 선호 시간대에 따른 시작 시간 조정
-    int startHour = 9; // 기본값
-    final preferredTimeOfDay = userPreferences['preferredTimeOfDay'];
-
-    if (preferredTimeOfDay == '아침') {
-      startHour = 7;
-    } else if (preferredTimeOfDay == '점심') {
-      startHour = 11;
-    } else if (preferredTimeOfDay == '저녁') {
-      startHour = 17;
-    } else if (preferredTimeOfDay == '밤') {
-      startHour = 20;
-    }
-
-    // 수면 시간에 따른 시간 제한 설정
-    int endHour = 22; // 기본값
-    final sleepSchedule = userPreferences['sleepSchedule'];
-
-    if (sleepSchedule.contains('PM 11:00 ~ AM 07:00')) {
-      endHour = 23;
-    } else if (sleepSchedule.contains('AM 07:00 ~ PM 03:00')) {
-      endHour = 19; // 오후 7시
-    } else if (sleepSchedule.contains('PM 03:00 ~ PM 11:00')) {
-      endHour = 15; // 오후 3시
-    }
-
-    // 휴식 빈도 설정
-    int breakInterval = 60; // 기본 1시간마다 (분 단위)
-    final breakFrequency = userPreferences['breakFrequency'];
-
-    if (breakFrequency == '30분마다') {
-      breakInterval = 30;
-    } else if (breakFrequency == '1시간마다') {
-      breakInterval = 60;
-    } else if (breakFrequency == '2시간마다') {
-      breakInterval = 120;
-    } else if (breakFrequency == '3시간이상') {
-      breakInterval = 180;
-    }
-
-    // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
+    // 캘린더 이벤트 먼저 추가 (고정 일정)
     for (var event in calendar) {
       if (event['startTime'] != null) {
         final startHour = int.parse(event['startTime'].split(':')[0]);
@@ -1390,7 +1754,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           'id': 'cal_${schedule.length}',
           'title': '(일정) ${event['title']}',
           'time': event['startTime'],
-          'endTime': event['endTime'] ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
+          'endTime': event['endTime'] ??
+              '${(startHour + 1).toString().padLeft(2, '0')}:00',
           'priority': 3, // 최우선
           'description': '캘린더 일정',
           'memo': '',
@@ -1399,43 +1764,24 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       }
     }
 
-    // 2. 작업 중요도/긴급도 기준 정렬
+    // 작업 중요도/긴급도 기준 정렬
     tasks.sort((a, b) {
       final aScore = (a['importance'] ?? 1) + (a['urgency'] ?? 1);
       final bScore = (b['importance'] ?? 1) + (b['urgency'] ?? 1);
       return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
     });
 
-    // 3. 휴식 시간 추가 (사용자 선호도 기반)
-    int currentWorkTime = 0;
-    List<int> breakHours = [];
-
-    for (int hour = startHour; hour < endHour; hour++) {
-      if (!occupiedHours.contains(hour)) {
-        currentWorkTime += 60; // 1시간 추가
-
-        if (currentWorkTime >= breakInterval) {
-          // 휴식 시간 추가
-          breakHours.add(hour);
-          currentWorkTime = 0; // 타이머 초기화
-        }
-      }
-    }
-
-    // 4. 남은 시간대에 작업 배치 (선호 시간대 고려)
-    int taskStartHour = startHour;
+    // 남은 시간대에 작업 배치
+    int taskStartHour = 9; // 기본 시작 시간
 
     for (var task in tasks) {
-      // 사용자 선호 시간대 내에서만 작업
-      if (taskStartHour >= endHour) break;
-
       // 사용 가능한 시간 찾기
-      while (occupiedHours.contains(taskStartHour) || breakHours.contains(taskStartHour)) {
+      while (occupiedHours.contains(taskStartHour)) {
         taskStartHour++;
-        if (taskStartHour >= endHour) break;
+        if (taskStartHour >= 21) break; // 최대 오후 9시까지
       }
 
-      if (taskStartHour >= endHour) break;
+      if (taskStartHour >= 21) break;
 
       // 중요도/긴급도에 따른 우선순위 설정
       final importance = task['importance'] ?? 1;
@@ -1456,24 +1802,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
       occupiedHours.add(taskStartHour);
       taskStartHour++;
-    }
-
-    // 5. 휴식 시간 일정 추가
-    for (int breakHour in breakHours) {
-      if (!occupiedHours.contains(breakHour)) {
-        schedule.add({
-          'id': 'break_${schedule.length}',
-          'title': '휴식 시간',
-          'time': '${breakHour.toString().padLeft(2, '0')}:00',
-          'endTime': '${(breakHour + 1).toString().padLeft(2, '0')}:00',
-          'priority': 1, // 낮은 우선순위
-          'description': '사용자 선호 휴식 간격: $breakFrequency',
-          'memo': '효율적인 업무를 위한 휴식 시간입니다.',
-          'location': '',
-        });
-
-        occupiedHours.add(breakHour);
-      }
     }
 
     // 시간순 정렬
@@ -1487,168 +1815,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 }
 
-
-// 로컬 대체 스케줄링 함수 수정 - 사용자 선호도 반영
-  List<Map<String, dynamic>> _generateLocalSchedule(
-      List<Map<String, dynamic>> tasks,
-      List<Map<String, dynamic>> calendar,
-      Map<String, dynamic> userPreferences) {
-
-    List<Map<String, dynamic>> schedule = [];
-    Set<int> occupiedHours = {};
-
-    // 선호 시간대에 따른 시작 시간 조정
-    int startHour = 9; // 기본값
-    final preferredTimeOfDay = userPreferences['preferredTimeOfDay'];
-
-    if (preferredTimeOfDay == '아침') {
-      startHour = 7;
-    } else if (preferredTimeOfDay == '점심') {
-      startHour = 11;
-    } else if (preferredTimeOfDay == '저녁') {
-      startHour = 17;
-    } else if (preferredTimeOfDay == '밤') {
-      startHour = 20;
-    }
-
-    // 수면 시간에 따른 시간 제한 설정
-    int endHour = 22; // 기본값
-    final sleepSchedule = userPreferences['sleepSchedule'];
-
-    if (sleepSchedule.contains('PM 11:00 ~ AM 07:00')) {
-      endHour = 23;
-    } else if (sleepSchedule.contains('AM 07:00 ~ PM 03:00')) {
-      endHour = 19; // 오후 7시
-    } else if (sleepSchedule.contains('PM 03:00 ~ PM 11:00')) {
-      endHour = 15; // 오후 3시
-    }
-
-    // 휴식 빈도 설정
-    int breakInterval = 60; // 기본 1시간마다 (분 단위)
-    final breakFrequency = userPreferences['breakFrequency'];
-
-    if (breakFrequency == '30분마다') {
-      breakInterval = 30;
-    } else if (breakFrequency == '1시간마다') {
-      breakInterval = 60;
-    } else if (breakFrequency == '2시간마다') {
-      breakInterval = 120;
-    } else if (breakFrequency == '3시간이상') {
-      breakInterval = 180;
-    }
-
-    // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
-    for (var event in calendar) {
-      if (event['startTime'] != null) {
-        final startHour = int.parse(event['startTime'].split(':')[0]);
-        final endHour = event['endTime'] != null
-            ? int.parse(event['endTime'].split(':')[0])
-            : startHour + 1;
-
-        // 시간대 차지 표시
-        for (int h = startHour; h <= endHour; h++) {
-          occupiedHours.add(h);
-        }
-
-        schedule.add({
-          'id': 'cal_${schedule.length}',
-          'title': '(일정) ${event['title']}',
-          'time': event['startTime'],
-          'endTime': event['endTime'] ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
-          'priority': 3, // 최우선
-          'description': '캘린더 일정',
-          'memo': '',
-          'location': event['location'] ?? '',
-        });
-      }
-    }
-
-    // 2. 작업 중요도/긴급도 기준 정렬
-    tasks.sort((a, b) {
-      final aScore = (a['importance'] ?? 1) + (a['urgency'] ?? 1);
-      final bScore = (b['importance'] ?? 1) + (b['urgency'] ?? 1);
-      return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
-    });
-
-    // 3. 휴식 시간 추가 (사용자 선호도 기반)
-    int currentWorkTime = 0;
-    List<int> breakHours = [];
-
-    for (int hour = startHour; hour < endHour; hour++) {
-      if (!occupiedHours.contains(hour)) {
-        currentWorkTime += 60; // 1시간 추가
-
-        if (currentWorkTime >= breakInterval) {
-          // 휴식 시간 추가
-          breakHours.add(hour);
-          currentWorkTime = 0; // 타이머 초기화
-        }
-      }
-    }
-
-    // 4. 남은 시간대에 작업 배치 (선호 시간대 고려)
-    int taskStartHour = startHour;
-
-    for (var task in tasks) {
-      // 사용자 선호 시간대 내에서만 작업
-      if (taskStartHour >= endHour) break;
-
-      // 사용 가능한 시간 찾기
-      while (occupiedHours.contains(taskStartHour) || breakHours.contains(taskStartHour)) {
-        taskStartHour++;
-        if (taskStartHour >= endHour) break;
-      }
-
-      if (taskStartHour >= endHour) break;
-
-      // 중요도/긴급도에 따른 우선순위 설정
-      final importance = task['importance'] ?? 1;
-      final urgency = task['urgency'] ?? 1;
-      final priority = importance > urgency ? importance : urgency;
-
-      schedule.add({
-        'id': 'task_${schedule.length}',
-        'title': task['title'],
-        'time': '${taskStartHour.toString().padLeft(2, '0')}:00',
-        'endTime': '${(taskStartHour + 1).toString().padLeft(2, '0')}:00',
-        'priority': priority,
-        'description': '중요도: $importance, 긴급도: $urgency',
-        'memo': '',
-        'location': '',
-        'dueDate': task['dueDate'],
-      });
-
-      occupiedHours.add(taskStartHour);
-      taskStartHour++;
-    }
-
-    // 5. 휴식 시간 일정 추가
-    for (int breakHour in breakHours) {
-      if (!occupiedHours.contains(breakHour)) {
-        schedule.add({
-          'id': 'break_${schedule.length}',
-          'title': '휴식 시간',
-          'time': '${breakHour.toString().padLeft(2, '0')}:00',
-          'endTime': '${(breakHour + 1).toString().padLeft(2, '0')}:00',
-          'priority': 1, // 낮은 우선순위
-          'description': '사용자 선호 휴식 간격: $breakFrequency',
-          'memo': '효율적인 업무를 위한 휴식 시간입니다.',
-          'location': '',
-        });
-
-        occupiedHours.add(breakHour);
-      }
-    }
-
-    // 시간순 정렬
-    schedule.sort((a, b) {
-      if (a['time'] == null) return 1;
-      if (b['time'] == null) return -1;
-      return a['time'].compareTo(b['time']);
-    });
-
-    return schedule;
-  }
 
 
 // 개선된 월 선택기 위젯
