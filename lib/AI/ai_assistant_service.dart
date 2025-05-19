@@ -118,25 +118,44 @@ class AIAssistantService {
         'isCompleted': task.isCompleted,
       }).toList();
 
-      // API 요청
-      final url = Uri.parse('http://127.0.0.1:5001/schedule');
+      // URL 목록 정의 (클래스 상단에 이미 정의되어 있으면 이 부분은 생략)
+      final List<String> possibleServerUrls = [
+        'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
+        'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
+        'http://127.0.0.1:5001',      // 로컬호스트
+        'http://localhost:5001'       // 로컬호스트 (이름)
+      ];
 
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'tasks': todosData,
-          'calendar': calendarData,
-        }),
-      );
+      // 각 URL에 시도
+      for (final serverUrl in possibleServerUrls) {
+        try {
+          final url = Uri.parse('$serverUrl/schedule');
+          print('서버 연결 시도: $url');
 
-      if (response.statusCode == 200) {
-        final scheduleSuggestions = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(scheduleSuggestions);
-      } else {
-        print('서버 오류: ${response.statusCode}');
-        return [];
+          final response = await http.post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'tasks': todosData,
+              'calendar': calendarData,
+            }),
+          ).timeout(const Duration(seconds: 5));
+
+          if (response.statusCode == 200) {
+            final scheduleSuggestions = jsonDecode(response.body);
+            return List<Map<String, dynamic>>.from(scheduleSuggestions);
+          } else {
+            print('$serverUrl 응답 오류: ${response.statusCode}');
+          }
+        } catch (e) {
+          print('$serverUrl 연결 시도 실패: $e');
+          // 다음 URL 시도
+        }
       }
+
+      // 모든 URL이 실패한 경우
+      print('서버 오류: 모든 연결 시도 실패');
+      return [];
     } catch (e) {
       print('AI 일정 추천 오류: $e');
       return [];

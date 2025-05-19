@@ -20,35 +20,65 @@ class SurveyScreen extends StatefulWidget {
 class _SurveyScreenState extends State<SurveyScreen> with SingleTickerProviderStateMixin {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Future<void> _saveUserData_() async {
-    String email = widget.param1!;
-    String password = widget.param2!;
+// survey_screen.dart에서 수집한 선호도 정보를 Firestore에 저장하기 위한 수정
 
-    if (email.isEmpty || password.isEmpty) {
-      print("이메일 또는 비밀번호를 입력하세요.");
+// saveUserData 함수 수정
+  Future<void> _saveUserData_() async {
+    String userId = widget.userId; // userId를 사용
+
+    if (userId.isEmpty) {
+      print("유효한 사용자 ID가 없습니다.");
       return;
     }
 
     try {
-      // Firestore에 저장할 사용자 데이터를 만들기
+      // Firestore에 저장할 사용자 데이터 준비
       Map<String, dynamic> userData = {
-        'email': email,
-        'password': password, // 보안상 실제 앱에서는 비밀번호를 해싱해서 저장해야 함!
-        'timestamp': FieldValue.serverTimestamp(),
+        'preferences': {}, // 사용자 선호도를 저장할 객체
+        'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      // 각 질문에 대한 선택지를 Firestore에 추가
-      for (int i = 0; i < questions.length; i++) {
-        String questionKey = 'question_${i + 1}'; // 질문의 고유 키 생성
-        userData[questionKey] = questions[i].value; // 선택된 값 저장
+      // 각 질문에 대한 선택지를 preferences 객체에 추가
+      Map<String, dynamic> preferences = {};
+
+      if (questions.length >= 1) {
+        preferences['preferredTimeOfDay'] = questions[0].value; // 활동 선호 시간대
       }
 
-      // Firestore에 데이터 추가
-      await _firestore.collection('user').add(userData);
+      if (questions.length >= 2) {
+        preferences['sleepSchedule'] = questions[1].value; // 수면 시간
+      }
 
-      print("사용자 데이터 저장 완료: 이메일 - $email");
+      if (questions.length >= 3) {
+        preferences['breakFrequency'] = questions[2].value; // 휴식 빈도
+      }
+
+      // 선호도 데이터 추가
+      userData['preferences'] = preferences;
+
+      // Firestore에 선호도 정보 업데이트
+      await _firestore.collection('user').doc(userId).update(userData);
+
+      print("사용자 선호도 저장 완료: userId - $userId");
     } catch (e) {
-      print('Firestore 오류: $e');
+      print('Firestore 선호도 저장 오류: $e');
+
+      try {
+        // 문서가 없는 경우를 대비해 set 시도
+        Map<String, dynamic> userData = {
+          'preferences': {
+            'preferredTimeOfDay': questions[0].value,
+            'sleepSchedule': questions[1].value,
+            'breakFrequency': questions[2].value,
+          },
+          'createdAt': FieldValue.serverTimestamp(),
+        };
+
+        await _firestore.collection('user').doc(userId).set(userData);
+        print("사용자 선호도 생성 완료: userId - $userId");
+      } catch (e2) {
+        print('Firestore 문서 생성 오류: $e2');
+      }
     }
   }
 

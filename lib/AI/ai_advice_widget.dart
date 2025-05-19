@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'ai_advice_service.dart';
+
 // AIAdviceWidget 클래스를 실제 위젯으로 변환
 class AIAdviceWidget extends StatefulWidget {
   final List<Map<String, dynamic>> calendar;
@@ -23,8 +25,13 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
   List<Map<String, dynamic>> messages = [];
   bool isLoading = true;
 
-  // 서버 주소는 환경에 맞게 변경 필요
-  static const String baseUrl = "http://127.0.0.1:5001"; // Flask 서버 주소
+
+  static final List<String> possibleServerUrls = [
+    'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
+    'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
+    'http://127.0.0.1:5001',      // 로컬호스트
+    'http://localhost:5001'       // 로컬호스트 (이름)
+  ];
 
   @override
   void initState() {
@@ -180,7 +187,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
       _printDebugData('/dashboard_message', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/dashboard_message'),
+        Uri.parse('$possibleServerUrls/dashboard_message'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -224,7 +231,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
       _printDebugData('/advice', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/advice'),
+        Uri.parse('$possibleServerUrls/advice'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -332,7 +339,7 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
   }
 
   // 기본 조언 메시지 생성 (서버 응답 실패 시)
-  List<Map<String, dynamic>> _getDefaultAdvice(
+  static List<Map<String, dynamic>> _getDefaultAdvice(
       List<Map<String, dynamic>> calendar,
       List<Map<String, dynamic>> tasks
       ) {
@@ -361,6 +368,67 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
       if (tomorrowEvents.isNotEmpty) {
         defaultMessages.add({
           "text": "내일 ${tomorrowEvents.length}개의 일정이 있어요. 미리 준비해보세요!",
+          "type": "reminder"
+        });
+      }
+
+      // 앞으로 7일 이내의 일정 확인
+      final now = DateTime.now();
+      final upcomingEvents = calendar.where((event) {
+        final eventDateStr = event["date"] as String?;
+        if (eventDateStr == null) return false;
+
+        final eventDate = DateTime.tryParse(eventDateStr);
+        if (eventDate == null) return false;
+
+        final difference = eventDate.difference(now).inDays;
+        return difference > 0 && difference <= 7;
+      }).toList();
+
+      // 여행 관련 일정 찾기
+      final travelEvents = upcomingEvents.where((event) {
+        final title = event["title"]?.toString().toLowerCase() ?? "";
+        return title.contains('여행') || title.contains('trip') || title.contains('vacation');
+      }).toList();
+
+      if (travelEvents.isNotEmpty) {
+        final travelEvent = travelEvents.first;
+        final title = travelEvent["title"] ?? "";
+        final dateStr = travelEvent["date"] as String?;
+        final eventDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+
+        String daysLeft = "";
+        if (eventDate != null) {
+          final difference = eventDate.difference(now).inDays;
+          daysLeft = "$difference일 후";
+        }
+
+        defaultMessages.add({
+          "text": "$daysLeft $title 예정이시군요! 여행 준비는 잘 되고 있나요? 숙소와 교통편은 확인하셨나요?",
+          "type": "reminder"
+        });
+      }
+
+      // 시험/테스트 관련 일정 찾기
+      final examEvents = upcomingEvents.where((event) {
+        final title = event["title"]?.toString().toLowerCase() ?? "";
+        return title.contains('시험') || title.contains('테스트') || title.contains('exam') || title.contains('test');
+      }).toList();
+
+      if (examEvents.isNotEmpty) {
+        final examEvent = examEvents.first;
+        final title = examEvent["title"] ?? "";
+        final dateStr = examEvent["date"] as String?;
+        final eventDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+
+        String daysLeft = "";
+        if (eventDate != null) {
+          final difference = eventDate.difference(now).inDays;
+          daysLeft = "$difference일 후";
+        }
+
+        defaultMessages.add({
+          "text": "$daysLeft $title 예정이시군요! 시험 공부는 계획대로 진행되고 있나요?",
           "type": "reminder"
         });
       }
@@ -396,6 +464,30 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
           "type": "alert"
         });
       }
+
+      // 공부 관련 할 일 확인
+      final studyTasks = tasks.where((task) {
+        final title = task["title"]?.toString().toLowerCase() ?? "";
+        return title.contains('공부') || title.contains('학습') || title.contains('study') ||
+            title.contains('모의고사') || title.contains('test');
+      }).toList();
+
+      if (studyTasks.isNotEmpty) {
+        final studyTask = studyTasks.first;
+        final title = studyTask["title"] ?? "";
+
+        if (title.toLowerCase().contains('모의고사')) {
+          defaultMessages.add({
+            "text": "$title가 계획되어 있네요. 몇 회차 모의고사인가요? 잘 준비되고 있나요?",
+            "type": "inquiry"
+          });
+        } else {
+          defaultMessages.add({
+            "text": "$title가 계획되어 있네요. 학습 계획은 잘 세우셨나요?",
+            "type": "inquiry"
+          });
+        }
+      }
     }
 
     // 기본 메시지가 없으면 추가
@@ -413,33 +505,70 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
 
     return defaultMessages;
   }
-
   // 키워드 기반 맞춤형 조언 생성 함수
-  List<Map<String, dynamic>> _generateKeywordBasedAdvice(
+  static List<Map<String, dynamic>> _generateKeywordBasedAdvice(
       List<Map<String, dynamic>> calendar,
       List<Map<String, dynamic>> tasks
       ) {
     final List<Map<String, dynamic>> contextualAdvice = [];
+    final now = DateTime.now();
 
     // 캘린더에서 키워드 기반 조언
     for (final event in calendar) {
       final title = event['title'].toString().toLowerCase();
+      final eventDate = event['date'] != null ? DateTime.tryParse(event['date'].toString()) : null;
 
-      // 여행 관련 일정
-      if (title.contains('여행') || title.contains('trip')) {
+      // 날짜 차이 계산 (며칠 전/후인지)
+      int daysDifference = 0;
+      if (eventDate != null) {
+        daysDifference = eventDate.difference(now).inDays;
+      }
+
+      // 여행 관련 일정 - 더 다양한 목적지 검색 및 여행 기간에 따른 조언
+      if (title.contains('여행') || title.contains('trip') || title.contains('vacation')) {
         String destination = '';
 
-        if (title.contains('일본')) destination = '일본';
-        else if (title.contains('미국')) destination = '미국';
-        else if (title.contains('유럽')) destination = '유럽';
-        else if (title.contains('제주')) destination = '제주';
-        else if (title.contains('부산')) destination = '부산';
+        // 더 많은 여행지 인식
+        final destinations = {
+          '일본': ['일본', '도쿄', '오사카', '교토', '후쿠오카', '홋카이도'],
+          '미국': ['미국', '뉴욕', '로스앤젤레스', 'la', '시애틀', '샌프란시스코', '하와이'],
+          '유럽': ['유럽', '프랑스', '영국', '이탈리아', '스페인', '독일'],
+          '제주': ['제주', '제주도'],
+          '부산': ['부산'],
+          '대만': ['대만', '타이페이', '타이완'],
+          '홍콩': ['홍콩'],
+          '호주': ['호주', '시드니', '멜버른']
+        };
+
+        // 목적지 확인
+        for (var key in destinations.keys) {
+          for (var keyword in destinations[key]!) {
+            if (title.contains(keyword)) {
+              destination = key;
+              break;
+            }
+          }
+          if (destination.isNotEmpty) break;
+        }
 
         if (destination.isNotEmpty) {
-          contextualAdvice.add({
-            "text": "$destination 여행 준비는 잘 되고 있나요? 호텔과 항공권은 예약하셨나요?",
-            "type": "suggestion"
-          });
+          // 여행 날짜에 따른 맞춤 조언
+          if (daysDifference >= 0 && daysDifference <= 3) {
+            contextualAdvice.add({
+              "text": "$destination 여행이 ${daysDifference == 0 ? '오늘이네요! 여권, 항공권, 호텔 예약 정보를 확인하셨나요?' : '$daysDifference일 후에 있어요! 마지막 준비물을 체크해보세요.'}",
+              "type": "travel_reminder"
+            });
+          } else if (daysDifference > 3 && daysDifference <= 14) {
+            contextualAdvice.add({
+              "text": "$daysDifference일 후 $destination 여행 예정이시군요! 여행 준비물 목록과 현지 날씨를 확인해보세요.",
+              "type": "travel_preparation"
+            });
+          } else if (daysDifference > 14) {
+            contextualAdvice.add({
+              "text": "$destination 여행 계획 중이시군요! 숙소와 항공권 예약은 완료하셨나요?",
+              "type": "travel_planning"
+            });
+          }
         } else {
           contextualAdvice.add({
             "text": "여행 준비는 잘 되고 있나요? 필요한 준비물 목록을 만들어보세요!",
@@ -448,50 +577,178 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
         }
       }
 
-      // 미팅/회의 관련 일정
+      // 미팅/회의 관련 일정 - 회의 시기에 따른 조언
       else if (title.contains('회의') || title.contains('미팅') || title.contains('meeting')) {
+        String advice = "다가오는 회의 준비는 잘 되고 있나요?";
+
+        // 오늘 회의라면
+        if (daysDifference == 0) {
+          advice = "오늘 회의가 있습니다. 필요한 자료는 모두 준비되었나요? 시간에 늦지 않도록 준비해주세요.";
+        }
+        // 내일 회의라면
+        else if (daysDifference == 1) {
+          advice = "내일 회의가 있습니다. 발표 자료나 회의 안건을 미리 점검해보세요.";
+        }
+
         contextualAdvice.add({
-          "text": "다가오는 회의 준비는 잘 되고 있나요? 필요한 자료를 미리 준비해두세요!",
+          "text": advice,
           "type": "reminder"
         });
       }
 
-      // 시험 관련 일정
-      else if (title.contains('시험') || title.contains('테스트') || title.contains('exam')) {
-        contextualAdvice.add({
-          "text": "시험 준비는 잘 되고 있나요? 핵심 주제를 중심으로 복습 계획을 세워보세요!",
-          "type": "suggestion"
-        });
+      // 시험/모의고사 관련 일정 - 시험 유형 및 기간에 따른 조언
+      else if (title.contains('시험') || title.contains('테스트') || title.contains('모의고사') ||
+          title.contains('exam') || title.contains('test')) {
+
+        // 시험 유형 파악
+        String examType = '';
+        if (title.contains('모의고사')) examType = '모의고사';
+        else if (title.contains('수능')) examType = '수능';
+        else if (title.contains('중간고사')) examType = '중간고사';
+        else if (title.contains('기말고사')) examType = '기말고사';
+        else if (title.contains('토익')) examType = '토익';
+        else if (title.contains('토플')) examType = '토플';
+        else if (title.contains('자격증')) examType = '자격증 시험';
+        else examType = '시험';
+
+        // 시험 날짜에 따른 맞춤 조언
+        if (daysDifference == 0) {
+          contextualAdvice.add({
+            "text": "오늘이 $examType 날이에요! 컨디션 관리에 신경 쓰시고, 미리 시험장 위치와 준비물을 확인하세요.",
+            "type": "exam_day"
+          });
+        } else if (daysDifference > 0 && daysDifference <= 7) {
+          contextualAdvice.add({
+            "text": "$examType이 $daysDifference일 남았습니다. 오답 노트와 핵심 내용 위주로 마무리 복습을 진행하세요.",
+            "type": "exam_preparation"
+          });
+        } else if (daysDifference > 7 && daysDifference <= 30) {
+          contextualAdvice.add({
+            "text": "$examType까지 약 ${(daysDifference / 7).round()}주 남았습니다. 취약 영역을 중점적으로 공략하고 정기적인 복습 일정을 세워보세요.",
+            "type": "exam_planning"
+          });
+        }
       }
 
-      // 생일 관련 일정
-      else if (title.contains('생일') || title.contains('birthday')) {
-        contextualAdvice.add({
-          "text": "생일 축하 메시지나 선물 준비는 잘 되고 있나요?",
-          "type": "reminder"
-        });
+      // 생일/기념일 관련 일정
+      else if (title.contains('생일') || title.contains('기념일') || title.contains('anniversary')) {
+        // 오늘이 생일이라면
+        if (daysDifference == 0) {
+          if (title.contains('내') || title.contains('my')) {
+            contextualAdvice.add({
+              "text": "오늘은 당신의 생일이군요! 🎂 행복한 하루 되세요. 특별한 계획이 있으신가요?",
+              "type": "celebration"
+            });
+          } else {
+            contextualAdvice.add({
+              "text": "오늘은 누군가의 생일이군요! 축하 메시지를 보내시거나 축하 전화를 드려보세요.",
+              "type": "reminder"
+            });
+          }
+        }
+        // 생일이 일주일 이내라면
+        else if (daysDifference > 0 && daysDifference <= 7) {
+          contextualAdvice.add({
+            "text": "곧 생일이 다가오네요. 선물이나 축하 준비는 하셨나요?",
+            "type": "reminder"
+          });
+        }
       }
     }
 
     // 할 일에서 키워드 기반 조언
     for (final task in tasks) {
       final title = task['title'].toString().toLowerCase();
+      final isCompleted = task['isCompleted'] == true;
+      final dueDate = task['dueDate'] != null && task['dueDate'] != '없음'
+          ? DateTime.tryParse(task['dueDate'].toString())
+          : null;
+
+      // 완료된 할 일은 건너뛰기
+      if (isCompleted) continue;
+
+      // 날짜 차이 계산
+      int daysDifference = 0;
+      if (dueDate != null) {
+        daysDifference = dueDate.difference(now).inDays;
+      }
+
+      // 모의고사/시험 대비 공부 관련
+      if (title.contains('모의고사') || title.contains('모고') ||
+          (title.contains('공부') && (title.contains('시험') || title.contains('test')))) {
+
+        contextualAdvice.add({
+          "text": "모의고사 대비 계획을 위한 시간 관리가 중요합니다. 과목별 취약점 분석과 오답 정리를 통한 효율적인 학습을 추천드립니다.",
+          "type": "exam_preparation"
+        });
+
+        // 모의고사 유형 감지 시도
+        if (title.contains('수능')) {
+          contextualAdvice.add({
+            "text": "수능 대비 모의고사는 꾸준한 실전 연습이 중요합니다. 오답 노트 정리 시간도 반드시 확보하세요.",
+            "type": "exam_strategy"
+          });
+        }
+        break;  // 중복 메시지 방지
+      }
 
       // 마감일이 가까운 과제
-      if ((title.contains('과제') || title.contains('숙제') || title.contains('assignment')) &&
-          task['dueDate'] != null && task['dueDate'] != '없음') {
-        contextualAdvice.add({
-          "text": "과제 마감일이 다가오고 있어요! 시간 관리에 유의하세요.",
-          "type": "alert"
-        });
+      else if ((title.contains('과제') || title.contains('숙제') || title.contains('assignment')) &&
+          dueDate != null) {
+
+        // 마감일에 따른 조언
+        if (daysDifference == 0) {
+          contextualAdvice.add({
+            "text": "오늘이 과제 마감일입니다! 최종 점검 후 제출하세요.",
+            "type": "alert"
+          });
+        }
+        else if (daysDifference == 1) {
+          contextualAdvice.add({
+            "text": "과제 마감일이 내일입니다. 완성도를 높이기 위한 최종 검토를 진행하세요.",
+            "type": "alert"
+          });
+        }
+        else if (daysDifference > 1 && daysDifference <= 3) {
+          contextualAdvice.add({
+            "text": "과제 마감이 ${daysDifference}일 남았습니다. 작업 속도를 높여 완성도를 챙기세요.",
+            "type": "alert"
+          });
+        }
         break;  // 중복 메시지 방지
       }
 
       // 프로젝트 관련 할 일
       else if (title.contains('프로젝트') || title.contains('project')) {
+        // 마감일이 있는 경우
+        if (dueDate != null && daysDifference >= 0 && daysDifference <= 7) {
+          contextualAdvice.add({
+            "text": "프로젝트 마감이 ${daysDifference}일 남았습니다. 주요 마일스톤을 점검하고 팀원들과 진행 상황을 공유하세요.",
+            "type": "suggestion"
+          });
+        } else {
+          contextualAdvice.add({
+            "text": "프로젝트 진행 상황을 체크해보세요. 계획대로 진행되고 있나요?",
+            "type": "suggestion"
+          });
+        }
+        break;  // 중복 메시지 방지
+      }
+
+      // 운동 관련 할 일
+      else if (title.contains('운동') || title.contains('헬스') || title.contains('workout') || title.contains('gym')) {
         contextualAdvice.add({
-          "text": "프로젝트 진행 상황을 체크해보세요. 계획대로 진행되고 있나요?",
-          "type": "suggestion"
+          "text": "운동 계획이 있군요! 규칙적인 운동 습관을 위한 일정 관리가 중요합니다. 운동 전후 충분한 스트레칭도 잊지 마세요.",
+          "type": "health_tip"
+        });
+        break;  // 중복 메시지 방지
+      }
+
+      // 독서 관련 할 일
+      else if (title.contains('독서') || title.contains('책') || title.contains('읽기') || title.contains('reading') || title.contains('book')) {
+        contextualAdvice.add({
+          "text": "독서 시간을 계획하셨군요. 조용한 환경에서 집중해서 읽으면 더 효과적일 거예요. 독서 노트를 작성해보는 것도 좋은 방법입니다.",
+          "type": "hobby_suggestion"
         });
         break;  // 중복 메시지 방지
       }
@@ -748,12 +1005,13 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
     }
   }
 
-  // 추가: 챗봇 대화 API
+// 추가: 챗봇 대화 API
   Future<Map<String, dynamic>> chatWithAssistant({
     required String message,
     required List<Map<String, dynamic>> calendar,
     required List<Map<String, dynamic>> tasks,
     List<Map<String, dynamic>>? history,
+    String? action,
   }) async {
     try {
       final requestData = {
@@ -762,34 +1020,57 @@ class _AIAdviceWidgetState extends State<AIAdviceWidget> {
           "calendar": _sanitizeCalendarData(calendar),
           "tasks": _sanitizeTaskData(tasks),
         },
-        "history": history ?? []
+        "history": history ?? [],
+        "action": action,
       };
 
       _printDebugData('/chatbot', requestData);
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/chatbot'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(requestData),
-      );
+      // 각 URL에 시도
+      Exception? lastException;
+      for (final serverUrl in possibleServerUrls) {
+        try {
+          final endpointUrl = "$serverUrl/chatbot";
+          final response = await http.post(
+            Uri.parse(endpointUrl),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode(requestData),
+          ).timeout(const Duration(seconds: 5)); // 5초 타임아웃 추가
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        print('챗봇 응답: $data');
-        return data;
-      } else {
-        print("서버 오류(챗봇): ${response.statusCode} - ${response.body}");
-        return {
-          "response": "죄송합니다. 서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-          "actions": [],
-          "timestamp": DateTime.now().toIso8601String()
-        };
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            print('챗봇 응답: $data');
+
+            // options 필드 추가
+            if (!data.containsKey('options')) {
+              data['options'] = AIAdviceService.generateRecommendationOptions(calendar, tasks);
+            }
+
+            return data;
+          } else {
+            print("서버 오류($serverUrl): ${response.statusCode} - ${response.body}");
+          }
+        } catch (e) {
+          lastException = e as Exception?;
+          print("$serverUrl 연결 시도 실패: $e");
+          // 다음 URL 시도
+        }
       }
+
+      // 모든 서버 연결 실패 시
+      print("모든 서버 연결 실패. 마지막 오류: $lastException");
+      return {
+        "response": "죄송합니다. 서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        "actions": [],
+        "options": AIAdviceService.generateRecommendationOptions(calendar, tasks),
+        "timestamp": DateTime.now().toIso8601String()
+      };
     } catch (e) {
       print("통신 오류(챗봇): $e");
       return {
         "response": "죄송합니다. 통신 오류가 발생했습니다. 네트워크 연결을 확인해주세요.",
         "actions": [],
+        "options": AIAdviceService.generateRecommendationOptions(calendar, tasks),
         "timestamp": DateTime.now().toIso8601String()
       };
     }

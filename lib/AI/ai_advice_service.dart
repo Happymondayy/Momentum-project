@@ -1,10 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AIAdviceService {
-  // 서버 주소는 환경에 맞게 변경 필요
-  static const String baseUrl = "http://127.0.0.1:5001"; // Flask 서버 주소
-  static const String geminiApiEndpoint = "$baseUrl/gemini"; // Gemini API 엔드포인트
+// 대신 가능한 URL 목록 정의:
+  static final List<String> possibleServerUrls = [
+    'http://10.0.2.2:5001',       // 안드로이드 에뮬레이터
+    'http://192.168.219.110:5001', // 서버 실제 IP (로컬 네트워크)
+    'http://127.0.0.1:5001',      // 로컬호스트
+    'http://localhost:5001'       // 로컬호스트 (이름)
+  ];
+
+// API 엔드포인트 접미사 정의
+  static const String geminiEndpointPath = "/gemini";
+
+// getGeminiUrl() 헬퍼 메서드 추가
+  static String getGeminiEndpoint(String baseUrl) {
+    return "$baseUrl$geminiEndpointPath";
+  }
 
   // 디버깅용 - 데이터 출력
   static void _printDebugData(String endpoint, Map<String, dynamic> data) {
@@ -12,15 +25,137 @@ class AIAdviceService {
     print('데이터: ${jsonEncode(data)}');
   }
 
-  // Gemini API를 통한 AI 어시스턴트와 대화
+  // 사용자 닉네임 가져오기 함수
+  static Future<String> getUserNickname() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      return prefs.getString('nickname') ?? '사용자';
+    } catch (e) {
+      print('닉네임 로드 오류: $e');
+      return '사용자';
+    }
+  }
+  // 추천 옵션 카테고리 생성
+  static List<Map<String, dynamic>> generateRecommendationOptions(
+      List<Map<String, dynamic>> calendar,
+      List<Map<String, dynamic>> tasks) {
+
+    // 기본 빠른 액션 옵션
+    final options = [
+      {
+        "text": "오늘의 추천 일정",
+        "action": "suggest_schedule",
+        "icon": "calendar"
+      },
+      {
+        "text": "빈 시간 활용하기",
+        "action": "free_time",
+        "icon": "time"
+      },
+      {
+        "text": "시간 관리 팁",
+        "action": "time_tips",
+        "icon": "bulb"
+      }
+    ];
+
+    // 사용자 일정과 할 일에서 키워드 검색
+    bool hasStudyTask = false;
+    bool hasTravelPlan = false;
+    bool hasWorkoutPlan = false;
+    bool hasExam = false;
+    String travelDestination = "";
+
+    // 할 일에서 키워드 확인
+    for (var task in tasks) {
+      final title = task['title'].toString().toLowerCase();
+
+      if (title.contains('공부') || title.contains('학습') || title.contains('study') ||
+          title.contains('과제') || title.contains('숙제')) {
+        hasStudyTask = true;
+      }
+
+      if (title.contains('모의고사') || title.contains('시험') ||
+          title.contains('exam') || title.contains('test')) {
+        hasExam = true;
+      }
+
+      if (title.contains('운동') || title.contains('workout') ||
+          title.contains('헬스') || title.contains('exercise')) {
+        hasWorkoutPlan = true;
+      }
+    }
+
+    // 일정에서 키워드 확인
+    for (var event in calendar) {
+      final title = event['title'].toString().toLowerCase();
+
+      // 여행 관련 키워드 확인 및 목적지 추출
+      if (title.contains('여행') || title.contains('trip') || title.contains('vacation')) {
+        hasTravelPlan = true;
+
+        // 여행지 추출 시도
+        final List<String> destinations = ['일본', '미국', '유럽', '제주', '부산', '서울', '대만', '홍콩', '호주'];
+        for (var dest in destinations) {
+          if (title.contains(dest.toLowerCase())) {
+            travelDestination = dest;
+            break;
+          }
+        }
+      }
+    }
+
+    // 사용자 맞춤 옵션 추가
+    if (hasStudyTask) {
+      options.add({
+        "text": "공부 계획 세우기",
+        "action": "study_plan",
+        "icon": "book"
+      });
+    }
+
+    if (hasExam) {
+      options.add({
+        "text": "모의고사 대비 계획",
+        "action": "exam_prep",
+        "icon": "school"
+      });
+    }
+
+    if (hasTravelPlan) {
+      options.add({
+        "text": travelDestination.isNotEmpty ?
+        "$travelDestination 여행 준비물" : "여행 준비 체크리스트",
+        "action": "travel_checklist",
+        "icon": "flight"
+      });
+    }
+
+    if (hasWorkoutPlan) {
+      options.add({
+        "text": "운동 루틴 추천",
+        "action": "workout_routine",
+        "icon": "fitness"
+      });
+    }
+
+    return options;
+  }
+
+
+// Gemini API를 통한 AI 어시스턴트와 대화
   static Future<Map<String, dynamic>> chatWithAssistant({
     required String message,
     required List<Map<String, dynamic>> calendar,
     required List<Map<String, dynamic>> tasks,
     required List<Map<String, dynamic>> history,
     String? date,
+    String? action,
   }) async {
     try {
+      // 사용자 닉네임 가져오기
+      final nickname = await getUserNickname();
+
       // 요청할 데이터 준비
       final requestData = {
         "message": message,
@@ -28,38 +163,56 @@ class AIAdviceService {
         "tasks": tasks,
         "history": history,
         "date": date ?? DateTime.now().toString().split(' ')[0], // YYYY-MM-DD 형식
-        "preferences": {} // 나중에 사용자 설정 추가 가능
+        "preferences": {}, // 나중에 사용자 설정 추가 가능
+        "nickname": nickname,
+        "action": action // 선택한 액션 유형 (말풍선 선택 시)
       };
 
       // 디버깅
       _printDebugData('/gemini', requestData);
 
-      final response = await http.post(
-        Uri.parse(geminiApiEndpoint),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(requestData),
-      );
+      // 각 URL에 시도하기
+      Exception? lastException;
+      for (final serverUrl in possibleServerUrls) {
+        try {
+          final geminiEndpoint = "$serverUrl/gemini";
+          print('서버 연결 시도: $geminiEndpoint');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        print('Gemini 응답: $data');
+          final response = await http.post(
+            Uri.parse(geminiEndpoint),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode(requestData),
+          ).timeout(const Duration(seconds: 5)); // 5초 시간제한 추가
 
-        // 기본 응답 구조 확인
-        if (!data.containsKey('response')) {
-          return {
-            "response": "죄송합니다. 서버 응답에 문제가 있습니다. 다시 시도해주세요.",
-            "actions": []
-          };
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            print('Gemini 응답: $data');
+
+            // 기본 응답 구조 확인
+            if (!data.containsKey('response')) {
+              return {
+                "response": "죄송합니다. 서버 응답에 문제가 있습니다. 다시 시도해주세요.",
+                "actions": []
+              };
+            }
+
+            return {
+              "response": data['response'],
+              "actions": List<Map<String, dynamic>>.from(data['actions'] ?? []),
+            };
+          } else {
+            print("서버 오류($serverUrl): ${response.statusCode} - ${response.body}");
+          }
+        } catch (e) {
+          lastException = e as Exception?;
+          print("$serverUrl 연결 시도 실패: $e");
+          // 다음 URL 시도를 위해 계속 진행
         }
-
-        return {
-          "response": data['response'],
-          "actions": List<Map<String, dynamic>>.from(data['actions'] ?? []),
-        };
-      } else {
-        print("서버 오류(Gemini): ${response.statusCode} - ${response.body}");
-        return _getFallbackResponse(message, calendar, tasks);
       }
+
+      // 모든 URL이 실패한 경우
+      print("서버 오류(Gemini): 모든 연결 시도 실패. 마지막 오류: $lastException");
+      return _getFallbackResponse(message, calendar, tasks);
     } catch (e) {
       print("통신 오류(Gemini): $e");
       return _getFallbackResponse(message, calendar, tasks);
@@ -86,7 +239,7 @@ class AIAdviceService {
       _printDebugData('/recommend_time_slots', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/recommend_time_slots'),
+        Uri.parse('$possibleServerUrls/recommend_time_slots'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -133,7 +286,7 @@ class AIAdviceService {
       _printDebugData('/recommend_tasks', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/recommend_tasks'),
+        Uri.parse('$possibleServerUrls/recommend_tasks'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -318,7 +471,7 @@ class AIAdviceService {
       _printDebugData('/advice', requestData);
 
       final response = await http.post(
-        Uri.parse('$baseUrl/advice'),
+        Uri.parse('$possibleServerUrls/advice'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       );
@@ -1132,7 +1285,8 @@ class AIAdviceService {
     // 최종 응답 반환
     return {
       "response": response,
-      "actions": actions
+      "actions": actions,
+      "options": generateRecommendationOptions(calendar, tasks)
     };
   }
 }

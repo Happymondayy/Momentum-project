@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/AI/chat_service.dart';
+import 'package:momentum_planner/AI/ai_advice_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore import 추가
+import 'package:momentum_planner/Calendar/models/event.dart'; // Event 모델 import
+import 'package:uuid/uuid.dart'; // UUID 생성을 위한 패키지 추가
 
 class ChatScreen extends StatefulWidget {
   final List<Map<String, dynamic>> calendarData;
   final List<Map<String, dynamic>> todoData;
   final String userId;
+  final Function(Map<String, dynamic>) onEventAdded; // 이벤트 추가 콜백
+  final Function(String) onEventDeleted; // 이벤트 삭제 콜백
 
   const ChatScreen({
     Key? key,
     required this.calendarData,
     required this.todoData,
     required this.userId,
+    required this.onEventAdded,
+    required this.onEventDeleted,
   }) : super(key: key);
 
   @override
@@ -21,9 +29,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _quickOptions = [];
   bool _isLoading = false;
   bool _isOfflineMode = false;
   late ChatService _chatService;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Uuid _uuid = Uuid();
 
   @override
   void initState() {
@@ -42,17 +53,50 @@ class _ChatScreenState extends State<ChatScreen> {
       // 간단한 테스트 메시지로 서비스 연결 상태 확인
       final testResponse = await _chatService.generateOfflineResponse("테스트");
 
+      // 빠른 옵션(말풍선) 생성
+      _quickOptions = AIAdviceService.generateRecommendationOptions(
+          widget.calendarData,
+          widget.todoData
+      );
+
       setState(() {
         _isOfflineMode = false;
         _isLoading = false;
       });
 
-      _addSystemMessage("안녕하세요! 일정과 할 일 관리를 도와드릴 AI 비서입니다. 무엇을 도와드릴까요?");
+      // 사용자 닉네임 가져와서 인사말에 포함
+      String nickname = '사용자'; // 기본값
+      try {
+        nickname = await AIAdviceService.getUserNickname();
+      } catch (e) {
+        print('닉네임 로드 오류: $e');
+      }
+
+      _addSystemMessage("${nickname}님 안녕하세요! FocusMate입니다. 무엇을 도와드릴까요?");
     } catch (e) {
       print('초기화 오류: $e');
 
       // 오류 발생 시 오프라인 모드 활성화
       _chatService = ChatService(userId: widget.userId);
+
+      // 오프라인 모드에서도 기본 옵션 제공
+      _quickOptions = [
+        {
+          "text": "오늘의 추천 일정",
+          "action": "suggest_schedule",
+          "icon": "calendar"
+        },
+        {
+          "text": "빈 시간 활용하기",
+          "action": "free_time",
+          "icon": "time"
+        },
+        {
+          "text": "시간 관리 팁",
+          "action": "time_tips",
+          "icon": "bulb"
+        }
+      ];
 
       setState(() {
         _isOfflineMode = true;
@@ -140,6 +184,11 @@ class _ChatScreenState extends State<ChatScreen> {
           'actions': response['actions'] ?? [],
         });
         _isLoading = false;
+
+        // 새로운 추천 옵션 업데이트
+        if (response['options'] != null) {
+          _quickOptions = List<Map<String, dynamic>>.from(response['options']);
+        }
       });
 
       _scrollToBottom();
@@ -165,6 +214,73 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // 빠른 옵션 클릭 처리 함수 추가
+  void _handleQuickOptionTap(Map<String, dynamic> option) async {
+    final action = option['action'];
+
+    if (action != null) {
+      _addUserMessage(option['text']);
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        Map<String, dynamic> response;
+
+        if (_isOfflineMode) {
+          response = _chatService.generateOfflineResponse(option['text']);
+        } else {
+          response = await _chatService.chatWithAssistant(
+            message: option['text'],
+            calendar: widget.calendarData,
+            tasks: widget.todoData,
+            history: _messages,
+            action: action,
+          ).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () {
+                setState(() {
+                  _isOfflineMode = true;
+                });
+                return _chatService.generateOfflineResponse(option['text']);
+              }
+          );
+        }
+
+        setState(() {
+          _messages.add({
+            'role': 'assistant',
+            'content': response['response'],
+            'actions': response['actions'] ?? [],
+          });
+
+          _isLoading = false;
+
+          // 새로운 추천 옵션 업데이트
+          if (response['options'] != null) {
+            _quickOptions = List<Map<String, dynamic>>.from(response['options']);
+          }
+        });
+
+        _scrollToBottom();
+
+        if (response['actions'] != null && (response['actions'] as List).isNotEmpty) {
+          _processActions(response['actions']);
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+          _messages.add({
+            'role': 'assistant',
+            'content': '죄송합니다. 요청을 처리하는 중 오류가 발생했습니다.',
+          });
+        });
+        print('빠른 옵션 처리 오류: $e');
+      }
+    }
+  }
+
   // 액션 처리 함수
   void _processActions(List<dynamic> actions) {
     try {
@@ -177,20 +293,12 @@ class _ChatScreenState extends State<ChatScreen> {
           if (actionType == 'add_task') {
             // 일정 추가 로직
             print('일정 추가 액션: $actionData');
-            // 여기에 실제 일정 추가 구현
-            // 예: TaskDataService().addTask(actionData);
-
-            // 추가 성공 메시지
-            _addSystemMessage("'${actionData['title']}' 일정이 추가되었습니다.");
+            _addEvent(actionData);
           }
           else if (actionType == 'delete_task') {
             // 일정 삭제 로직
             print('일정 삭제 액션: $actionData');
-            // 여기에 실제 일정 삭제 구현
-            // 예: TaskDataService().deleteTask(actionData);
-
-            // 삭제 성공 메시지
-            _addSystemMessage("'${actionData['title']}' 일정이 삭제되었습니다.");
+            _deleteEvent(actionData);
           }
           else if (actionType == 'recommend_task') {
             // 일정 추천 로직
@@ -204,6 +312,143 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       print('액션 처리 오류: $e');
       // 오류가 있어도 채팅은 계속 진행
+    }
+  }
+
+  // 일정 추가 함수
+  Future<void> _addEvent(Map<String, dynamic> eventData) async {
+    try {
+      // 필수 데이터 확인
+      if (eventData['title'] == null || eventData['title'].toString().isEmpty) {
+        _addSystemMessage("일정 추가에 실패했습니다. 제목이 없습니다.");
+        return;
+      }
+
+      // 날짜 및 시간 처리
+      String date = eventData['date'] ?? DateTime.now().toString().split(' ')[0];
+      String? startTimeStr = eventData['time'];
+      String? endTimeStr = eventData['endTime'];
+
+      // 시간 문자열을 TimeOfDay로 변환
+      TimeOfDay? startTime;
+      TimeOfDay? endTime;
+
+      if (startTimeStr != null && startTimeStr.isNotEmpty) {
+        final timeParts = startTimeStr.split(':');
+        if (timeParts.length >= 2) {
+          startTime = TimeOfDay(
+            hour: int.parse(timeParts[0]),
+            minute: int.parse(timeParts[1].split(' ')[0]),
+          );
+        }
+      }
+
+      if (endTimeStr != null && endTimeStr.isNotEmpty) {
+        final timeParts = endTimeStr.split(':');
+        if (timeParts.length >= 2) {
+          endTime = TimeOfDay(
+            hour: int.parse(timeParts[0]),
+            minute: int.parse(timeParts[1].split(' ')[0]),
+          );
+        }
+      } else if (startTime != null && eventData['duration'] != null) {
+        // 시작 시간 + 지속 시간으로 종료 시간 계산
+        final durationParts = eventData['duration'].toString().split(':');
+        if (durationParts.length >= 2) {
+          final durationHours = int.parse(durationParts[0]);
+          final durationMinutes = int.parse(durationParts[1]);
+
+          final totalMinutes = startTime.hour * 60 + startTime.minute + durationHours * 60 + durationMinutes;
+          endTime = TimeOfDay(
+            hour: (totalMinutes ~/ 60) % 24,
+            minute: totalMinutes % 60,
+          );
+        }
+      }
+
+      // DateTime 객체 생성
+      final dateComponents = date.split('-');
+      if (dateComponents.length < 3) {
+        _addSystemMessage("일정 추가에 실패했습니다. 날짜 형식이 올바르지 않습니다.");
+        return;
+      }
+
+      final eventDate = DateTime(
+        int.parse(dateComponents[0]),
+        int.parse(dateComponents[1]),
+        int.parse(dateComponents[2]),
+      );
+
+      // 이벤트 ID 생성
+      final eventId = _uuid.v4();
+
+      // Firestore에 저장할 데이터 준비
+      final eventDocData = {
+        'id': eventId,
+        'userId': widget.userId,
+        'title': eventData['title'],
+        'date': Timestamp.fromDate(eventDate),
+        'startTime': startTime != null ? '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}' : null,
+        'endTime': endTime != null ? '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}' : null,
+        'location': eventData['location'] ?? '',
+        'description': eventData['description'] ?? eventData['memo'] ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'color': eventData['color'] ?? '#9D8CFF', // 기본 색상
+        'isCompleted': false,
+      };
+
+      // Firestore에 저장
+      await _firestore.collection('events').doc(eventId).set(eventDocData);
+
+      // 부모에게 이벤트 추가 알림
+      widget.onEventAdded(eventDocData);
+
+      // 성공 메시지
+      _addSystemMessage("'${eventData['title']}' 일정이 추가되었습니다.");
+    } catch (e) {
+      print('일정 추가 오류: $e');
+      _addSystemMessage("일정 추가 중 오류가 발생했습니다: $e");
+    }
+  }
+
+  // 일정 삭제 함수
+  Future<void> _deleteEvent(Map<String, dynamic> eventData) async {
+    try {
+      String? eventId;
+      String title = eventData['title'] ?? '';
+
+      // ID로 삭제
+      if (eventData['id'] != null) {
+        eventId = eventData['id'].toString();
+      }
+      // 제목으로 찾아서 삭제
+      else if (title.isNotEmpty) {
+        // 원본 캘린더 데이터에서 제목으로 검색
+        for (var event in widget.calendarData) {
+          if (event['title'] == title) {
+            eventId = event['id'].toString();
+            break;
+          }
+        }
+      }
+
+      if (eventId == null || eventId.isEmpty) {
+        _addSystemMessage("삭제할 일정을 찾을 수 없습니다.");
+        return;
+      }
+
+      // Firestore에서 삭제
+      await _firestore.collection('events').doc(eventId).delete();
+
+      // 부모에게 삭제 알림
+      widget.onEventDeleted(eventId);
+
+      // 성공 메시지
+      _addSystemMessage("'$title' 일정이 삭제되었습니다.");
+    } catch (e) {
+      print('일정 삭제 오류: $e');
+      _addSystemMessage("일정 삭제 중 오류가 발생했습니다: $e");
     }
   }
 
@@ -223,8 +468,8 @@ class _ChatScreenState extends State<ChatScreen> {
               if (recommendation['description'] != null)
                 Text('설명: ${recommendation['description']}'),
               const SizedBox(height: 8),
-              if (recommendation['time'] != null && recommendation['endTime'] != null)
-                Text('시간: ${recommendation['time']} ~ ${recommendation['endTime']}'),
+              if (recommendation['time'] != null)
+                Text('시간: ${recommendation['time']}${recommendation['endTime'] != null ? ' ~ ${recommendation['endTime']}' : ''}'),
               const SizedBox(height: 16),
               const Text('이 일정을 추가하시겠습니까?'),
             ],
@@ -236,12 +481,8 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             TextButton(
               onPressed: () {
-                // 추천 일정 추가 로직
-                // 예: TaskDataService().addTask(recommendation);
-
-                // 추가 성공 메시지
-                _addSystemMessage("'${recommendation['title'] ?? '추천 일정'}' 일정이 추가되었습니다.");
-
+                // 추천 일정 추가
+                _addEvent(recommendation);
                 Navigator.pop(context);
               },
               child: const Text('추가'),
@@ -344,6 +585,48 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
+          // 빠른 옵션 말풍선 UI 추가
+          if (_quickOptions.isNotEmpty)
+            Container(
+              height: 60,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _quickOptions.length,
+                itemBuilder: (context, index) {
+                  final option = _quickOptions[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: InkWell(
+                      onTap: () => _handleQuickOptionTap(option),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE6E0FF),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFF9D8CFF), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _getIconForOption(option['icon']),
+                            const SizedBox(width: 8),
+                            Text(
+                              option['text'],
+                              style: const TextStyle(
+                                color: Color(0xFF4A4A4A),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
           // 입력 영역
           Container(
             padding: const EdgeInsets.all(8.0),
@@ -393,6 +676,43 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // 옵션 아이콘 가져오기 함수
+  Widget _getIconForOption(String? iconName) {
+    IconData iconData;
+
+    switch (iconName) {
+      case 'calendar':
+        iconData = Icons.calendar_today;
+        break;
+      case 'time':
+        iconData = Icons.access_time;
+        break;
+      case 'bulb':
+        iconData = Icons.lightbulb_outline;
+        break;
+      case 'book':
+        iconData = Icons.book;
+        break;
+      case 'school':
+        iconData = Icons.school;
+        break;
+      case 'flight':
+        iconData = Icons.flight;
+        break;
+      case 'fitness':
+        iconData = Icons.fitness_center;
+        break;
+      default:
+        iconData = Icons.chat_bubble_outline;
+    }
+
+    return Icon(
+      iconData,
+      size: 18,
+      color: const Color(0xFF9D8CFF),
     );
   }
 }

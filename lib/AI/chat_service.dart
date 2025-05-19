@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatService {
   // Gemini API 엔드포인트 및 키
-  static const String _apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+  static String get _apiUrl => 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
   // 사용자 ID
   late final String userId;
@@ -142,7 +142,6 @@ JSON 형식으로 응답을 구성해주세요:
           "topK": 32,
           "topP": 0.8,
           "maxOutputTokens": 2048,
-          "responseMimeType": "application/json",
         }
       };
 
@@ -166,7 +165,7 @@ JSON 형식으로 응답을 구성해주세요:
           if (jsonStart >= 0 && jsonEnd > jsonStart) {
             final jsonString = text.substring(jsonStart, jsonEnd);
             final recommendations = jsonDecode(jsonString);
-            return recommendations;
+            return Map<String, dynamic>.from(recommendations);
           }
         } catch (e) {
           print('JSON 파싱 오류: $e');
@@ -227,6 +226,7 @@ JSON 형식으로 응답을 구성해주세요:
     required List<Map<String, dynamic>> calendar,
     required List<Map<String, dynamic>> tasks,
     required List<Map<String, dynamic>> history,
+    String? action,
   }) async {
     try {
       // API 키 확인
@@ -238,18 +238,18 @@ JSON 형식으로 응답을 구성해주세요:
       final now = DateTime.now();
       final formattedDate = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
 
-      // 대화 기록 형식화
-      final formattedHistory = history.map((msg) {
+      // 대화 기록 형식화 - user와 model 역할만 사용
+      final List<Map<String, dynamic>> formattedHistory = [];
+      for (var msg in history) {
         final role = msg['role'] == 'user' ? 'user' : 'model';
-        return {"role": role, "parts": [{"text": msg['content']}]};
-      }).toList();
+        formattedHistory.add({
+          "role": role,
+          "parts": [{"text": msg['content']}]
+        });
+      }
 
-      // 시스템 프롬프트
-      final systemPrompt = {
-        "role": "system",
-        "parts": [
-          {
-            "text": '''
+      // 초기 프롬프트
+      final initialPrompt = '''
 당신은 일정 관리 앱의 AI 비서입니다. 사용자의 일정과 할 일을 관리하고, 시간 관리에 도움을 주며, 일정을 추천합니다.
 
 오늘 날짜: $formattedDate
@@ -287,29 +287,41 @@ ${jsonEncode(tasks)}
 
 사용자가 "네", "예", "좋아요" 등의 긍정적인 대답을 하면, 이전에 제안한 작업을 실행하세요.
 항상 친절하고 도움이 되도록 대화하며, 한국어로 응답하세요.
-'''
-          }
-        ]
-      };
+''';
 
-      // 대화 목록에 시스템 프롬프트 추가
-      final conversationHistory = [systemPrompt, ...formattedHistory];
+      // 대화 설정
+      List<Map<String, dynamic>> conversationContents = [];
+
+      // 비어있지 않은 대화 기록이 있는 경우에만 기존 대화 추가
+      if (formattedHistory.isNotEmpty) {
+        conversationContents.addAll(formattedHistory);
+      } else {
+        // 첫 대화면 초기 설명 추가
+        conversationContents.add({
+          "role": "user",
+          "parts": [{"text": "안녕하세요. 도움이 필요합니다."}]
+        });
+
+        conversationContents.add({
+          "role": "model",
+          "parts": [{"text": initialPrompt}]
+        });
+      }
 
       // 사용자 메시지 추가
-      conversationHistory.add({
+      conversationContents.add({
         "role": "user",
         "parts": [{"text": message}]
       });
 
       // API 요청 데이터
       final requestData = {
-        "contents": conversationHistory,
+        "contents": conversationContents,
         "generationConfig": {
           "temperature": 0.7,
           "topK": 40,
           "topP": 0.95,
           "maxOutputTokens": 2048,
-          "responseMimeType": "application/json",
         }
       };
 
@@ -332,11 +344,19 @@ ${jsonEncode(tasks)}
 
           if (jsonStart >= 0 && jsonEnd > jsonStart) {
             final jsonString = text.substring(jsonStart, jsonEnd);
-            final parsedResponse = jsonDecode(jsonString);
+            final Map<String, dynamic> parsedResponse = Map<String, dynamic>.from(json.decode(jsonString));
 
             // 액션 필드가 없으면 빈 배열 추가
             if (!parsedResponse.containsKey('actions')) {
-              parsedResponse['actions'] = [];
+              parsedResponse['actions'] = <Map<String, dynamic>>[];
+            } else {
+              // actions가 있으면 형식 확인 및 변환
+              final actions = parsedResponse['actions'];
+              if (actions is List) {
+                parsedResponse['actions'] = List<Map<String, dynamic>>.from(
+                    actions.map((action) => Map<String, dynamic>.from(action))
+                );
+              }
             }
 
             return parsedResponse;
@@ -344,7 +364,7 @@ ${jsonEncode(tasks)}
             // JSON이 없는 경우 텍스트만 반환
             return {
               "response": text,
-              "actions": []
+              "actions": <Map<String, dynamic>>[]
             };
           }
         } catch (e) {
@@ -354,7 +374,7 @@ ${jsonEncode(tasks)}
           // 파싱 오류 시 텍스트만 반환
           return {
             "response": text,
-            "actions": []
+            "actions": <Map<String, dynamic>>[]
           };
         }
       }

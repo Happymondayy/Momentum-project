@@ -62,7 +62,7 @@ class TaskDataService {
           endTime: data['endTime'],
           date: dateTime,
           isImportant: data['isImportant'] ?? false,
-          isUrgent: data['isUrgent'] ?? false,
+          //isUrgent: data['isUrgent'] ?? false,
           memo: data['memo'],
           location: data['location'],
           importance: data['importance'] ?? 1,
@@ -104,7 +104,7 @@ class TaskDataService {
           endTime: data['endTime'],
           date: dateTime,
           isImportant: data['isImportant'] ?? false,
-          isUrgent: data['isUrgent'] ?? false,
+          //isUrgent: data['isUrgent'] ?? false,
           memo: data['memo'],
           location: data['location'],
           importance: data['importance'] ?? 1,
@@ -148,7 +148,7 @@ class TaskDataService {
         'endTime': task.endTime,
         'date': task.date.toIso8601String(),
         'isImportant': task.isImportant,
-        'isUrgent': task.isUrgent,
+        //'isUrgent': task.isUrgent,
         'memo': task.memo,
         'location': task.location,
         'importance': task.importance,
@@ -175,7 +175,7 @@ class TaskDataService {
         'endTime': task.endTime,
         'date': task.date.toIso8601String(),
         'isImportant': task.isImportant,
-        'isUrgent': task.isUrgent,
+        //'isUrgent': task.isUrgent,
         'memo': task.memo,
         'location': task.location,
         'importance': task.importance,
@@ -439,6 +439,49 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     // 파이어스토어에서 데이터 로드
     _taskDataService.setUserId(userId);
     _loadData();
+  }
+
+  // 사용자 선호도 정보 가져오기 (수정된 함수)
+  Future<Map<String, dynamic>> _getUserPreferences() async {
+    Map<String, dynamic> preferences = {
+      'preferredTimeOfDay': '아침', // 기본값
+      'sleepSchedule': 'PM 11:00 ~ AM 07:00', // 기본값
+      'breakFrequency': '1시간마다', // 기본값
+    };
+
+    try {
+      if (userId.isNotEmpty) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('user')
+            .doc(userId)
+            .get();
+
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          if (userData != null && userData.containsKey('preferences')) {
+            final userPrefs = userData['preferences'];
+            if (userPrefs is Map) {
+              // 각 선호도 항목 추출
+              if (userPrefs.containsKey('preferredTimeOfDay')) {
+                preferences['preferredTimeOfDay'] = userPrefs['preferredTimeOfDay'];
+              }
+
+              if (userPrefs.containsKey('sleepSchedule')) {
+                preferences['sleepSchedule'] = userPrefs['sleepSchedule'];
+              }
+
+              if (userPrefs.containsKey('breakFrequency')) {
+                preferences['breakFrequency'] = userPrefs['breakFrequency'];
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('사용자 선호도 불러오기 오류: $e');
+    }
+
+    return preferences;
   }
 
 // 파이어스토어에서 데이터 로드하는 메서드
@@ -1167,7 +1210,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         importance: priority,
         urgency: priority,
         isImportant: priority >= 2,
-        isUrgent: priority >= 3,
+        //isUrgent: priority >= 3,
         description: item['description'],
         memo: item['memo'],
         location: item['location'],
@@ -1208,13 +1251,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
+  // 2. _generateLocalSchedule 함수 호출 오류 수정
   Future<List<dynamic>> _getScheduleFromAI(
       List<Map<String, dynamic>> tasks,
       List<Map<String, dynamic>> calendar) async {
 
+    // 사용자 선호도 정보 가져오기
+    Map<String, dynamic> userPreferences = await _getUserPreferences();
+
     // 디버깅
     print('Tasks sent to server: $tasks');
     print('Calendar sent to server: $calendar');
+    print('User preferences: $userPreferences');
 
     // 서버 URL 결정 (다양한 환경 지원)
     const List<String> possibleUrls = [
@@ -1228,6 +1276,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     final requestBody = json.encode({
       'tasks': tasks,
       'calendar': calendar,
+      'userPreferences': userPreferences, // 사용자 선호도 정보 추가
     });
 
     print('Request body: $requestBody');
@@ -1272,16 +1321,57 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     // 모든 연결 시도 실패 시 로컬 시뮬레이션
     print("All connection attempts failed. Using fallback local scheduling.");
-    return _generateLocalSchedule(tasks, calendar);
+    return _generateLocalSchedule(tasks, calendar, userPreferences);  // 여기에 userPreferences 전달
   }
 
-// 로컬 대체 스케줄링 함수
+  // 3. 로컬 대체 스케줄링 함수 수정 - 사용자 선호도 반영
   List<Map<String, dynamic>> _generateLocalSchedule(
       List<Map<String, dynamic>> tasks,
-      List<Map<String, dynamic>> calendar) {
+      List<Map<String, dynamic>> calendar,
+      Map<String, dynamic> userPreferences) {  // 매개변수 추가
 
     List<Map<String, dynamic>> schedule = [];
     Set<int> occupiedHours = {};
+
+    // 선호 시간대에 따른 시작 시간 조정
+    int startHour = 9; // 기본값
+    final preferredTimeOfDay = userPreferences['preferredTimeOfDay'];
+
+    if (preferredTimeOfDay == '아침') {
+      startHour = 7;
+    } else if (preferredTimeOfDay == '점심') {
+      startHour = 11;
+    } else if (preferredTimeOfDay == '저녁') {
+      startHour = 17;
+    } else if (preferredTimeOfDay == '밤') {
+      startHour = 20;
+    }
+
+    // 수면 시간에 따른 시간 제한 설정
+    int endHour = 22; // 기본값
+    final sleepSchedule = userPreferences['sleepSchedule'];
+
+    if (sleepSchedule.contains('PM 11:00 ~ AM 07:00')) {
+      endHour = 23;
+    } else if (sleepSchedule.contains('AM 07:00 ~ PM 03:00')) {
+      endHour = 19; // 오후 7시
+    } else if (sleepSchedule.contains('PM 03:00 ~ PM 11:00')) {
+      endHour = 15; // 오후 3시
+    }
+
+    // 휴식 빈도 설정
+    int breakInterval = 60; // 기본 1시간마다 (분 단위)
+    final breakFrequency = userPreferences['breakFrequency'];
+
+    if (breakFrequency == '30분마다') {
+      breakInterval = 30;
+    } else if (breakFrequency == '1시간마다') {
+      breakInterval = 60;
+    } else if (breakFrequency == '2시간마다') {
+      breakInterval = 120;
+    } else if (breakFrequency == '3시간이상') {
+      breakInterval = 180;
+    }
 
     // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
     for (var event in calendar) {
@@ -1316,20 +1406,36 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
     });
 
-    // 3. 남은 시간대에 작업 배치
-    int startHour = 9; // 오전 9시부터 시작
+    // 3. 휴식 시간 추가 (사용자 선호도 기반)
+    int currentWorkTime = 0;
+    List<int> breakHours = [];
+
+    for (int hour = startHour; hour < endHour; hour++) {
+      if (!occupiedHours.contains(hour)) {
+        currentWorkTime += 60; // 1시간 추가
+
+        if (currentWorkTime >= breakInterval) {
+          // 휴식 시간 추가
+          breakHours.add(hour);
+          currentWorkTime = 0; // 타이머 초기화
+        }
+      }
+    }
+
+    // 4. 남은 시간대에 작업 배치 (선호 시간대 고려)
+    int taskStartHour = startHour;
 
     for (var task in tasks) {
-      // 하루 업무 시간 9시-18시로 제한
-      if (startHour >= 18) break;
+      // 사용자 선호 시간대 내에서만 작업
+      if (taskStartHour >= endHour) break;
 
       // 사용 가능한 시간 찾기
-      while (occupiedHours.contains(startHour)) {
-        startHour++;
-        if (startHour >= 18) break;
+      while (occupiedHours.contains(taskStartHour) || breakHours.contains(taskStartHour)) {
+        taskStartHour++;
+        if (taskStartHour >= endHour) break;
       }
 
-      if (startHour >= 18) break;
+      if (taskStartHour >= endHour) break;
 
       // 중요도/긴급도에 따른 우선순위 설정
       final importance = task['importance'] ?? 1;
@@ -1339,8 +1445,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       schedule.add({
         'id': 'task_${schedule.length}',
         'title': task['title'],
-        'time': '${startHour.toString().padLeft(2, '0')}:00',
-        'endTime': '${(startHour + 1).toString().padLeft(2, '0')}:00',
+        'time': '${taskStartHour.toString().padLeft(2, '0')}:00',
+        'endTime': '${(taskStartHour + 1).toString().padLeft(2, '0')}:00',
         'priority': priority,
         'description': '중요도: $importance, 긴급도: $urgency',
         'memo': '',
@@ -1348,8 +1454,190 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         'dueDate': task['dueDate'],
       });
 
-      occupiedHours.add(startHour);
-      startHour++;
+      occupiedHours.add(taskStartHour);
+      taskStartHour++;
+    }
+
+    // 5. 휴식 시간 일정 추가
+    for (int breakHour in breakHours) {
+      if (!occupiedHours.contains(breakHour)) {
+        schedule.add({
+          'id': 'break_${schedule.length}',
+          'title': '휴식 시간',
+          'time': '${breakHour.toString().padLeft(2, '0')}:00',
+          'endTime': '${(breakHour + 1).toString().padLeft(2, '0')}:00',
+          'priority': 1, // 낮은 우선순위
+          'description': '사용자 선호 휴식 간격: $breakFrequency',
+          'memo': '효율적인 업무를 위한 휴식 시간입니다.',
+          'location': '',
+        });
+
+        occupiedHours.add(breakHour);
+      }
+    }
+
+    // 시간순 정렬
+    schedule.sort((a, b) {
+      if (a['time'] == null) return 1;
+      if (b['time'] == null) return -1;
+      return a['time'].compareTo(b['time']);
+    });
+
+    return schedule;
+  }
+}
+
+
+// 로컬 대체 스케줄링 함수 수정 - 사용자 선호도 반영
+  List<Map<String, dynamic>> _generateLocalSchedule(
+      List<Map<String, dynamic>> tasks,
+      List<Map<String, dynamic>> calendar,
+      Map<String, dynamic> userPreferences) {
+
+    List<Map<String, dynamic>> schedule = [];
+    Set<int> occupiedHours = {};
+
+    // 선호 시간대에 따른 시작 시간 조정
+    int startHour = 9; // 기본값
+    final preferredTimeOfDay = userPreferences['preferredTimeOfDay'];
+
+    if (preferredTimeOfDay == '아침') {
+      startHour = 7;
+    } else if (preferredTimeOfDay == '점심') {
+      startHour = 11;
+    } else if (preferredTimeOfDay == '저녁') {
+      startHour = 17;
+    } else if (preferredTimeOfDay == '밤') {
+      startHour = 20;
+    }
+
+    // 수면 시간에 따른 시간 제한 설정
+    int endHour = 22; // 기본값
+    final sleepSchedule = userPreferences['sleepSchedule'];
+
+    if (sleepSchedule.contains('PM 11:00 ~ AM 07:00')) {
+      endHour = 23;
+    } else if (sleepSchedule.contains('AM 07:00 ~ PM 03:00')) {
+      endHour = 19; // 오후 7시
+    } else if (sleepSchedule.contains('PM 03:00 ~ PM 11:00')) {
+      endHour = 15; // 오후 3시
+    }
+
+    // 휴식 빈도 설정
+    int breakInterval = 60; // 기본 1시간마다 (분 단위)
+    final breakFrequency = userPreferences['breakFrequency'];
+
+    if (breakFrequency == '30분마다') {
+      breakInterval = 30;
+    } else if (breakFrequency == '1시간마다') {
+      breakInterval = 60;
+    } else if (breakFrequency == '2시간마다') {
+      breakInterval = 120;
+    } else if (breakFrequency == '3시간이상') {
+      breakInterval = 180;
+    }
+
+    // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
+    for (var event in calendar) {
+      if (event['startTime'] != null) {
+        final startHour = int.parse(event['startTime'].split(':')[0]);
+        final endHour = event['endTime'] != null
+            ? int.parse(event['endTime'].split(':')[0])
+            : startHour + 1;
+
+        // 시간대 차지 표시
+        for (int h = startHour; h <= endHour; h++) {
+          occupiedHours.add(h);
+        }
+
+        schedule.add({
+          'id': 'cal_${schedule.length}',
+          'title': '(일정) ${event['title']}',
+          'time': event['startTime'],
+          'endTime': event['endTime'] ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
+          'priority': 3, // 최우선
+          'description': '캘린더 일정',
+          'memo': '',
+          'location': event['location'] ?? '',
+        });
+      }
+    }
+
+    // 2. 작업 중요도/긴급도 기준 정렬
+    tasks.sort((a, b) {
+      final aScore = (a['importance'] ?? 1) + (a['urgency'] ?? 1);
+      final bScore = (b['importance'] ?? 1) + (b['urgency'] ?? 1);
+      return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
+    });
+
+    // 3. 휴식 시간 추가 (사용자 선호도 기반)
+    int currentWorkTime = 0;
+    List<int> breakHours = [];
+
+    for (int hour = startHour; hour < endHour; hour++) {
+      if (!occupiedHours.contains(hour)) {
+        currentWorkTime += 60; // 1시간 추가
+
+        if (currentWorkTime >= breakInterval) {
+          // 휴식 시간 추가
+          breakHours.add(hour);
+          currentWorkTime = 0; // 타이머 초기화
+        }
+      }
+    }
+
+    // 4. 남은 시간대에 작업 배치 (선호 시간대 고려)
+    int taskStartHour = startHour;
+
+    for (var task in tasks) {
+      // 사용자 선호 시간대 내에서만 작업
+      if (taskStartHour >= endHour) break;
+
+      // 사용 가능한 시간 찾기
+      while (occupiedHours.contains(taskStartHour) || breakHours.contains(taskStartHour)) {
+        taskStartHour++;
+        if (taskStartHour >= endHour) break;
+      }
+
+      if (taskStartHour >= endHour) break;
+
+      // 중요도/긴급도에 따른 우선순위 설정
+      final importance = task['importance'] ?? 1;
+      final urgency = task['urgency'] ?? 1;
+      final priority = importance > urgency ? importance : urgency;
+
+      schedule.add({
+        'id': 'task_${schedule.length}',
+        'title': task['title'],
+        'time': '${taskStartHour.toString().padLeft(2, '0')}:00',
+        'endTime': '${(taskStartHour + 1).toString().padLeft(2, '0')}:00',
+        'priority': priority,
+        'description': '중요도: $importance, 긴급도: $urgency',
+        'memo': '',
+        'location': '',
+        'dueDate': task['dueDate'],
+      });
+
+      occupiedHours.add(taskStartHour);
+      taskStartHour++;
+    }
+
+    // 5. 휴식 시간 일정 추가
+    for (int breakHour in breakHours) {
+      if (!occupiedHours.contains(breakHour)) {
+        schedule.add({
+          'id': 'break_${schedule.length}',
+          'title': '휴식 시간',
+          'time': '${breakHour.toString().padLeft(2, '0')}:00',
+          'endTime': '${(breakHour + 1).toString().padLeft(2, '0')}:00',
+          'priority': 1, // 낮은 우선순위
+          'description': '사용자 선호 휴식 간격: $breakFrequency',
+          'memo': '효율적인 업무를 위한 휴식 시간입니다.',
+          'location': '',
+        });
+
+        occupiedHours.add(breakHour);
+      }
     }
 
     // 시간순 정렬
@@ -1362,7 +1650,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     return schedule;
   }
 
-}
 
 // 개선된 월 선택기 위젯
 class ImprovedMonthSelector extends StatelessWidget {

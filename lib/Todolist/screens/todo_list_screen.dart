@@ -14,7 +14,7 @@ class Todo_Task {
   String? endTime;
   DateTime date;
   bool isImportant;
-  bool isUrgent;
+  //bool isUrgent;
   String? memo;
   String? location;
   int importance;
@@ -33,7 +33,7 @@ class Todo_Task {
     this.endTime,
     required this.date,
     required this.isImportant,
-    required this.isUrgent,
+    //required this.isUrgent,
     this.memo,
     this.location,
     required this.importance,
@@ -63,7 +63,7 @@ class Todo_Task {
       endTime: data['endTime'],
       date: (data['date'] as Timestamp).toDate(),
       isImportant: data['isImportant'] ?? false,
-      isUrgent: data['isUrgent'] ?? false,
+      //isUrgent: data['isUrgent'] ?? false,
       memo: data['memo'],
       location: data['location'],
       importance: data['importance'] ?? 1,
@@ -85,7 +85,7 @@ class Todo_Task {
       'endTime': endTime,
       'date': Timestamp.fromDate(date),
       'isImportant': isImportant,
-      'isUrgent': isUrgent,
+      //'isUrgent': isUrgent,
       'memo': memo,
       'location': location,
       'importance': importance,
@@ -764,7 +764,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                         ),
                         const SizedBox(width: 8),
                         if (task.isImportant) const Text('🔔'),
-                        if (task.isUrgent) const Text('🔁'),
+                        //if (task.isUrgent) const Text('🔁'),
                       ],
                     ),
                   ),
@@ -898,7 +898,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     DateTime taskDate = task.date;
     DateTime? dueDate = task.dueDate;
     bool isImportant = task.isImportant;
-    bool isUrgent = task.isUrgent;
+    //bool isUrgent = task.isUrgent;
     int importanceLevel = task.importance;
     int urgencyLevel = task.urgency;
     List<int> selectedReminders = List.from(task.reminderMinutesBefore ?? []);
@@ -1063,6 +1063,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                               const SizedBox(height: 20),
 
+                              /*
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
                                   isUrgent = value;
@@ -1070,6 +1071,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
 
                               const SizedBox(height: 20),
+                              */
 
                               _buildTextField(
                                 memoController,
@@ -1141,7 +1143,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                           task.time = formattedStart;
                                           task.endTime = formattedEnd;
                                           task.isImportant = isImportant;
-                                          task.isUrgent = isUrgent;
+                                          //task.isUrgent = isUrgent;
                                           task.memo = memoController.text;
                                           task.location = locationController.text;
                                           task.importance = importanceLevel;
@@ -1258,7 +1260,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     TimeOfDay endTime = TimeOfDay.now().replacing(hour: startTime.hour + 1);
 
     bool isImportant = false;
-    bool isUrgent = false;
+    //bool isUrgent = false;
     int importanceLevel = 1;
     int urgencyLevel = 1;
     List<int> selectedReminders = []; // ✅ 사용자 선택 알림 시간
@@ -1429,6 +1431,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                               const SizedBox(height: 20),
 
+                              /*
                               _buildSwitchRow('반복 일정', isUrgent, (value) {
                                 setState(() {
                                   isUrgent = value;
@@ -1436,6 +1439,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
 
                               const SizedBox(height: 20),
+                              */
 
                               _buildTextField(
                                 memoController,
@@ -1477,7 +1481,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                         time: formattedStart,
                                         endTime: formattedEnd,
                                         isImportant: isImportant,
-                                        isUrgent: isUrgent,
+                                        //isUrgent: isUrgent,
                                         memo: memoController.text,
                                         location: locationController.text,
                                         importance: importanceLevel,
