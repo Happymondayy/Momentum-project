@@ -172,7 +172,7 @@ class _TodoDialogState extends State<TodoDialog> {
             todo.startTime!.minute,
           );
 
-          // 안전한 알림 ID 생성 (todo ID 해시)
+          //알림 ID 생성
           final notificationId = todo.id.hashCode.abs();
 
           print('⏰ 알림 예약: ID=${notificationId}, 이벤트=${todo.title}, 시작=${todoStartDateTime}');

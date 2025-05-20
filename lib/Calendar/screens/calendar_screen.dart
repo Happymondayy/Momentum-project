@@ -676,10 +676,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
       // 상태 업데이트 - 로컬 상태도 즉시 업데이트
       if (mounted) {
-        setState(() {
-          // 필요한 경우 로컬 이벤트 리스트에서도 제거
-          // _todos.removeWhere((e) => e.id == todo.id);
-        });
+        setState(() {});
 
         // 삭제 성공 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
