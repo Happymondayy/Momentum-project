@@ -754,6 +754,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     return SingleChildScrollView(
       child: Column(
         children: [
+          _buildReminderBubble(),
           // 상단 버튼 영역 (날짜 표시 제거됨)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1582,16 +1583,55 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     final dateKey = _taskDataService.dateToKey(selectedDate);
     _taskDataService.plannerTasksByDate[dateKey] = [];
 
+    // 먼저 TimeOfDay parsing 함수 정의 (함수를 참조하기 전에 선언)
+    TimeOfDay? parseTimeString(String? timeStr) {
+      if (timeStr == null || timeStr.isEmpty) return null;
+
+      final regexAMPM = RegExp(r'(AM|PM)\s+(\d{1,2}):(\d{2})');
+      final amPmMatch = regexAMPM.firstMatch(timeStr);
+
+      if (amPmMatch != null) {
+        final period = amPmMatch.group(1);
+        final hour = int.parse(amPmMatch.group(2)!);
+        final minute = int.parse(amPmMatch.group(3)!);
+
+        int adjustedHour = hour;
+        if (period == 'PM' && hour < 12) adjustedHour += 12;
+        if (period == 'AM' && hour == 12) adjustedHour = 0;
+
+        return TimeOfDay(hour: adjustedHour, minute: minute);
+      }
+
+      // HH:MM 포맷 처리
+      final timeParts = timeStr.split(':');
+      if (timeParts.length == 2) {
+        return TimeOfDay(
+          hour: int.parse(timeParts[0]),
+          minute: int.parse(timeParts[1]),
+        );
+      }
+
+      return null;
+    }
+
     // AI가 준 스케줄대로 Todo_Task 생성 및 저장
     for (var item in aiSchedule) {
-      final int priority = item['priority'] ?? 1;
+      final startTimeStr = item['time'];
+      final endTimeStr = item['endTime'];
 
-      // Generate unique ID for new tasks if not provided
-      String taskId = item['id'] ?? DateTime
-          .now()
-          .millisecondsSinceEpoch
-          .toString() +
-          '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
+      // 우선순위 설정 (이전에 undefined 'priority' 변수 대신 사용)
+      final int priorityLevel = item['priority'] ?? 1;
+
+      // TimeOfDay로 변환 (이제 함수가 정의되었으므로 사용 가능)
+      final TimeOfDay? parsedStartTime = parseTimeString(startTimeStr);
+      final TimeOfDay? parsedEndTime = parseTimeString(endTimeStr);
+
+      // 시간 포맷팅
+      final formattedStartTime = parsedStartTime != null ?
+      '${parsedStartTime.period == DayPeriod.am ? "AM" : "PM"} ${parsedStartTime.hourOfPeriod.toString().padLeft(2, '0')}:${parsedStartTime.minute.toString().padLeft(2, '0')}' : null;
+
+      final formattedEndTime = parsedEndTime != null ?
+      '${parsedEndTime.period == DayPeriod.am ? "AM" : "PM"} ${parsedEndTime.hourOfPeriod.toString().padLeft(2, '0')}:${parsedEndTime.minute.toString().padLeft(2, '0')}' : null;
 
       DateTime? parsedDueDate;
       if (item['dueDate'] != null && item['dueDate'] != '없음') {
@@ -1604,15 +1644,19 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         }
       }
 
+      // Generate unique ID for new tasks if not provided
+      String generatedTaskId = item['id'] ?? DateTime.now().millisecondsSinceEpoch.toString() +
+          '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
+
       final task = Todo_Task(
-        id: taskId,
+        id: generatedTaskId, // 이전에 undefined 'taskId' 변수 대신 생성된 ID 사용
         title: item['title'] ?? '제목 없음',
         date: selectedDate,
-        time: _normalizeTime(item['time']),
-        endTime: _normalizeTime(item['endTime']),
-        importance: priority,
-        urgency: priority,
-        isImportant: priority >= 2,
+        time: formattedStartTime,
+        endTime: formattedEndTime,
+        importance: priorityLevel, // priority 변수 대신 사용
+        urgency: priorityLevel, // priority 변수 대신 사용
+        isImportant: priorityLevel >= 2, // priority 변수 대신 사용
         //isUrgent: priority >= 3,
         description: item['description'],
         memo: item['memo'],
@@ -1652,6 +1696,127 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
     );
+  }
+
+  Widget _buildReminderBubble() {
+    // 오늘 일정 가져오기
+    final todayCalendarEvents = _getEventsForSelectedDate();
+    final todayTodoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+
+    // 일정/할일이 없으면 표시하지 않음
+    if (todayCalendarEvents.isEmpty && todayTodoTasks.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    // 맞춤형 메시지 생성
+    String message = _generateContextualMessage(todayCalendarEvents, todayTodoTasks);
+
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Color(0xFFE6E0FF),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              backgroundColor: Color(0xFF9D8CFF),
+              radius: 20,
+              child: Icon(Icons.assistant, color: Colors.white, size: 24),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "오늘의 리마인더",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF4A4A4A),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF4A4A4A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// 맞춤형 메시지 생성 함수
+  String _generateContextualMessage(List<Event> events, List<Todo_Task> tasks) {
+    // 기본 메시지
+    if (events.isEmpty && tasks.isEmpty) {
+      return "오늘은 특별한 일정이 없습니다. 여유로운 하루 되세요!";
+    }
+
+    // 먼저 특정 키워드 기반 맞춤 메시지 확인
+    for (var event in events) {
+      final title = event.title.toLowerCase();
+
+      // 여행 관련 일정
+      if (title.contains('여행') || title.contains('trip')) {
+        String destination = '';
+
+        if (title.contains('일본')) destination = '일본';
+        else if (title.contains('미국')) destination = '미국';
+        else if (title.contains('유럽')) destination = '유럽';
+        else if (title.contains('제주')) destination = '제주';
+
+        if (destination.isNotEmpty) {
+          return "$destination 여행을 가시는군요! 호텔과 항공권은 예약하셨나요?";
+        }
+
+        return "여행 준비는 잘 되고 있나요? 여권과 필수 준비물을 확인하세요.";
+      }
+
+      // 시험 관련 일정
+      if (title.contains('시험') || title.contains('테스트') || title.contains('exam')) {
+        return "오늘 시험이 있네요. 충분히 준비하셨나요? 행운을 빕니다!";
+      }
+
+      // 미팅/회의 관련
+      if (title.contains('회의') || title.contains('미팅')) {
+        return "오늘 회의가 있습니다. 필요한 자료는 준비되었나요?";
+      }
+    }
+
+    // 할 일 관련 메시지
+    if (tasks.isNotEmpty) {
+      final completedTasks = tasks.where((task) => task.isCompleted).length;
+      final totalTasks = tasks.length;
+
+      if (completedTasks == 0) {
+        return "오늘 할 일이 ${tasks.length}개 있습니다. 지금 시작해볼까요?";
+      } else {
+        return "오늘 할 일 ${totalTasks}개 중 ${completedTasks}개를 완료했습니다. 잘하고 계세요!";
+      }
+    }
+
+    // 기본 메시지
+    return "오늘 하루도 화이팅하세요!";
   }
 
   // 2. _generateLocalSchedule 함수 호출 오류 수정
