@@ -663,36 +663,66 @@ class TodoListScreenState extends State<TodoListScreen> {
       return taskDate;
     }
 
-    // Parse "AM 09:30" or "PM 03:45" format
-    final isAM = timeString.startsWith('AM');
-    final timeParts = timeString.substring(3).split(':');
-
-    if (timeParts.length != 2) return taskDate;
+    print('시간 문자열 파싱: $timeString');
 
     try {
-      int hour = int.parse(timeParts[0].trim());
-      int minute = int.parse(timeParts[1].trim());
+      // "AM 09:30" 또는 "PM 03:45" 형식 처리
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        final isAM = timeString.contains('AM');
 
-      // Convert 12-hour format to 24-hour
-      if (!isAM && hour < 12) {
-        hour += 12;
-      }
-      // Convert 12 AM to 0 hours
-      if (isAM && hour == 12) {
-        hour = 0;
+        // 시간 부분 추출
+        String timeSection = timeString;
+        if (timeString.startsWith('AM') || timeString.startsWith('PM')) {
+          timeSection = timeString.substring(2).trim(); // "AM 09:30" -> "09:30"
+        } else {
+          // 다른 형식일 경우 (예: "09:30 AM")
+          timeSection = timeString.replaceAll('AM', '').replaceAll('PM', '').trim();
+        }
+
+        final timeParts = timeSection.split(':');
+        if (timeParts.length != 2) return taskDate;
+
+        int hour = int.parse(timeParts[0].trim());
+        int minute = int.parse(timeParts[1].trim());
+
+        // 12시간제 -> 24시간제 변환
+        if (!isAM && hour < 12) {
+          hour += 12;
+        }
+        if (isAM && hour == 12) {
+          hour = 0;
+        }
+
+        return DateTime(
+          taskDate.year,
+          taskDate.month,
+          taskDate.day,
+          hour,
+          minute,
+        );
       }
 
-      return DateTime(
-        taskDate.year,
-        taskDate.month,
-        taskDate.day,
-        hour,
-        minute,
-      );
+      // "HH:MM" 형식 처리
+      else if (timeString.contains(':')) {
+        final timeParts = timeString.split(':');
+        if (timeParts.length != 2) return taskDate;
+
+        int hour = int.parse(timeParts[0].trim());
+        int minute = int.parse(timeParts[1].trim());
+
+        return DateTime(
+          taskDate.year,
+          taskDate.month,
+          taskDate.day,
+          hour,
+          minute,
+        );
+      }
     } catch (e) {
-      print('Error parsing time: $e');
-      return taskDate;
+      print('시간 파싱 오류: $e');
     }
+
+    return taskDate;
   }
 
   Widget _buildTaskItem(Todo_Task task) {

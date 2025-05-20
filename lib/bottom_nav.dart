@@ -58,7 +58,7 @@ class _BottomNavState extends State<BottomNav> {
         );
         break;
 
-      case 2: // Chat (새로 추가된 탭)
+      case 2: // Chat (AI 비서)
         print('Chat 탭으로 이동: userId = ${widget.userId}');
 
         // 로딩 인디케이터 표시
@@ -78,7 +78,7 @@ class _BottomNavState extends State<BottomNav> {
         _fetchDataAndNavigateToChatScreen(context);
         break;
 
-      case 3: // Diary (인덱스 변경됨)
+      case 3: // Diary
         print('Diary 탭으로 이동: userId = ${widget.userId}');
         Navigator.pushReplacementNamed(
           context,
@@ -87,7 +87,7 @@ class _BottomNavState extends State<BottomNav> {
         );
         break;
 
-      case 4: // Settings (인덱스 변경됨)
+      case 4: // Settings
         print('Settings 탭으로 이동: userId = ${widget.userId}');
         if (widget.userId.isNotEmpty) {
           Navigator.pushReplacement(

@@ -5,7 +5,9 @@ import 'package:momentum_planner/AI/chat_service.dart';
 import 'package:momentum_planner/AI/ai_advice_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore import 추가
 import 'package:momentum_planner/Calendar/models/event.dart'; // Event 모델 import
-import 'package:uuid/uuid.dart'; // UUID 생성을 위한 패키지 추가
+import 'package:uuid/uuid.dart';
+
+import '../Planner/DailyPlannerPage.dart'; // UUID 생성을 위한 패키지 추가
 
 class ChatScreen extends StatefulWidget {
   final List<Map<String, dynamic>> calendarData;
@@ -844,6 +846,20 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Text(_isOfflineMode ? 'AI 비서 (오프라인 모드)' : 'AI 비서'),
         backgroundColor: const Color(0xFF9D8CFF),
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DailyPlannerPage(
+                  userId: widget.userId,
+                  calendarData: widget.calendarData,
+                ),
+              ),
+            );
+          },
+        ),
         actions: [
           // 새로고침 버튼
           IconButton(
