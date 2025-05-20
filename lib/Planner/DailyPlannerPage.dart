@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:momentum_planner/Todolist/screens/notification_service.dart';
-
+import 'dart:async';
 
 // API URL (Flask 서버 URL)
 final String apiUrl = 'http://localhost:5000';  // 로컬 개발 환경에서 사용할 경우
@@ -525,131 +525,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  // 추가 위치: DailyPlannerPage.dart의 _DailyPlannerPageState 클래스 내부 (다른 메서드들과 같은 레벨)에 다음 메서드 추가
-
-  Widget _buildDailyReminder() {
-    // 오늘의 할 일과 일정 가져오기
-    final todayTasks = _taskDataService.getTodoTasksForDate(selectedDate);
-    final todayEvents = widget.calendarData.where((event) {
-      final eventDate = DateTime.tryParse(event['date'] ?? '');
-      return eventDate?.year == selectedDate.year &&
-          eventDate?.month == selectedDate.month &&
-          eventDate?.day == selectedDate.day;
-    }).toList();
-
-    // 할 일이나 일정이 없으면 위젯을 표시하지 않음
-    if (todayTasks.isEmpty && todayEvents.isEmpty) {
-      return SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Color(0xFFE6E0FF),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 헤더
-          Row(
-            children: [
-              Icon(Icons.assistant, color: Color(0xFF9D8CFF)),
-              SizedBox(width: 8),
-              Text(
-                '오늘의 리마인더',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Color(0xFF4A4A4A),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          // 캘린더 일정 리스트
-          if (todayEvents.isNotEmpty) ...[
-            Text(
-              '📅 캘린더 일정:',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-                color: Color(0xFF4A4A4A),
-              ),
-            ),
-            SizedBox(height: 4),
-            ...todayEvents.take(3).map((event) =>
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 4),
-                  child: Text(
-                    '• ${event['title']} ${event['startTime'] != null
-                        ? '(${event['startTime']})'
-                        : ''}',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                )
-            ),
-            if (todayEvents.length > 3)
-              Padding(
-                padding: const EdgeInsets.only(left: 12, bottom: 4),
-                child: Text(
-                  '외 ${todayEvents.length - 3}개 일정',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-              ),
-            SizedBox(height: 4),
-          ],
-          // 할일 리스트
-          if (todayTasks.isNotEmpty) ...[
-            Text(
-              '📝 할 일:',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-                color: Color(0xFF4A4A4A),
-              ),
-            ),
-            SizedBox(height: 4),
-            ...todayTasks.take(3).map((task) =>
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 4),
-                  child: Text(
-                    '• ${task.title}${task.time != null
-                        ? ' (${task.time})'
-                        : ''}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : null,
-                      color: task.isCompleted ? Colors.grey : Colors.black87,
-                    ),
-                  ),
-                )
-            ),
-            if (todayTasks.length > 3)
-              Padding(
-                padding: const EdgeInsets.only(left: 12, bottom: 4),
-                child: Text(
-                  '외 ${todayTasks.length - 3}개 할 일',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -779,37 +654,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // 리마인더 표시 (새로 추가)
-                if (isToday &&
-                    (todoTasks.isNotEmpty || calendarEvents.isNotEmpty))
-                  GestureDetector(
-                    onTap: _showReminderDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.purple.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.notifications_active,
-                              size: 18,
-                              color: Colors.purple.shade700),
-                          const SizedBox(width: 4),
-                          Text(
-                            '오늘의 리마인더',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.purple.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 const Spacer(),
                 // 일정 전체 삭제 버튼
                 IconButton(
@@ -963,173 +807,159 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
 // 리마인더 대화상자 표시 함수 추가
-  void _showReminderDialog() {
+  void _showReminderDialog() async {
     final todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
-    final calendarEvents = _getEventsForSelectedDate();
+
+    // 비동기 처리로 캘린더 이벤트 가져오기
+    final calendarEvents = await _getEventsForSelectedDate();
+
+    if (!mounted) return; // 위젯이 dispose 됐는지 확인
 
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            backgroundColor: Colors.white,
-            title: Row(
-              children: [
-                Icon(Icons.notifications_active, color: Colors.purple.shade700),
-                const SizedBox(width: 10),
-                const Text('오늘의 리마인더'),
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Row(
+          children: [
+            Icon(Icons.notifications_active, color: Colors.purple.shade700),
+            const SizedBox(width: 10),
+            const Text('오늘의 리마인더'),
+          ],
+        ),
+        content: Container(
+          width: double.maxFinite,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (calendarEvents.isNotEmpty) ...[
+                const Text(
+                  '📅 오늘의 일정',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ...calendarEvents.map((event) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        if (event.startTime != null)
+                          Text(
+                            '시간: ${event.startTime!.format(context)} ${event.endTime != null ? '~ ${event.endTime!.format(context)}' : ''}',
+                            style: TextStyle(color: Colors.blue.shade700),
+                          ),
+                        if (event.location != null && event.location!.isNotEmpty)
+                          Text(
+                            '장소: ${event.location}',
+                            style: TextStyle(color: Colors.blue.shade700),
+                          ),
+                      ],
+                    ),
+                  ),
+                )),
               ],
-            ),
-            content: Container(
-              width: double.maxFinite,
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery
-                    .of(context)
-                    .size
-                    .height * 0.6,
-              ),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  if (calendarEvents.isNotEmpty) ...[
-                    const Text(
-                      '📅 오늘의 일정',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    ...calendarEvents.map((event) =>
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  event.title,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                if (event.startTime != null)
-                                  Text(
-                                    '시간: ${event.startTime!.format(
-                                        context)} ${event.endTime != null
-                                        ? '~ ${event.endTime!.format(context)}'
-                                        : ''}',
-                                    style: TextStyle(
-                                        color: Colors.blue.shade700),
-                                  ),
-                                if (event.location != null &&
-                                    event.location!.isNotEmpty)
-                                  Text(
-                                    '장소: ${event.location}',
-                                    style: TextStyle(
-                                        color: Colors.blue.shade700),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        )),
-                  ],
 
-                  if (todoTasks.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Text(
-                      '📝 오늘의 할 일',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16),
+              if (todoTasks.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '📝 오늘의 할 일',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ...todoTasks.map((task) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    const SizedBox(height: 8),
-                    ...todoTasks.map((task) =>
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Checkbox(
+                                value: task.isCompleted,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _taskDataService.updateTaskStatus(
+                                        task, value ?? false);
+                                    updateProgress();
+                                    Navigator.pop(context); // 대화상자 닫기
+                                  });
+                                },
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: Checkbox(
-                                        value: task.isCompleted,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _taskDataService.updateTaskStatus(
-                                                task, value ?? false);
-                                            updateProgress();
-                                            Navigator.pop(context); // 대화상자 닫기
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        task.title,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          decoration: task.isCompleted
-                                              ? TextDecoration.lineThrough
-                                              : null,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  decoration: task.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
                                 ),
-                                Row(
-                                  children: [
-                                    if (task.importance > 0) ...[
-                                      const SizedBox(width: 32),
-                                      Icon(Icons.star, size: 14,
-                                          color: Colors.amber),
-                                      Text(' ${task.importance}',
-                                          style: TextStyle(fontSize: 12,
-                                              color: Colors.amber.shade800)),
-                                    ],
-                                    if (task.urgency > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Icon(Icons.timer, size: 14,
-                                          color: Colors.red.shade400),
-                                      Text(' ${task.urgency}',
-                                          style: TextStyle(fontSize: 12,
-                                              color: Colors.red.shade800)),
-                                    ],
-                                  ],
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        )),
-                  ],
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            if (task.importance > 0) ...[
+                              const SizedBox(width: 32),
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Text(' ${task.importance}',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.amber.shade800)),
+                            ],
+                            if (task.urgency > 0) ...[
+                              const SizedBox(width: 8),
+                              Icon(Icons.timer, size: 14, color: Colors.red.shade400),
+                              Text(' ${task.urgency}',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.red.shade800)),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
+              ],
 
-                  if (calendarEvents.isEmpty && todoTasks.isEmpty)
-                    const Text('오늘은 특별한 일정이나 할 일이 없습니다. 편안한 하루 되세요!'),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('확인'),
-              ),
+              if (calendarEvents.isEmpty && todoTasks.isEmpty)
+                const Text('오늘은 특별한 일정이나 할 일이 없습니다. 편안한 하루 되세요!'),
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
     );
   }
 
-// 선택된 날짜의 이벤트를 가져오는 헬퍼 함수
-  List<Event> _getEventsForSelectedDate() {
+  Future<List<Event>> _getEventsForSelectedDate() async {
     final events = <Event>[];
 
     try {
@@ -1138,24 +968,41 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           .toString()
           .padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
 
-      // Firestore에서 해당 날짜의
+      // Firestore에서 데이터 가져오기를 비동기로 변경
       FirebaseFirestore.instance
           .collection('events')
           .where('userId', isEqualTo: userId)
-          .where('startDate', isEqualTo: dateStr)
           .get()
           .then((snapshot) {
         for (var doc in snapshot.docs) {
           final data = doc.data();
 
+          // 날짜 확인
+          bool isMatchingDate = false;
+
+          if (data['startDate'] is String) {
+            isMatchingDate = data['startDate'].startsWith(dateStr);
+          } else if (data['startDate'] is Timestamp) {
+            final eventDate = data['startDate'].toDate();
+            isMatchingDate = eventDate.year == selectedDate.year &&
+                eventDate.month == selectedDate.month &&
+                eventDate.day == selectedDate.day;
+          }
+
+          if (!isMatchingDate) continue;
+
           final startTime = data['startTime'] != null
+              ? (data['startTime'] is Map
               ? TimeOfDay(hour: data['startTime']['hour'],
               minute: data['startTime']['minute'])
+              : null)
               : null;
 
           final endTime = data['endTime'] != null
+              ? (data['endTime'] is Map
               ? TimeOfDay(
               hour: data['endTime']['hour'], minute: data['endTime']['minute'])
+              : null)
               : null;
 
           final event = Event(
@@ -1163,8 +1010,16 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             id: doc.id,
             title: data['title'] ?? '',
             description: data['description'] ?? '',
-            startDate: DateTime.parse(data['startDate']),
-            endDate: DateTime.parse(data['endDate'] ?? data['startDate']),
+            startDate: data['startDate'] is Timestamp
+                ? data['startDate'].toDate()
+                : DateTime.parse(data['startDate']),
+            endDate: data['endDate'] != null
+                ? (data['endDate'] is Timestamp
+                ? data['endDate'].toDate()
+                : DateTime.parse(data['endDate']))
+                : (data['startDate'] is Timestamp
+                ? data['startDate'].toDate()
+                : DateTime.parse(data['startDate'])),
             startTime: startTime,
             endTime: endTime,
             memo: data['memo'] ?? '',
@@ -1198,7 +1053,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-// TodoTask 카드 위젯 - 레이아웃 변경
   Widget _buildTodoTaskCard(dynamic task) {
     final start = _parseTimeToDateTime(task.time);
     final end = _parseTimeToDateTime(task.endTime);
@@ -1208,7 +1062,14 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     // 완료 여부에 따른 스타일 조정
     final isCompleted = task.isCompleted;
-    final taskColor = task.color ?? _getFixedColorForTask(task.title);
+
+    // 캘린더 일정과 투두 일정 구분
+    final isCalendarEvent = task.title.startsWith('(일정)');
+
+    // 색상 설정 - 캘린더 일정은 파란색 계열, 투두는 기존 색상
+    final taskColor = isCalendarEvent
+        ? Colors.blue.shade100
+        : (task.color ?? _getFixedColorForTask(task.title));
 
     // 마감일까지 남은 일수 계산
     int? daysLeft;
@@ -1242,9 +1103,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         color: isCompleted ? Colors.grey.shade100 : taskColor.withOpacity(0.12),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isCompleted ? Colors.grey.shade300 : taskColor.withOpacity(
-              0.5),
-          width: 1,
+          color: isCompleted ? Colors.grey.shade300 : isCalendarEvent
+              ? Colors.blue.shade300  // 캘린더 일정은 파란색 테두리
+              : taskColor.withOpacity(0.5),
+          width: isCalendarEvent ? 1.5 : 1,  // 캘린더 일정은 테두리 굵게
         ),
         boxShadow: [
           BoxShadow(
@@ -1272,10 +1134,19 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 캘린더 일정은 특별한 아이콘 표시
+                    if (isCalendarEvent)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Icon(Icons.event, size: 16, color: Colors.blue),
+                      ),
+
                     // 제목
                     Expanded(
                       child: Text(
-                        task.title,
+                        isCalendarEvent
+                            ? task.title.replaceFirst('(일정) ', '') // '(일정)' 접두사 제거
+                            : task.title,
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -1297,29 +1168,31 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         ),
                       ),
 
-                    // 체크박스
-                    const SizedBox(width: 8),
-                    Transform.scale(
-                      scale: 1.1,
-                      child: Checkbox(
-                        value: task.isCompleted,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
+                    // 체크박스 (캘린더 일정에는 표시하지 않음)
+                    if (!isCalendarEvent) ...[
+                      const SizedBox(width: 8),
+                      Transform.scale(
+                        scale: 1.1,
+                        child: Checkbox(
+                          value: task.isCompleted,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          activeColor: Colors.purple.shade400, // 보라색으로 변경
+                          onChanged: (bool? value) {
+                            setState(() {
+                              _taskDataService.updateTaskStatus(
+                                  task, value ?? false);
+                              updateProgress();
+                            });
+                            if (value == true) {
+                              _notificationService.showTaskCompletedNotification(
+                                  task.title);
+                            }
+                          },
                         ),
-                        activeColor: Colors.purple.shade400, // 보라색으로 변경
-                        onChanged: (bool? value) {
-                          setState(() {
-                            _taskDataService.updateTaskStatus(
-                                task, value ?? false);
-                            updateProgress();
-                          });
-                          if (value == true) {
-                            _notificationService.showTaskCompletedNotification(
-                                task.title);
-                          }
-                        },
                       ),
-                    ),
+                    ],
                   ],
                 ),
 
@@ -1362,10 +1235,14 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.05), // 보라색으로 변경
+                            color: isCalendarEvent
+                                ? Colors.blue.withOpacity(0.05) // 캘린더 일정은 파란색
+                                : Colors.purple.withOpacity(0.05), // 투두 일정은 보라색
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: Colors.purple.withOpacity(0.2), // 보라색으로 변경
+                              color: isCalendarEvent
+                                  ? Colors.blue.withOpacity(0.2) // 캘린더 일정은 파란색
+                                  : Colors.purple.withOpacity(0.2), // 투두 일정은 보라색
                               width: 1,
                             ),
                           ),
@@ -1375,16 +1252,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                               Icon(
                                 Icons.location_on,
                                 size: 14,
-                                color: isCompleted ? Colors.grey : Colors
-                                    .purple, // 보라색으로 변경
+                                color: isCompleted
+                                    ? Colors.grey
+                                    : (isCalendarEvent ? Colors.blue : Colors.purple),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 task.location!,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isCompleted ? Colors.grey : Colors
-                                      .purple, // 보라색으로 변경
+                                  color: isCompleted
+                                      ? Colors.grey
+                                      : (isCalendarEvent ? Colors.blue : Colors.purple),
                                 ),
                               ),
                             ],
@@ -1405,7 +1284,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                           ? Colors.red.withOpacity(0.1)
                           : daysLeft != null && daysLeft == 0
                           ? Colors.orange.withOpacity(0.1)
-                          : Colors.purple.withOpacity(0.1), // 보라색으로 변경
+                          : isCalendarEvent
+                          ? Colors.blue.withOpacity(0.1) // 캘린더는 파란색
+                          : Colors.purple.withOpacity(0.1), // 투두는 보라색
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -1418,7 +1299,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                               ? Colors.red
                               : daysLeft != null && daysLeft == 0
                               ? Colors.orange
-                              : Colors.purple, // 보라색으로 변경
+                              : isCalendarEvent ? Colors.blue : Colors.purple,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -1433,7 +1314,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                                 ? Colors.red
                                 : daysLeft != null && daysLeft == 0
                                 ? Colors.orange
-                                : Colors.purple, // 보라색으로 변경
+                                : isCalendarEvent ? Colors.blue : Colors.purple,
                           ),
                         ),
                       ],
@@ -1470,6 +1351,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     return null;
   }
+
+
 
 
   Widget _buildFloatingActionButton() {
@@ -1547,6 +1430,37 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
 
+  // 시간 형식을 "HH:MM" 형식에서 "AM/PM HH:MM" 형식으로 변환
+  String _convertTimeFormat(String timeStr) {
+    try {
+      // HH:MM 형식 확인
+      if (timeStr.contains(':')) {
+        final parts = timeStr.split(':');
+        if (parts.length == 2) {
+          int hour = int.parse(parts[0].trim());
+          int minute = int.parse(parts[1].trim());
+
+          // 오전/오후 결정
+          final isAM = hour < 12;
+          final hour12 = (hour == 0) ? 12 : (hour > 12 ? hour - 12 : hour);
+
+          // AM/PM HH:MM 형식으로 변환
+          return '${isAM ? 'AM' : 'PM'} ${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+        }
+      }
+
+      // 이미 AM/PM 형식이면 그대로 반환
+      if (timeStr.contains('AM') || timeStr.contains('PM')) {
+        return timeStr;
+      }
+    } catch (e) {
+      print('시간 형식 변환 오류: $e');
+    }
+
+    // 변환 실패 시 원본 문자열 반환
+    return timeStr;
+  }
+
   void _generateAIPlanner() async {
     // Show loading indicator while processing
     setState(() {
@@ -1558,7 +1472,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     // Firebase에서 Calendar Event 가져오기 (시간 포함)
     final eventsSnapshot = await FirebaseFirestore.instance
         .collection('events')
+        .where('userId', isEqualTo: userId)
         .get();
+
     List<Map<String, dynamic>> calendarEvents = [];
 
     for (var doc in eventsSnapshot.docs) {
@@ -1628,8 +1544,33 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
           'title': data['title'],
           'startTime': startTimeStr,
           'endTime': endTimeStr,
+          'location': data['location'] ?? '',
+          'description': data['description'] ?? '',
+          'id': doc.id,
         });
       }
+    }
+
+    // 여기서 캘린더 이벤트를 플래너 일정으로 변환하여 추가
+    for (var event in calendarEvents) {
+      // 캘린더 이벤트를 플래너 일정으로 변환
+      Todo_Task calendarTask = Todo_Task(
+        id: 'calendar_${event['id']}',
+        title: '(일정) ${event['title']}',
+        date: selectedDate,
+        time: event['startTime'] != null ? _convertTimeFormat(event['startTime']) : null,
+        endTime: event['endTime'] != null ? _convertTimeFormat(event['endTime']) : null,
+        isImportant: true,
+        importance: 5, // 캘린더 일정은 중요도 높게 설정
+        urgency: 5,   // 캘린더 일정은 긴급도 높게 설정
+        memo: event['description'] ?? '캘린더에서 가져온 일정',
+        location: event['location'] ?? '',
+        isCompleted: false,
+        color: Colors.blue.shade100, // 캘린더 일정은 파란색 계열로 구분
+      );
+
+      _taskDataService.addPlannerTask(calendarTask);
+      print('Added calendar event to planner: ${calendarTask.title} at ${calendarTask.time}');
     }
 
     // 투두 일정 시간 형식 유지하도록 수정
@@ -1658,6 +1599,16 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
       return taskData;
     }).toList();
+
+    // 캘린더 이벤트를 allTasksData에 추가
+    allTasksData.addAll(calendarEvents.map((event) => {
+      'title': event['title'],
+      'time': event['startTime'],
+      'endTime': event['endTime'],
+      'importance': 5, // 캘린더 일정은 중요도 높게 설정
+      'urgency': 5,    // 캘린더 일정은 긴급도 높게 설정
+      'location': event['location'],
+    }));
 
     if (allTasksData.isEmpty && calendarEvents.isEmpty) {
       setState(() {
@@ -1757,75 +1708,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-  Widget _buildReminderBubble() {
-    // 오늘 일정 가져오기
-    final todayCalendarEvents = _getEventsForSelectedDate();
-    final todayTodoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
-
-    // 일정/할일이 없으면 표시하지 않음
-    if (todayCalendarEvents.isEmpty && todayTodoTasks.isEmpty) {
-      return SizedBox.shrink();
-    }
-
-    // 맞춤형 메시지 생성
-    String message = _generateContextualMessage(
-        todayCalendarEvents, todayTodoTasks);
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Color(0xFFE6E0FF),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.2),
-              spreadRadius: 1,
-              blurRadius: 3,
-              offset: Offset(0, 1),
-            ),
-          ],
-        ),
-        padding: EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              backgroundColor: Color(0xFF9D8CFF),
-              radius: 20,
-              child: Icon(Icons.assistant, color: Colors.white, size: 24),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "오늘의 리마인더",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Color(0xFF4A4A4A),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF4A4A4A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-// 맞춤형 메시지 생성 함수
+  // 맞춤형 메시지 생성 함수
   String _generateContextualMessage(List<Event> events, List<Todo_Task> tasks) {
     // 기본 메시지
     if (events.isEmpty && tasks.isEmpty) {
@@ -1835,54 +1718,501 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     // 먼저 특정 키워드 기반 맞춤 메시지 확인
     for (var event in events) {
       final title = event.title.toLowerCase();
+      final description = event.description?.toLowerCase() ?? '';
+      final location = event.location?.toLowerCase() ?? '';
 
       // 여행 관련 일정
-      if (title.contains('여행') || title.contains('trip')) {
+      if (title.contains('여행') || title.contains('trip') ||
+          description.contains('여행') || description.contains('trip')) {
         String destination = '';
 
-        if (title.contains('일본'))
+        // 국가/도시 감지
+        if (title.contains('일본') || location.contains('일본'))
           destination = '일본';
-        else if (title.contains('미국'))
+        else if (title.contains('미국') || location.contains('미국'))
           destination = '미국';
-        else if (title.contains('유럽'))
+        else if (title.contains('유럽') || location.contains('유럽'))
           destination = '유럽';
-        else if (title.contains('제주')) destination = '제주';
+        else if (title.contains('제주') || location.contains('제주'))
+          destination = '제주';
+        else if (title.contains('서울') || location.contains('서울'))
+          destination = '서울';
+        else if (title.contains('부산') || location.contains('부산'))
+          destination = '부산';
+        else if (title.contains('베트남') || location.contains('베트남'))
+          destination = '베트남';
+        else if (title.contains('태국') || location.contains('태국'))
+          destination = '태국';
 
         if (destination.isNotEmpty) {
-          return "$destination 여행을 가시는군요! 호텔과 항공권은 예약하셨나요?";
+          // 여행 일정 시작일 기준으로 메시지 다양화
+          final today = DateTime.now();
+          final eventDate = event.startDate;
+          final daysUntil = eventDate.difference(today).inDays;
+
+          if (daysUntil > 7) {
+            return "$destination 여행 준비는 잘 되고 있나요? 여권과 필수 준비물 목록을 확인해보세요.";
+          } else if (daysUntil > 3) {
+            return "$destination 여행이 일주일 내로 다가왔네요! 여행에 필요한 환전은 하셨나요?";
+          } else if (daysUntil > 0) {
+            return "$destination 여행이 ${daysUntil}일 후로 다가왔어요! 짐 챙기는 것 잊지 마세요.";
+          } else if (daysUntil == 0) {
+            return "오늘 $destination 여행을 떠나시는 날이네요! 좋은 여행 되세요.";
+          } else {
+            return "$destination 여행 중이시군요! 즐거운 시간 보내세요.";
+          }
         }
 
         return "여행 준비는 잘 되고 있나요? 여권과 필수 준비물을 확인하세요.";
       }
 
-      // 시험 관련 일정
-      if (title.contains('시험') || title.contains('테스트') ||
-          title.contains('exam')) {
-        return "오늘 시험이 있네요. 충분히 준비하셨나요? 행운을 빕니다!";
+      // 시험/테스트 관련 일정
+      if (title.contains('시험') || title.contains('테스트') || title.contains('exam') ||
+          title.contains('퀴즈') || title.contains('quiz') || title.contains('평가')) {
+        String subject = '';
+
+        // 과목 감지
+        if (title.contains('수학') || title.contains('math'))
+          subject = '수학';
+        else if (title.contains('영어') || title.contains('english'))
+          subject = '영어';
+        else if (title.contains('국어') || title.contains('korean'))
+          subject = '국어';
+        else if (title.contains('과학') || title.contains('science'))
+          subject = '과학';
+        else if (title.contains('코딩') || title.contains('프로그래밍') || title.contains('coding'))
+          subject = '코딩';
+
+        if (subject.isNotEmpty) {
+          return "오늘 $subject 시험이 있네요. 충분히 준비하셨나요? 행운을 빕니다!";
+        }
+
+        return "오늘 시험이 있네요. 마지막으로 중요 내용을 복습해보세요. 화이팅!";
       }
 
-      // 미팅/회의 관련
-      if (title.contains('회의') || title.contains('미팅')) {
-        return "오늘 회의가 있습니다. 필요한 자료는 준비되었나요?";
+      // 회의/미팅 관련
+      if (title.contains('회의') || title.contains('미팅') || title.contains('meeting') ||
+          title.contains('conference') || title.contains('콜') || title.contains('call')) {
+
+        // 회의 종류 감지
+        if (title.contains('팀') || title.contains('team'))
+          return "오늘 팀 회의가 있습니다. 논의 사항을 미리 정리해 보세요.";
+        else if (title.contains('고객') || title.contains('client'))
+          return "오늘 고객 미팅이 있습니다. 필요한 자료는 준비되었나요?";
+        else if (title.contains('주간') || title.contains('weekly'))
+          return "주간 회의 날이네요. 지난 주 성과와, 이번 주 계획을 정리해보세요.";
+        else if (title.contains('월간') || title.contains('monthly'))
+          return "월간 회의 날입니다. 월간 성과 데이터를 체크해보세요.";
+        else if (title.contains('1:1') || title.contains('one-on-one'))
+          return "오늘 1:1 미팅이 있어요. 논의하고 싶은 주제를 미리 생각해두세요.";
+
+        return "오늘 회의가 있습니다. 회의 자료와 아젠다 확인하셨나요?";
+      }
+
+      // 운동 관련
+      if (title.contains('운동') || title.contains('workout') || title.contains('헬스') ||
+          title.contains('피트니스') || title.contains('fitness') || title.contains('요가') ||
+          title.contains('yoga') || title.contains('필라테스') || title.contains('pilates') ||
+          title.contains('수영') || title.contains('swim')) {
+
+        String exerciseType = '';
+
+        if (title.contains('헬스') || title.contains('gym'))
+          exerciseType = '헬스장';
+        else if (title.contains('요가') || title.contains('yoga'))
+          exerciseType = '요가';
+        else if (title.contains('필라테스') || title.contains('pilates'))
+          exerciseType = '필라테스';
+        else if (title.contains('수영') || title.contains('swim'))
+          exerciseType = '수영';
+        else if (title.contains('달리기') || title.contains('run') || title.contains('러닝'))
+          exerciseType = '러닝';
+        else if (title.contains('자전거') || title.contains('cycling') || title.contains('싸이클'))
+          exerciseType = '자전거';
+
+        if (exerciseType.isNotEmpty) {
+          return "오늘 $exerciseType 일정이 있어요. 운동복과 물은 챙기셨나요?";
+        }
+
+        return "오늘 운동 일정이 있네요. 건강한 하루 되세요!";
+      }
+
+      // 공부/학습 관련
+      if (title.contains('공부') || title.contains('스터디') || title.contains('study') ||
+          title.contains('학습') || title.contains('강의') || title.contains('lecture') ||
+          title.contains('세미나') || title.contains('seminar') || title.contains('workshop')) {
+
+        String studyTopic = '';
+
+        if (title.contains('코딩') || title.contains('프로그래밍') || title.contains('개발'))
+          studyTopic = '코딩';
+        else if (title.contains('언어') || title.contains('영어') || title.contains('일본어'))
+          studyTopic = '언어';
+        else if (title.contains('수학') || title.contains('math'))
+          studyTopic = '수학';
+        else if (title.contains('과학') || title.contains('science'))
+          studyTopic = '과학';
+        else if (title.contains('역사') || title.contains('history'))
+          studyTopic = '역사';
+        else if (title.contains('독서') || title.contains('reading'))
+          studyTopic = '독서';
+
+        if (studyTopic.isNotEmpty) {
+          return "오늘 $studyTopic 공부 일정이 있어요. 학습 목표를 설정하고 집중해보세요!";
+        }
+
+        return "오늘 공부/학습 일정이 있네요. 방해받지 않는 환경에서 집중해보세요.";
+      }
+
+      // 병원/의료 관련
+      if (title.contains('병원') || title.contains('의사') || title.contains('doctor') ||
+          title.contains('치과') || title.contains('dental') || title.contains('검진') ||
+          title.contains('check-up') || title.contains('진료')) {
+
+        String appointmentType = '';
+
+        if (title.contains('치과') || title.contains('dental'))
+          appointmentType = '치과';
+        else if (title.contains('안과') || title.contains('eye'))
+          appointmentType = '안과';
+        else if (title.contains('내과') || title.contains('internal'))
+          appointmentType = '내과';
+        else if (title.contains('피부과') || title.contains('dermatologist'))
+          appointmentType = '피부과';
+        else if (title.contains('검진') || title.contains('check-up'))
+          appointmentType = '건강검진';
+
+        if (appointmentType.isNotEmpty) {
+          return "오늘 $appointmentType 예약이 있습니다. 보험증과 필요한 서류를 챙겨가세요.";
+        }
+
+        return "오늘 병원 예약이 있습니다. 진료 받으실 내용을 메모해 두세요.";
+      }
+
+      // 식사/외식 관련
+      if (title.contains('식사') || title.contains('점심') || title.contains('저녁') ||
+          title.contains('lunch') || title.contains('dinner') || title.contains('meal') ||
+          title.contains('레스토랑') || title.contains('restaurant') || title.contains('카페')) {
+
+        // 식사 대상 감지
+        if (title.contains('가족') || title.contains('family'))
+          return "오늘 가족과의 식사가 있네요. 즐거운 시간 되세요!";
+        else if (title.contains('친구') || title.contains('friend'))
+          return "오늘 친구와의 식사가 있어요. 만날 장소는 확인하셨나요?";
+        else if (title.contains('동료') || title.contains('colleague') || title.contains('팀원'))
+          return "오늘 직장 동료들과의 식사가 있네요. 즐거운 시간 보내세요.";
+        else if (title.contains('비즈니스') || title.contains('business'))
+          return "오늘 비즈니스 식사가 있습니다. 논의할 내용을 미리 준비해보세요.";
+
+        return "오늘 식사 약속이 있네요. 즐거운 시간 되세요!";
+      }
+
+      // 생일/기념일 관련
+      if (title.contains('생일') || title.contains('birthday') || title.contains('기념일') ||
+          title.contains('anniversary') || title.contains('파티') || title.contains('party') ||
+          title.contains('축하')) {
+
+        if (title.contains('내 생일') || title.contains('my birthday'))
+          return "오늘은 당신의 생일이군요! 행복한 하루 되세요. 🎂";
+        else if (title.toLowerCase().contains('생일'))
+          return "오늘은 누군가의 생일이네요! 선물은 준비하셨나요?";
+        else if (title.contains('결혼기념일') || title.contains('wedding anniversary'))
+          return "오늘은 결혼기념일이네요! 특별한 계획이 있으신가요?";
+
+        return "오늘은 특별한 기념일이네요! 축하합니다. 🎉";
+      }
+
+      // 쇼핑 관련
+      if (title.contains('쇼핑') || title.contains('shopping') || title.contains('구매') ||
+          title.contains('buy') || title.contains('마트') || title.contains('mart') ||
+          title.contains('장보기') || title.contains('grocery')) {
+
+        return "오늘 쇼핑 일정이 있네요. 구매 목록은 작성하셨나요?";
+      }
+
+      // 문화/엔터테인먼트 관련
+      if (title.contains('영화') || title.contains('movie') || title.contains('공연') ||
+          title.contains('concert') || title.contains('전시') || title.contains('exhibition') ||
+          title.contains('뮤지컬') || title.contains('musical') || title.contains('연극') ||
+          title.contains('theater') || title.contains('show')) {
+
+        String eventType = '';
+
+        if (title.contains('영화') || title.contains('movie'))
+          eventType = '영화';
+        else if (title.contains('공연') || title.contains('concert'))
+          eventType = '공연';
+        else if (title.contains('전시') || title.contains('exhibition'))
+          eventType = '전시회';
+        else if (title.contains('뮤지컬') || title.contains('musical'))
+          eventType = '뮤지컬';
+        else if (title.contains('연극') || title.contains('theater'))
+          eventType = '연극';
+
+        if (eventType.isNotEmpty) {
+          return "오늘 $eventType 일정이 있네요. 티켓은 준비되었나요? 즐거운 시간 보내세요!";
+        }
+
+        return "오늘 문화 행사 일정이 있네요. 즐거운 시간 되세요!";
       }
     }
 
     // 할 일 관련 메시지
     if (tasks.isNotEmpty) {
-      final completedTasks = tasks
-          .where((task) => task.isCompleted)
-          .length;
+      final completedTasks = tasks.where((task) => task.isCompleted).length;
       final totalTasks = tasks.length;
+      final completionRate = (completedTasks / totalTasks) * 100;
+
+      // 중요한 할 일이 있는지 확인
+      bool hasImportantTask = tasks.any((task) =>
+      !task.isCompleted && (task.importance ?? 0) >= 3);
+
+      // 마감 임박한 할 일이 있는지 확인
+      bool hasUrgentTask = tasks.any((task) =>
+      !task.isCompleted && task.dueDate != null &&
+          task.dueDate!.difference(DateTime.now()).inDays <= 1);
 
       if (completedTasks == 0) {
-        return "오늘 할 일이 ${tasks.length}개 있습니다. 지금 시작해볼까요?";
+        if (hasImportantTask && hasUrgentTask) {
+          return "중요하고 긴급한 할 일이 있습니다! 최우선으로 처리해보세요.";
+        } else if (hasImportantTask) {
+          return "중요한 할 일이 아직 남아있어요. 집중해서 처리해보세요.";
+        } else if (hasUrgentTask) {
+          return "마감이 임박한 할 일이 있어요! 서둘러 처리하세요.";
+        } else {
+          return "오늘 할 일이 ${tasks.length}개 있습니다. 지금 시작해볼까요?";
+        }
+      } else if (completionRate >= 75) {
+        return "오늘 할 일의 ${completionRate.toStringAsFixed(0)}%를 완료했어요! 조금만 더 힘내세요.";
+      } else if (completionRate >= 50) {
+        return "할 일의 절반 이상을 완료했어요. 좋은 진행 상황입니다!";
       } else {
-        return "오늘 할 일 ${totalTasks}개 중 ${completedTasks}개를 완료했습니다. 잘하고 계세요!";
+        return "오늘 할 일 ${totalTasks}개 중 ${completedTasks}개를 완료했습니다. 계속 진행해 보세요!";
       }
     }
 
+    // 날씨 기반 메시지 (날씨 API가 있다면 활용)
+    // 여기서는 임의로 메시지만 작성
+    /*
+  if (isRainy) {
+    return "오늘은 비가 오네요. 우산을 챙기세요!";
+  } else if (isSunny) {
+    return "화창한 하루네요! 선크림을 바르고 나가세요.";
+  }
+  */
+
     // 기본 메시지
-    return "오늘 하루도 화이팅하세요!";
+    final now = DateTime.now();
+    if (now.hour < 12) {
+      return "좋은 아침입니다! 오늘 하루도 화이팅하세요.";
+    } else if (now.hour < 18) {
+      return "활기찬 오후 되세요! 남은 일정도 차근차근 해결해봐요.";
+    } else {
+      return "저녁 시간입니다. 오늘 하루도 수고 많으셨어요.";
+    }
+  }
+
+  Widget _buildReminderBubble() {
+    return FutureBuilder<List<Event>>(
+      future: _getEventsForSelectedDate(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        final todayCalendarEvents = snapshot.data ?? [];
+        final todayTodoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+
+        // 일정/할일이 없으면 표시하지 않음
+        if (todayCalendarEvents.isEmpty && todayTodoTasks.isEmpty) {
+          return SizedBox.shrink();
+        }
+
+        // 맞춤형 메시지 생성
+        String message = _generateContextualMessage(
+            todayCalendarEvents, todayTodoTasks);
+
+        return Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Color(0xFFE6E0FF),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.2),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: Color(0xFF9D8CFF),
+                  radius: 20,
+                  child: Icon(Icons.assistant, color: Colors.white, size: 24),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "오늘의 리마인더",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF4A4A4A),
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        message,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF4A4A4A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDailyReminder() {
+    return FutureBuilder<List<Event>>(
+      future: _getEventsForSelectedDate(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        // 오늘의 할 일과 일정 가져오기
+        final todayTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+        final todayEvents = snapshot.data ?? [];
+
+        // 할 일이나 일정이 없으면 위젯을 표시하지 않음
+        if (todayTasks.isEmpty && todayEvents.isEmpty) {
+          return SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Color(0xFFE6E0FF),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.2),
+                spreadRadius: 1,
+                blurRadius: 3,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 헤더
+              Row(
+                children: [
+                  Icon(Icons.assistant, color: Color(0xFF9D8CFF)),
+                  SizedBox(width: 8),
+                  Text(
+                    '오늘의 리마인더',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF4A4A4A),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              // 캘린더 일정 리스트
+              if (todayEvents.isNotEmpty) ...[
+                Text(
+                  '📅 캘린더 일정:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    color: Color(0xFF4A4A4A),
+                  ),
+                ),
+                SizedBox(height: 4),
+                ...todayEvents.take(3).map((event) =>
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12, bottom: 4),
+                      child: Text(
+                        '• ${event.title} ${event.startTime != null
+                            ? '(${event.startTime!.format(context)})'
+                            : ''}',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    )
+                ),
+                if (todayEvents.length > 3)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, bottom: 4),
+                    child: Text(
+                      '외 ${todayEvents.length - 3}개 일정',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ),
+                SizedBox(height: 4),
+              ],
+              // 할일 리스트
+              if (todayTasks.isNotEmpty) ...[
+                Text(
+                  '📝 할 일:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    color: Color(0xFF4A4A4A),
+                  ),
+                ),
+                SizedBox(height: 4),
+                ...todayTasks.take(3).map((task) =>
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12, bottom: 4),
+                      child: Text(
+                        '• ${task.title}${task.time != null
+                            ? ' (${task.time})'
+                            : ''}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          decoration: task.isCompleted
+                              ? TextDecoration.lineThrough
+                              : null,
+                          color: task.isCompleted ? Colors.grey : Colors.black87,
+                        ),
+                      ),
+                    )
+                ),
+                if (todayTasks.length > 3)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, bottom: 4),
+                    child: Text(
+                      '외 ${todayTasks.length - 3}개 할 일',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<List<dynamic>> _getScheduleFromAI(List<Map<String, dynamic>> tasks,
@@ -2395,6 +2725,68 @@ class _EnhancedWeeklyCalendarState extends State<EnhancedWeeklyCalendar> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+}
+
+
+// 캐러셀 텍스트 위젯 (클래스를 밖으로 빼기)
+class CarouselReminderText extends StatefulWidget {
+  final List<String> messages;
+
+  const CarouselReminderText({
+    Key? key,
+    required this.messages,
+  }) : super(key: key);
+
+  @override
+  _CarouselReminderTextState createState() => _CarouselReminderTextState();
+}
+
+class _CarouselReminderTextState extends State<CarouselReminderText> {
+  int _currentIndex = 0;
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(Duration(seconds: 5), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentIndex = (_currentIndex + 1) % widget.messages.length;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: Duration(milliseconds: 500),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+      child: Text(
+        widget.messages[_currentIndex],
+        key: ValueKey<int>(_currentIndex),
+        style: TextStyle(
+          fontSize: 14,
+          color: Color(0xFF4A4A4A),
+        ),
+      ),
+    );
   }
 }
 

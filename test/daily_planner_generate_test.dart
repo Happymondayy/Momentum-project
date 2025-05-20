@@ -7,7 +7,7 @@ void main() {
     // 플래너 화면을 렌더링
     await tester.pumpWidget(
       const MaterialApp(
-        home: DailyPlannerPage(),
+        home: DailyPlannerPage(userId: '',),
       ),
     );
 

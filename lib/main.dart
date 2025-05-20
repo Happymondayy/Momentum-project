@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:momentum_planner/AI/chat_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore import 추가
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
 import 'package:momentum_planner/Diary/screens/diary_screen.dart';
@@ -95,6 +95,7 @@ class _MyAppState extends State<MyApp> {
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;
         final userId = args?['userId'] ?? '';
+        final int initialIndex = args?['initialIndex'] ?? 0; // 초기 인덱스 추가
 
         switch (settings.name) {
           case 'Login/login_page':
@@ -111,14 +112,21 @@ class _MyAppState extends State<MyApp> {
             );
           case 'Planner/DailyPlannerPage':
             return MaterialPageRoute(
-              builder: (_) => DailyPlannerPage(userId: userId),
+              settings: settings,
+              builder: (_) => DailyPlannerPage(
+                userId: userId,
+              ),
             );
           case 'Calendar/screens/calendar_screen':
             return MaterialPageRoute(
-              builder: (_) => CalendarScreen(userId: userId),
+              settings: settings,
+              builder: (_) => CalendarScreen(
+                userId: userId,
+              ),
             );
           case 'AI/ChatScreen':
             return MaterialPageRoute(
+              settings: settings,
               builder: (context) {
                 // ChatScreen에 필요한 데이터 및 콜백 준비
                 return FutureBuilder<Map<String, dynamic>>(
@@ -149,14 +157,14 @@ class _MyAppState extends State<MyApp> {
                         print('일정 추가됨: ${eventData['title']}');
                         // 안전하게 pop 처리
                         if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop({'refresh': true});
+                          Navigator.of(context).pop({'refresh': true, 'returnToIndex': 1});
                         }
                       },
                       onEventDeleted: (String eventId) async {
                         print('일정 삭제됨: $eventId');
                         // 안전하게 pop 처리
                         if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop({'refresh': true});
+                          Navigator.of(context).pop({'refresh': true, 'returnToIndex': 1});
                         }
                       },
                     );
@@ -166,11 +174,17 @@ class _MyAppState extends State<MyApp> {
             );
           case 'Diary/screens/diary_screen':
             return MaterialPageRoute(
-              builder: (_) => DiaryScreen(userId: userId),
+              settings: settings,
+              builder: (_) => DiaryScreen(
+                userId: userId,
+              ),
             );
           case 'Setting/settings_page':
             return MaterialPageRoute(
-              builder: (_) => SettingsPage(userId: userId),
+              settings: settings,
+              builder: (_) => SettingsPage(
+                userId: userId,
+              ),
             );
           default:
             return null;

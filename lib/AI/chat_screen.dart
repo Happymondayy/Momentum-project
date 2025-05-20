@@ -1,20 +1,23 @@
+
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:momentum_planner/AI/chat_service.dart';
 import 'package:momentum_planner/AI/ai_advice_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore import 추가
-import 'package:momentum_planner/Calendar/models/event.dart'; // Event 모델 import
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:momentum_planner/Calendar/models/event.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../Planner/DailyPlannerPage.dart'; // UUID 생성을 위한 패키지 추가
+import '../Planner/DailyPlannerPage.dart';
 
 class ChatScreen extends StatefulWidget {
   final List<Map<String, dynamic>> calendarData;
   final List<Map<String, dynamic>> todoData;
   final String userId;
-  final Function(Map<String, dynamic>) onEventAdded; // 이벤트 추가 콜백
-  final Function(String) onEventDeleted; // 이벤트 삭제 콜백
+  final Function(Map<String, dynamic>) onEventAdded;
+  final Function(String) onEventDeleted;
 
   const ChatScreen({
     Key? key,
@@ -32,7 +35,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, dynamic>> _messages = [];
+  late List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> _quickOptions = [];
   bool _isLoading = false;
   bool _isOfflineMode = false;
@@ -45,10 +48,59 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    userId = widget.userId; // 여기서 초기화
+    userId = widget.userId;
     print('📌 userId 받은 값: $userId');
 
-    _initializeChatService();
+    // 대화 기록 먼저 로드
+    _loadMessages().then((_) {
+      // 대화 기록이 비어있는 경우에만 초기화 메시지 추가
+      if (_messages.isEmpty) {
+        _initializeChatService();
+      } else {
+        // 기존 대화가 있으면 채팅 서비스만 초기화
+        _chatService = ChatService(userId: widget.userId);
+        setState(() {
+          _isOfflineMode = false;
+          _isLoading = false;
+        });
+
+        // 빠른 옵션(말풍선) 생성
+        _quickOptions = AIAdviceService.generateRecommendationOptions(
+            widget.calendarData,
+            widget.todoData
+        );
+      }
+    });
+  }
+
+  // 메시지 저장 함수
+  Future<void> _saveMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // 대화 내용을 JSON 문자열로 변환하여 저장
+      await prefs.setString('chat_history_${widget.userId}', jsonEncode(_messages));
+    } catch (e) {
+      print('대화 저장 오류: $e');
+    }
+  }
+
+  // 메시지 로드 함수
+  Future<void> _loadMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final history = prefs.getString('chat_history_${widget.userId}');
+
+      if (history != null && history.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(history);
+        setState(() {
+          _messages = List<Map<String, dynamic>>.from(
+              decoded.map((item) => Map<String, dynamic>.from(item))
+          );
+        });
+      }
+    } catch (e) {
+      print('대화 로드 오류: $e');
+    }
   }
 
   Future<void> _initializeChatService() async {
@@ -135,20 +187,27 @@ class _ChatScreenState extends State<ChatScreen> {
     // 미완료 할 일 개수 계산
     final incompleteTasks = todayTasks.where((task) => task['isCompleted'] != true).length;
 
-    // 브리핑 메시지 생성
-    String message = "${nickname}님, 안녕하세요! FocusMate입니다.\n\n";
-
-    // 날짜 정보 추가
-    message += "오늘은 ${now.year}년 ${now.month}월 ${now.day}일 ";
+    // 브리핑 메시지 생성 - 더 친근하게 수정
+    String message = "안녕하세요, ${nickname}님! 🌟\n\n";
 
     // 요일 구하기
     final weekdays = ["월", "화", "수", "목", "금", "토", "일"];
     final weekday = weekdays[now.weekday - 1];
-    message += "$weekday요일입니다.\n\n";
+
+    // 계절감 있는 인사 추가
+    List<String> seasonalGreetings = [
+      "오늘도 활기찬 하루 되세요!",
+      "오늘 하루도 파이팅하세요!",
+      "오늘도 좋은 일이 있기를 바라요.",
+      "함께 오늘 하루를 계획해볼까요?"
+    ];
+    final greeting = seasonalGreetings[now.millisecond % seasonalGreetings.length];
+
+    message += "오늘은 ${now.year}년 ${now.month}월 ${now.day}일 $weekday요일이에요. $greeting\n\n";
 
     // 일정 요약
     if (todayEvents.isNotEmpty) {
-      message += "📅 오늘 일정 (${todayEvents.length}개):\n";
+      message += "📅 오늘의 일정 (${todayEvents.length}개):\n";
       for (int i = 0; i < min(3, todayEvents.length); i++) {
         final event = todayEvents[i];
         String timeInfo = "";
@@ -158,39 +217,51 @@ class _ChatScreenState extends State<ChatScreen> {
           timeInfo = "${startHour.toString().padLeft(2, '0')}:${startMinute.toString().padLeft(2, '0')}";
         }
 
-        message += "- ${event['title']}${timeInfo.isNotEmpty ? ' ($timeInfo)' : ''}\n";
+        message += "• ${event['title']}${timeInfo.isNotEmpty ? ' ($timeInfo)' : ''}\n";
       }
 
       if (todayEvents.length > 3) {
-        message += "  외 ${todayEvents.length - 3}개 일정이 있습니다.\n";
+        message += "  외 ${todayEvents.length - 3}개 일정이 있어요.\n";
       }
 
       message += "\n";
     } else {
-      message += "📅 오늘은 일정이 없습니다.\n\n";
+      message += "📅 오늘은 특별한 일정이 없네요! 여유로운 하루를 보내세요.\n\n";
     }
 
     // 할 일 요약
     if (todayTasks.isNotEmpty) {
-      message += "📝 오늘 할 일 (${todayTasks.length}개 중 ${todayTasks.length - incompleteTasks}개 완료):\n";
+      final completedTasks = todayTasks.length - incompleteTasks;
+      final percentComplete = todayTasks.isEmpty ? 0 : (completedTasks / todayTasks.length * 100).round();
+
+      message += "📝 오늘의 할 일 ($completedTasks/${todayTasks.length}개 완료, $percentComplete%):\n";
 
       // 완료되지 않은 일부터 표시
       final notCompletedTasks = todayTasks.where((task) => task['isCompleted'] != true).toList();
       for (int i = 0; i < min(3, notCompletedTasks.length); i++) {
         final task = notCompletedTasks[i];
-        message += "- ${task['title']}\n";
+        message += "• ${task['title']}\n";
       }
 
       if (notCompletedTasks.length > 3) {
-        message += "  외 ${notCompletedTasks.length - 3}개 미완료 항목이 있습니다.\n";
+        message += "  그 외 ${notCompletedTasks.length - 3}개의 할 일이 더 있어요.\n";
       }
 
       message += "\n";
+
+      // 응원 메시지 추가
+      if (percentComplete >= 70) {
+        message += "대단해요! 오늘 할 일의 대부분을 이미 완료하셨네요. 😄\n\n";
+      } else if (percentComplete >= 30) {
+        message += "순조롭게 진행 중이네요! 앞으로도 화이팅! 👍\n\n";
+      } else if (todayTasks.isNotEmpty) {
+        message += "오늘 할 일을 차근차근 시작해볼까요? 저도 도울게요! 💪\n\n";
+      }
     } else {
-      message += "📝 오늘은 할 일이 없습니다.\n\n";
+      message += "📝 오늘은 등록된 할 일이 없어요. 새로운 목표를 설정해볼까요?\n\n";
     }
 
-    message += "무엇을 도와드릴까요?";
+    message += "무엇을 도와드릴까요? 😊";
 
     return message;
   }
@@ -285,6 +356,7 @@ class _ChatScreenState extends State<ChatScreen> {
               'actions': actions,
             });
           });
+          _saveMessages(); // 추가된 메시지 저장
         }
       } else {
         _addSystemMessage("죄송합니다. 추천 일정을 생성하는 중 오류가 발생했습니다.");
@@ -419,6 +491,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     });
 
+    _saveMessages(); // 변경 내용 저장
     _scrollToBottom();
   }
 
@@ -430,6 +503,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     });
 
+    _saveMessages(); // 변경 내용 저장
     _scrollToBottom();
   }
 
@@ -495,6 +569,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
+      _saveMessages(); // 변경 내용 저장
       _scrollToBottom();
 
       // 액션 처리
@@ -514,6 +589,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _isOfflineMode = true; // 오류 발생 시 오프라인 모드로 전환
       });
 
+      _saveMessages(); // 변경 내용 저장
       _scrollToBottom();
     }
   }
@@ -567,6 +643,7 @@ class _ChatScreenState extends State<ChatScreen> {
           }
         });
 
+        _saveMessages(); // 변경 내용 저장
         _scrollToBottom();
 
         if (response['actions'] != null && (response['actions'] as List).isNotEmpty) {
@@ -580,6 +657,7 @@ class _ChatScreenState extends State<ChatScreen> {
             'content': '죄송합니다. 요청을 처리하는 중 오류가 발생했습니다.',
           });
         });
+        _saveMessages(); // 변경 내용 저장
         print('빠른 옵션 처리 오류: $e');
       }
     }
@@ -710,7 +788,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      // DateTime 객체 생성
+// DateTime 객체 생성
       final dateComponents = date.split('-');
       if (dateComponents.length < 3) {
         _addSystemMessage("일정 추가에 실패했습니다. 날짜 형식이 올바르지 않습니다.");
@@ -723,10 +801,10 @@ class _ChatScreenState extends State<ChatScreen> {
         int.parse(dateComponents[2]),
       );
 
-      // 이벤트 ID 생성
+// 이벤트 ID 생성
       final eventId = _uuid.v4();
 
-      // Firestore에 저장할 데이터 준비
+// Firestore에 저장할 데이터 준비
       final eventDocData = {
         'id': eventId,
         'userId': widget.userId,
@@ -742,13 +820,13 @@ class _ChatScreenState extends State<ChatScreen> {
         'isCompleted': false,
       };
 
-      // Firestore에 저장
+// Firestore에 저장
       await _firestore.collection('events').doc(eventId).set(eventDocData);
 
-      // 부모에게 이벤트 추가 알림
+// 부모에게 이벤트 추가 알림
       widget.onEventAdded(eventDocData);
 
-      // 성공 메시지
+// 성공 메시지
       _addSystemMessage("'${eventData['title']}' 일정이 추가되었습니다.");
     } catch (e) {
       print('일정 추가 오류: $e');
@@ -756,7 +834,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // 일정 삭제 함수
+// 일정 삭제 함수
   Future<void> _deleteEvent(Map<String, dynamic> eventData) async {
     try {
       String? eventId;
@@ -796,7 +874,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // 추천 확인 대화상자
+// 추천 확인 대화상자
   void _showRecommendationDialog(Map<String, dynamic> recommendation) {
     try {
       showDialog(
@@ -906,24 +984,36 @@ class _ChatScreenState extends State<ChatScreen> {
                 final message = _messages[index];
                 final isUser = message['role'] == 'user';
 
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4.0),
-                    padding: const EdgeInsets.all(12.0),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isUser
-                          ? const Color(0xFF9D8CFF)
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
-                    child: Text(
-                      message['content'],
-                      style: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: isUser ? 40.0 : 16.0,
+                    right: isUser ? 16.0 : 40.0,
+                    top: 8.0,
+                    bottom: 8.0,
+                  ),
+                  child: Align(
+                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                      decoration: BoxDecoration(
+                        color: isUser
+                            ? const Color(0xFF9D8CFF)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(20.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 5,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        message['content'],
+                        style: TextStyle(
+                          color: isUser ? Colors.white : Colors.black87,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
@@ -935,11 +1025,37 @@ class _ChatScreenState extends State<ChatScreen> {
           // 로딩 인디케이터
           if (_isLoading)
             Container(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(16.0),
               alignment: Alignment.centerLeft,
-              child: const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF9D8CFF)),
-                strokeWidth: 3,
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE6E0FF),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF9D8CFF)),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    "메시지 작성 중...",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -987,14 +1103,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // 입력 영역
           Container(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
                   color: Colors.grey.withOpacity(0.2),
                   spreadRadius: 1,
-                  blurRadius: 1,
+                  blurRadius: 3,
                   offset: const Offset(0, -1),
                 ),
               ],
@@ -1004,17 +1120,23 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: '메시지를 입력하세요...',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(24.0)),
+                        borderRadius: BorderRadius.circular(24.0),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: Color(0xFFF2F2F2),
+                      fillColor: Color(0xFFF5F3FF),
                       contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8.0,
+                        horizontal: 20.0,
+                        vertical: 12.0,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.chat_bubble_outline,
+                        color: Color(0xFF9D8CFF),
+                        size: 20,
                       ),
                     ),
                     textInputAction: TextInputAction.send,
@@ -1022,12 +1144,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 const SizedBox(width: 8.0),
-                FloatingActionButton(
-                  onPressed: _sendMessage,
-                  backgroundColor: const Color(0xFF9D8CFF),
-                  elevation: 0,
-                  mini: true,
-                  child: const Icon(Icons.send, color: Colors.white),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9D8CFF),
+                    borderRadius: BorderRadius.circular(24.0),
+                  ),
+                  child: IconButton(
+                    onPressed: _sendMessage,
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                    tooltip: '메시지 보내기',
+                  ),
                 ),
               ],
             ),
@@ -1037,7 +1163,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // 옵션 아이콘 가져오기 함수
+// 옵션 아이콘 가져오기 함수
   Widget _getIconForOption(String? iconName) {
     IconData iconData;
 
