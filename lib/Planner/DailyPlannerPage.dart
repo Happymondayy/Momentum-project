@@ -470,6 +470,156 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
 
+  // 5763820
+
+  final TextEditingController _inputController = TextEditingController();
+  String _algorithmOutput = '';
+  String _geminiOutput = '';
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  // Flask 서버 URL (실제 서버 주소로 변경 필요)
+  final String serverUrl_1 = 'https://railwavve-production-68d4.up.railway.app/schedule_';  // 에뮬레이터 사용 시
+  final String serverUrl__ = 'https://railwavve-production-68d4.up.railway.app/schedule_';  // 웹에서 테스트 시
+  // final String serverUrl = 'http://your-server-ip:5000/schedule_';  // 실제 서버 IP로 접속 시
+
+  Future<void> _getSchedule() async {
+
+    int _calculateDuration(String? start, String? end) {
+      if (start == null || end == null) return 1;
+
+      try {
+        final startParts = start.split(':').map(int.parse).toList();
+        final endParts = end.split(':').map(int.parse).toList();
+
+        final startMinutes = startParts[0] * 60 + startParts[1];
+        final endMinutes = endParts[0] * 60 + endParts[1];
+
+        final duration = ((endMinutes - startMinutes) / 60).round();
+        return duration > 0 ? duration : 1;
+      } catch (e) {
+        return 1;
+      }
+    }
+
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+    final List<Todo_Task> todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    final List<String> formattedList = todoTasks.map((task) {
+      final name = task.title;
+      final importance = task.importance ?? 1;
+      final urgency = task.urgency ?? 1;
+      final duration = _calculateDuration(task.time, task.endTime);
+      final startTime = task.time ?? '0';
+      final endTime = task.endTime ?? '0';
+
+      return '(N: $name, I: $importance, U: $urgency, D: $duration, T: $startTime, T: $endTime)';
+    }).toList(); // 여기서는 join하지 않고 리스트 상태로 유지
+
+// 유저 선호도 정리
+    Map<String, dynamic> userPreferences = await _getUserPreferences();
+
+// 🔹 1. 수면 종료 시간 파싱 (S)
+    String sleepSchedule = userPreferences['sleepSchedule'] ?? 'PM 11:00 ~ AM 07:00';
+    int sleepEndHour = 7; // 기본값
+
+    try {
+      final sleepEndStr = sleepSchedule.split('~').last.trim();
+      final parts = sleepEndStr.split(' ');
+      final ampm = parts[0];
+      final hourMinute = parts[1];
+      int hour = int.parse(hourMinute.split(':')[0]);
+
+      if (ampm == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (ampm == 'AM' && hour == 12) {
+        hour = 0;
+      }
+
+      sleepEndHour = hour;
+    } catch (e) {
+      print('수면 종료 시간 파싱 실패: $e');
+    }
+
+// 🔹 2. 휴식 시간 파싱 (H)
+    String breakFrequency = userPreferences['breakFrequency'] ?? '1시간마다';
+    int breakHour = 1; // 기본값
+
+    try {
+      final hourMatch = RegExp(r'\d+').firstMatch(breakFrequency);
+      if (hourMatch != null) {
+        int value = int.parse(hourMatch.group(0)!);
+
+        if (breakFrequency.contains('분')) {
+          breakHour = (value / 60).ceil();
+        } else {
+          breakHour = value;
+        }
+      }
+    } catch (e) {
+      print('휴식 시간 파싱 실패: $e');
+    }
+
+// 🔹 최종 문자열로 조합
+    String result = '[S: $sleepEndHour, H: $breakHour]';
+
+// 한 줄로 모든 정보 출력하기
+    String fullOutput = '$result${formattedList.join('')}';
+// 또는 진짜 한 줄로 하고 싶다면:
+// String fullOutput = '$result ${formattedList.join(' ')}';
+
+    print(fullOutput);
+
+
+
+
+    print("실행이 됩니까 실행이 됩니다");
+
+    try {
+      // HTTP POST 요청 보내기
+      final response = await http.post(
+        Uri.parse(serverUrl_1),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'input_text': fullOutput}),
+      );
+
+      if (response.statusCode == 200) {
+        // 성공적으로 응답 받음
+        final data = json.decode(response.body);
+
+        setState(() {
+          _algorithmOutput = data['algorithm_output'] ?? '결과 없음';
+          _geminiOutput = data['gemini_output'] ?? '결과 없음';
+          _isLoading = false;
+
+          print("연결됨"+_algorithmOutput);
+          print("연결됨"+_geminiOutput);
+        });
+      } else {
+        // 오류 응답 처리
+        setState(() {
+          _errorMessage = '서버 오류: ${response.statusCode}';
+          _isLoading = false;
+          print("엥"+ _errorMessage);
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = '연결 오류: $e';
+        _isLoading = false;
+        print("엥"+ _errorMessage);
+      });
+    }
+  }
+
+  // 5763820
+
+
+
+
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -1419,7 +1569,17 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
     for (var doc in eventsSnapshot.docs) {
       final data = doc.data();
-      final startDate = DateTime.parse(data['startDate']);
+      dynamic rawStartDate = data['startDate'];
+      DateTime startDate;
+
+      if (rawStartDate is Timestamp) {
+        startDate = rawStartDate.toDate();
+      } else if (rawStartDate is String) {
+        startDate = DateTime.parse(rawStartDate);
+      } else {
+        throw Exception("Unsupported startDate type: ${rawStartDate.runtimeType}");
+      }
+
       if (startDate.year == selectedDate.year &&
           startDate.month == selectedDate.month &&
           startDate.day == selectedDate.day) {
@@ -1529,6 +1689,50 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       const SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
     );
   }
+
+  Future<Map<String, dynamic>> _getUserPreferences() async {
+    Map<String, dynamic> preferences = {
+      'preferredTimeOfDay': '아침', // 기본값
+      'sleepSchedule': 'PM 11:00 ~ AM 07:00', // 기본값
+      'breakFrequency': '1시간마다', // 기본값
+    };
+
+    try {
+      if (userId.isNotEmpty) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('user')
+            .doc(userId)
+            .get();
+
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          if (userData != null && userData.containsKey('preferences')) {
+            final userPrefs = userData['preferences'];
+            if (userPrefs is Map) {
+              // 각 선호도 항목 추출
+              if (userPrefs.containsKey('preferredTimeOfDay')) {
+                preferences['preferredTimeOfDay'] =
+                userPrefs['preferredTimeOfDay'];
+              }
+
+              if (userPrefs.containsKey('sleepSchedule')) {
+                preferences['sleepSchedule'] = userPrefs['sleepSchedule'];
+              }
+
+              if (userPrefs.containsKey('breakFrequency')) {
+                preferences['breakFrequency'] = userPrefs['breakFrequency'];
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('사용자 선호도 불러오기 오류: $e');
+    }
+
+    return preferences;
+  }
+
 
   Future<List<dynamic>> _getScheduleFromAI(
       List<Map<String, dynamic>> tasks,
