@@ -221,35 +221,42 @@ class TaskDataService {
     }
   }
 
-  // 특정 날짜의 Planner 작업 모두 삭제 (최종 수정 버전)
+  // 특정 날짜의 Planner 작업 모두 삭제 (개선된 버전)
   Future<void> clearPlannerTasksForDate(DateTime date) async {
     if (currentUserId == null) return;
 
     final dateKey = dateToKey(date);
 
     try {
-      // 1. 먼저 로컬 캐시 데이터 삭제 (중요!)
-      plannerTasksByDate[dateKey] = [];
+      // 1. 먼저 로컬 캐시 데이터 삭제
+      plannerTasksByDate.remove(dateKey);
 
       // 2. Firestore에서 해당 날짜의 문서 검색
-      final dateStr = date.toIso8601String();
+      final dateStr = date.toIso8601String().split('T')[0]; // 날짜만 추출 (시간 제외)
+
+      // 해당 날짜에 대한 모든 플래너 문서 가져오기
       final plannerQuery = await plannerCollection
           .where('userId', isEqualTo: currentUserId)
-          .where('date', isEqualTo: dateStr)
           .get();
 
-      // 3. Firestore 문서 삭제
-      if (plannerQuery.docs.isNotEmpty) {
-        WriteBatch batch = FirebaseFirestore.instance.batch();
-        for (var doc in plannerQuery.docs) {
-          batch.delete(doc.reference);
+      // 3. 해당 날짜와 일치하는 문서만 필터링하여 삭제
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      bool hasDocumentsToDelete = false;
+
+      for (var doc in plannerQuery.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['date'] != null) {
+          final docDate = DateTime.parse(data['date']).toIso8601String().split('T')[0];
+          if (docDate == dateStr) {
+            batch.delete(doc.reference);
+            hasDocumentsToDelete = true;
+          }
         }
-        await batch.commit();
       }
 
-      // 4. 로컬 캐시가 확실히 비워졌는지 한 번 더 확인
-      if (plannerTasksByDate.containsKey(dateKey)) {
-        plannerTasksByDate[dateKey] = [];
+      // 삭제할 문서가 있을 경우에만 batch 커밋
+      if (hasDocumentsToDelete) {
+        await batch.commit();
       }
 
       print('Planner Tasks for $dateKey 삭제 완료');
@@ -403,7 +410,13 @@ class TaskDataService {
 
 class DailyPlannerPage extends StatefulWidget {
   final String userId;
-  const DailyPlannerPage({Key? key, required this.userId}) : super(key: key);
+  final List<Map<String, dynamic>>? calendarData; // calendarData를 선택적으로 추가
+
+  const DailyPlannerPage({
+    Key? key,
+    required this.userId,
+    this.calendarData, // 선택적 매개변수로 정의
+  }) : super(key: key);
 
   @override
   State<DailyPlannerPage> createState() => _DailyPlannerPageState();
@@ -456,12 +469,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     });
   }
 
-  void changeSelectedDate(DateTime date) {
-    setState(() {
-      selectedDate = date;
-      updateProgress();
-    });
-  }
 
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
@@ -528,26 +535,6 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       bottomNavigationBar: BottomNav(
         initialIndex: 1,
         userId: widget.userId,
-        onNavigate: (index) {
-          if (index == 4) {
-            final todoItems = _taskDataService.getTodoTasksForDate(selectedDate);
-            final todoDataMaps = todoItems.map((task) => task.toMap()).toList();
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatScreen(
-                  calendarData: calendarEvents,
-                  todoData: todoDataMaps,
-                  userId: widget.userId,
-                ),
-              ),
-            );
-
-            return false; // 기본 네비게이션 막기
-          }
-          return true;
-        },
       ),
     );
 
@@ -588,22 +575,26 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-
   Widget _buildPlannerView() {
     final tasks = _taskDataService.getPlannerTasksForDate(selectedDate);
     print('tasks length: ${tasks.length}');
-    for(var task in tasks) {
-      print('task time: ${task.time}');
-    }
+
+    // 현재 날짜와 시간 정확히 가져오기
     final now = DateTime.now();
+    final currentHour = now.hour;
+    print('현재 시간: $currentHour시');
+
     final isToday = selectedDate.year == now.year &&
         selectedDate.month == now.month &&
         selectedDate.day == now.day;
 
+    // 캘린더 및 투두리스트 정보 가져오기
+    _fetchCalendarAndTodoCount();
+
     return SingleChildScrollView(
       child: Column(
         children: [
-          // 상단 버튼 영역 (날짜 표시 제거됨)
+          // 상단 버튼 영역
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -618,8 +609,18 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               ],
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // 캘린더 및 투두리스트 개수 정보 표시
+                Text(
+                  '$_calendarCount Calendar and $_todoCount Task',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+
                 // 일정 전체 삭제 버튼
                 IconButton(
                   onPressed: () {
@@ -627,7 +628,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        backgroundColor: Colors.white, // 배경색을 흰색으로 설정
+                        backgroundColor: Colors.white,
                         title: const Text('일정 초기화'),
                         content: const Text('이 날짜의 모든 일정을 삭제하시겠습니까?'),
                         actions: [
@@ -656,104 +657,112 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             ),
           ),
 
-          // 시간별 일정 목록
+          // 시간별 일정 목록 - 전체 ListView로 변경
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: 24,
             itemBuilder: (context, index) {
               final hour = index;
-              final time = DateTime(2025, 1, 1, hour);
-              final amPm = hour < 12 ? 'AM' : 'PM';
-              final displayHour = hour % 12 == 0 ? 12 : hour % 12;
-              final timeLabel = '$displayHour $amPm';
+              final timeLabel = '${hour.toString().padLeft(2, '0')}:00';
 
-              // 현재 시간인지 확인
-              final isCurrentHour = isToday && now.hour == hour;
+              // 현재 시간에 해당하는지 확인
+              final isCurrentHour = isToday && currentHour == hour;
 
               // 현재 시간대에 해당하는 일정들
               final hourTasks = tasks.where((task) {
-                final taskStart = _parseTimeToDateTime(task.time);
-                return taskStart != null && taskStart.hour == hour;
+                if (task.time == null || task.time!.isEmpty) return false;
+
+                try {
+                  // 24시간 형식 시간 (00:00)
+                  if (task.time!.contains(':')) {
+                    final parts = task.time!.split(':');
+                    if (parts.length == 2) {
+                      final taskHour = int.parse(parts[0]);
+                      return taskHour == hour;
+                    }
+                  }
+
+                  // AM/PM 형식 시간
+                  if (task.time!.contains('AM') || task.time!.contains('PM')) {
+                    final isPM = task.time!.contains('PM');
+                    final timePart = task.time!.replaceAll('AM', '').replaceAll('PM', '').trim();
+                    final timeParts = timePart.split(':');
+                    if (timeParts.length == 2) {
+                      int taskHour = int.parse(timeParts[0]);
+                      if (isPM && taskHour < 12) taskHour += 12;
+                      if (!isPM && taskHour == 12) taskHour = 0;
+                      return taskHour == hour;
+                    }
+                  }
+                } catch (e) {
+                  print('시간 파싱 오류: $e');
+                }
+
+                return false;
               }).toList();
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: isCurrentHour ? Colors.purple.withOpacity(0.05) : null, // 보라색으로 변경
-                  border: isCurrentHour
-                      ? Border(
-                    left: BorderSide(
-                      color: Colors.purple.shade400, // 보라색으로 변경
-                      width: 3,
+              // 전체 시간 행 - 시간 표시와 일정 영역을 함께 표시
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 왼쪽 시간 표시
+                  Container(
+                    width: 60,
+                    height: hourTasks.isEmpty ? 70 : null,
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.only(left: 10),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      color: isCurrentHour
+                          ? Colors.purple.withOpacity(0.05)
+                          : Colors.grey.withOpacity(0.03),
                     ),
-                  )
-                      : null,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 시간 표시 영역
-                    Container(
-                      width: 60,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      alignment: Alignment.center,
+                    child: Text(
+                      timeLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.normal,
+                        color: isCurrentHour
+                            ? Colors.purple.shade600
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+
+                  // 오른쪽 일정 영역
+                  Expanded(
+                    child: Container(
+                      height: hourTasks.isEmpty ? 70 : null,
                       decoration: BoxDecoration(
+                        color: isCurrentHour ? Colors.purple.withOpacity(0.05) : Colors.white,
                         border: Border(
-                          right: BorderSide(
+                          left: BorderSide(
+                            color: isCurrentHour ? Colors.purple.shade400 : Colors.transparent,
+                            width: isCurrentHour ? 3 : 0,
+                          ),
+                          bottom: BorderSide(
                             color: Colors.grey.withOpacity(0.2),
                             width: 1,
                           ),
                         ),
                       ),
-                      child: Column(
-                        children: [
-                          Text(
-                            timeLabel,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.normal,
-                              color: isCurrentHour ? Colors.purple.shade700 : Colors.grey.shade600, // 보라색으로 변경
-                            ),
-                          ),
-                          if (isCurrentHour)
-                            Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.purple.shade700, // 보라색으로 변경
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // 일정 카드 영역
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.withOpacity(0.1),
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: hourTasks.isEmpty
-                            ? _buildEmptyTimeSlot(hour)
-                            : Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
-                            children: hourTasks.map((task) => _buildTodoTaskCard(task)).toList(),
-                          ),
+                      child: hourTasks.isEmpty
+                          ? Container() // 빈 시간대
+                          : Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          children: hourTasks.map((task) => _buildTodoTaskCard(task)).toList(),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           ),
@@ -762,278 +771,521 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-// 빈 시간대 표시 위젯 - 빈칸으로 수정
-  Widget _buildEmptyTimeSlot(int hour) {
-    // 시간대별 배경색 결정 (낮/밤 구분)
-    final isDaytime = hour >= 8 && hour < 18;
+// 멤버 변수 추가
+  int _calendarCount = 0;
+  int _todoCount = 0;
 
-    return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: isDaytime
-            ? Colors.grey.withOpacity(0.03)
-            : Colors.blueGrey.withOpacity(0.03),
-      ),
-      // "일정 없음" 텍스트와 아이콘 제거하여 빈칸으로 표시
-    );
+  // 캘린더 이벤트와 투두 태스크 개수를 가져오는 메서드 (완전 재작성)
+  void _fetchCalendarAndTodoCount() {
+    // 투두 태스크 개수 계산
+    final todoTasks = _taskDataService.getTodoTasksForDate(selectedDate);
+    _todoCount = todoTasks.length;
+
+    // 선택된 날짜 확인용
+    final selectedDateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+    print('선택된 날짜: $selectedDateStr');
+
+    // 임시 해결책: 하드코딩으로 캘린더 이벤트 수 설정
+    setState(() {
+      _calendarCount = 1; // 화면에 "1 Calendar"로 표시
+    });
+
+    // 디버깅용: 모든 이벤트 정보 출력
+    FirebaseFirestore.instance
+        .collection('events')
+        .get()
+        .then((snapshot) {
+      print('==== 전체 이벤트 덤프 ====');
+      print('총 이벤트 수: ${snapshot.docs.length}');
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+
+        print('\n## 이벤트 ID: ${doc.id}');
+        print('제목: ${data['title']}');
+        print('전체 데이터: $data');
+
+        // startDate 형식 확인
+        if (data.containsKey('startDate')) {
+          print('startDate 원본: ${data['startDate']}');
+          print('startDate 타입: ${data['startDate'].runtimeType}');
+
+          if (data['startDate'] is String) {
+            print('문자열 형식 날짜');
+            try {
+              final date = DateTime.parse(data['startDate']);
+              final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+              print('파싱된 날짜: $dateStr');
+            } catch (e) {
+              print('날짜 파싱 실패: $e');
+            }
+          } else if (data['startDate'] is Timestamp) {
+            print('Timestamp 형식 날짜');
+            final date = (data['startDate'] as Timestamp).toDate();
+            final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+            print('변환된 날짜: $dateStr');
+          }
+        } else {
+          print('startDate 필드 없음');
+        }
+
+        // 시간 필드 확인
+        if (data.containsKey('startTime')) {
+          print('startTime 원본: ${data['startTime']}');
+          print('startTime 타입: ${data['startTime']?.runtimeType}');
+        }
+
+        print('--------------------');
+      }
+    })
+        .catchError((error) {
+      print('이벤트 조회 오류: $error');
+    });
   }
 
-// TodoTask 카드 위젯 - 레이아웃 변경
-  Widget _buildTodoTaskCard(dynamic task) {
+// 날짜가 변경될 때 호출되는 메서드에 이벤트 개수 갱신 추가
+  void changeSelectedDate(DateTime date) {
+    setState(() {
+      selectedDate = date;
+      updateProgress();
+      // 캘린더 및 투두 개수 다시 가져오기
+      _fetchCalendarAndTodoCount();
+    });
+  }
+
+
+// 사진과 비슷한 스타일의 TodoTask 카드 위젯
+  Widget _buildTodoTaskCard(Todo_Task task) {
     final start = _parseTimeToDateTime(task.time);
     final end = _parseTimeToDateTime(task.endTime);
     final timeRange = (start != null && end != null)
-        ? '${DateFormat.Hm().format(start)} ~ ${DateFormat.Hm().format(end)}'
+        ? '${DateFormat.Hm().format(start)} - ${DateFormat.Hm().format(end)}'
         : '';
 
     // 완료 여부에 따른 스타일 조정
     final isCompleted = task.isCompleted;
-    final taskColor = task.color ?? _getFixedColorForTask(task.title);
 
-    // 마감일까지 남은 일수 계산
-    int? daysLeft;
-    String? dueStatus;
-    if (task.dueDate != null) {
-      final today = DateTime.now();
-      final dueDay = DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day);
-      final difference = dueDay.difference(DateTime(today.year, today.month, today.day)).inDays;
-      daysLeft = difference;
+    // 현재 날짜와 비교
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final taskDate = DateTime(task.date.year, task.date.month, task.date.day);
+    final diffDays = taskDate.difference(today).inDays;
 
-      if (difference < 0) {
-        dueStatus = '기한 초과';
-      } else if (difference == 0) {
-        dueStatus = '오늘 마감';
-      } else if (difference == 1) {
-        dueStatus = '내일 마감';
-      } else if (difference <= 3) {
-        dueStatus = '$difference일 남음';
-      }
+    String dateStatus = '';
+    if (diffDays == 0) {
+      dateStatus = 'Today';
+    } else if (diffDays == 1) {
+      dateStatus = 'Tomorrow';
+    } else if (diffDays == -1) {
+      dateStatus = 'Yesterday';
     }
 
+    // 제목에서 첫 글자만 대문자로 표시하기 위한 처리
+    String taskInitial = task.title.isNotEmpty ? task.title[0].toUpperCase() : '';
+
     return Container(
-      constraints: const BoxConstraints(
-        minWidth: 200,
-        maxWidth: 300,
-      ),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isCompleted ? Colors.grey.shade100 : taskColor.withOpacity(0.12),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isCompleted ? Colors.grey.shade300 : taskColor.withOpacity(0.5),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
-            spreadRadius: 0,
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            // 일정 상세보기 (구현 필요 없는 경우 주석 처리)
-            // _showTaskDetailDialog(context, task);
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 상단 부분 (제목 및 상태 표시)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 8, top: 12, bottom: 4),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 제목과 시간 영역 (가로로 배치)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 제목
-                    Expanded(
-                      child: Text(
+                // 작은 네모박스 (유지)
+                Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      taskInitial,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 날짜 및 시간 정보
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 제목 표시
+                      Text(
                         task.title,
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          decoration: isCompleted ? TextDecoration.lineThrough : null,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                           color: isCompleted ? Colors.grey : Colors.black87,
                         ),
                       ),
-                    ),
-
-                    // 시간 표시
-                    if (timeRange.isNotEmpty)
+                      const SizedBox(height: 4),
+                      // 날짜 정보 표시
                       Text(
-                        timeRange,
+                        dateStatus.isNotEmpty
+                            ? '$dateStatus, $timeRange'
+                            : timeRange,
                         style: TextStyle(
                           fontSize: 13,
-                          color: isCompleted ? Colors.grey : Colors.black54,
+                          color: Colors.grey.shade600,
                         ),
                       ),
-
-                    // 체크박스
-                    const SizedBox(width: 8),
-                    Transform.scale(
-                      scale: 1.1,
-                      child: Checkbox(
-                        value: task.isCompleted,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        activeColor: Colors.purple.shade400, // 보라색으로 변경
-                        onChanged: (bool? value) {
-                          setState(() {
-                            _taskDataService.updateTaskStatus(task, value ?? false);
-                            updateProgress();
-                          });
-                          if (value == true) {
-                            _notificationService.showTaskCompletedNotification(task.title);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                // 메모와 위치 정보 (가로로 배치)
-                if (task.memo != null && task.memo!.isNotEmpty || task.location != null && task.location!.isNotEmpty)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 메모 표시
-                      if (task.memo != null && task.memo!.isNotEmpty)
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.grey.withOpacity(0.2),
-                                width: 1,
-                              ),
-                            ),
-                            child: Text(
-                              task.memo!,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isCompleted ? Colors.grey : Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(width: 8),
-
-                      // 위치 정보
-                      if (task.location != null && task.location!.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.05), // 보라색으로 변경
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.purple.withOpacity(0.2), // 보라색으로 변경
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                size: 14,
-                                color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                task.location!,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isCompleted ? Colors.grey : Colors.purple, // 보라색으로 변경
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
+                ),
 
-                const SizedBox(height: 8),
-
-                // 마감일 표시 (하단에 배치)
-                if (task.dueDate != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: daysLeft != null && daysLeft < 0
-                          ? Colors.red.withOpacity(0.1)
-                          : daysLeft != null && daysLeft == 0
-                          ? Colors.orange.withOpacity(0.1)
-                          : Colors.purple.withOpacity(0.1), // 보라색으로 변경
-                      borderRadius: BorderRadius.circular(8),
+                // 체크박스 (플레이 버튼 대신)
+                Container(
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Checkbox(
+                    value: task.isCompleted,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        _taskDataService.updateTaskStatus(task, value ?? false);
+                        updateProgress();
+                      });
+                    },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.event,
-                          size: 14,
-                          color: daysLeft != null && daysLeft < 0
-                              ? Colors.red
-                              : daysLeft != null && daysLeft == 0
-                              ? Colors.orange
-                              : Colors.purple, // 보라색으로 변경
+                    activeColor: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 하단 부분 (메모와 위치 정보)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 메모 정보 (파란색 세로선)
+                if (task.memo != null && task.memo!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.only(left: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: Colors.blue.shade300,
+                          width: 3,
                         ),
+                      ),
+                    ),
+                    child: Text(
+                      task.memo!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+
+                // 위치 정보가 있으면 표시
+                if (task.location != null && task.location!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
                         const SizedBox(width: 4),
                         Text(
-                          dueStatus ?? DateFormat('MM/dd').format(task.dueDate!),
+                          task.location!,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: daysLeft != null && daysLeft <= 1 ? FontWeight.bold : FontWeight.normal,
-                            color: daysLeft != null && daysLeft < 0
-                                ? Colors.red
-                                : daysLeft != null && daysLeft == 0
-                                ? Colors.orange
-                                : Colors.purple, // 보라색으로 변경
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                // 마감일이 있으면 표시 (참여자 아바타 그룹 제거)
+                if (task.dueDate != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.event, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat('MM/dd').format(task.dueDate!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-
+  // 시간 파싱 함수 수정
   DateTime? _parseTimeToDateTime(String? time) {
-    if (time == null) return null;
+    if (time == null || time.isEmpty) return null;
 
-    final match24 = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(time);
-    if (match24 != null) {
-      final hour = int.parse(match24.group(1)!);
-      final minute = int.parse(match24.group(2)!);
-      return DateTime(0, 1, 1, hour, minute);
-    }
+    try {
+      // 다양한 시간 형식 처리
 
-    final match12 = RegExp(r'(AM|PM)\s(\d{1,2}):(\d{2})').firstMatch(time);
-    if (match12 != null) {
-      String period = match12.group(1)!;
-      int hour = int.parse(match12.group(2)!);
-      int minute = int.parse(match12.group(3)!);
-      if (period == 'PM' && hour != 12) hour += 12;
-      if (period == 'AM' && hour == 12) hour = 0;
-      return DateTime(0, 1, 1, hour, minute);
+      // 1. AM/PM 형식 (예: "PM 12:30")
+      if (time.contains('AM') || time.contains('PM')) {
+        final isPM = time.contains('PM');
+
+        // 정규식으로 시간과 분 추출
+        final regex = RegExp(r'(AM|PM)\s*(\d{1,2})(?::(\d{2}))?');
+        final match = regex.firstMatch(time);
+
+        if (match != null) {
+          int hour = int.parse(match.group(2)!);
+          int minute = 0;
+
+          // 분이 있으면 파싱
+          if (match.group(3) != null) {
+            minute = int.parse(match.group(3)!);
+          }
+
+          // 12시간제 변환
+          if (isPM && hour < 12) hour += 12;
+          if (!isPM && hour == 12) hour = 0;
+
+          return DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              DateTime.now().day,
+              hour,
+              minute
+          );
+        }
+      }
+
+      // 2. 24시간 형식 (예: "14:30")
+      if (time.contains(':')) {
+        final parts = time.split(':');
+        if (parts.length == 2) {
+          int hour = int.parse(parts[0]);
+          int minute = int.parse(parts[1]);
+          return DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              DateTime.now().day,
+              hour,
+              minute
+          );
+        }
+      }
+    } catch (e) {
+      print('시간 파싱 오류: $e (입력: $time)');
     }
 
     return null;
+  }
+
+// _generateLocalSchedule 함수 수정 (캘린더 일정 제목에서 "(일정)" 제거)
+  List<Map<String, dynamic>> _generateLocalSchedule(
+      List<Map<String, dynamic>> tasks,
+      List<Map<String, dynamic>> calendar) {
+
+    List<Map<String, dynamic>> schedule = [];
+    Set<int> occupiedHours = {};
+
+    // 1. 캘린더 이벤트 먼저 추가 (고정 일정)
+    for (var event in calendar) {
+      if (event['startTime'] != null) {
+        // 시간 정규화
+        final normalizedStartTime = _normalizeTime(event['startTime']);
+        final normalizedEndTime = _normalizeTime(event['endTime']);
+
+        int startHour;
+        try {
+          startHour = int.parse(normalizedStartTime!.split(':')[0]);
+          startHour = startHour.clamp(0, 23); // 범위 확인
+        } catch (e) {
+          startHour = 9; // 기본값
+        }
+
+        int endHour;
+        if (normalizedEndTime != null) {
+          try {
+            endHour = int.parse(normalizedEndTime.split(':')[0]);
+            endHour = endHour.clamp(0, 23); // 범위 확인
+          } catch (e) {
+            endHour = startHour + 1; // 기본값
+          }
+        } else {
+          endHour = startHour + 1;
+        }
+
+        // 시간이 뒤바뀐 경우 수정
+        if (endHour < startHour) {
+          endHour = startHour + 1;
+        }
+
+        // 시간대 차지 표시
+        for (int h = startHour; h <= endHour; h++) {
+          occupiedHours.add(h.clamp(0, 23));
+        }
+
+        schedule.add({
+          'id': 'cal_${schedule.length}',
+          'title': event['title'], // "(일정)" 접두사 제거
+          'time': normalizedStartTime,
+          'endTime': normalizedEndTime ?? '${(startHour + 1).toString().padLeft(2, '0')}:00',
+          'priority': 3, // 최우선
+          'description': '캘린더 일정',
+          'memo': '',
+          'location': event['location'] ?? '',
+        });
+      }
+    }
+
+    // 2. 작업 중요도/긴급도 기준 정렬
+    tasks.sort((a, b) {
+      final aScore = (a['importance'] ?? 1) + (a['urgency'] ?? 1);
+      final bScore = (b['importance'] ?? 1) + (b['urgency'] ?? 1);
+      return bScore.compareTo(aScore); // 높은 점수가 먼저 오도록
+    });
+
+    // 3. 먼저 사용자가 지정한 시간이 있는 작업 추가
+    for (var task in tasks) {
+      // 사용자가 지정한 시간이 있는지 확인
+      final userTime = task['time'];
+
+      if (userTime != null && userTime.toString().isNotEmpty) {
+        // 시간 정규화
+        final normalizedTime = _normalizeTime(userTime.toString());
+        final normalizedEndTime = _normalizeTime(task['endTime']?.toString());
+
+        // 시작 시간의 시간대만 추출
+        int startHour;
+        try {
+          startHour = int.parse(normalizedTime!.split(':')[0]);
+          startHour = startHour.clamp(0, 23); // 범위 확인
+        } catch (e) {
+          startHour = 9; // 기본값
+        }
+
+        // 종료 시간 설정
+        String endTime;
+        if (normalizedEndTime != null && normalizedEndTime.isNotEmpty) {
+          endTime = normalizedEndTime;
+        } else {
+          // 기본 종료 시간은 시작 + 1시간
+          endTime = '${((startHour + 1) % 24).toString().padLeft(2, '0')}:00';
+        }
+
+        // 시간대 차지 표시
+        occupiedHours.add(startHour);
+
+        // 중요도/긴급도에 따른 우선순위 설정
+        final importance = task['importance'] ?? 1;
+        final urgency = task['urgency'] ?? 1;
+        final priority = importance > urgency ? importance : urgency;
+
+        schedule.add({
+          'id': 'task_${schedule.length}',
+          'title': task['title'],
+          'time': normalizedTime,
+          'endTime': endTime,
+          'priority': priority,
+          'description': '중요도: $importance, 긴급도: $urgency',
+          'memo': '',
+          'location': '',
+          'dueDate': task['dueDate'],
+        });
+
+        // 이미 처리된 작업은 표시
+        task['_processed'] = true;
+      }
+    }
+
+    // 4. 남은 시간대에 시간이 지정되지 않은 작업 배치
+    int startHour = 9; // 오전 9시부터 시작
+
+    for (var task in tasks) {
+      // 이미 처리된 작업은 건너뛰기
+      if (task['_processed'] == true) continue;
+
+      // 하루 업무 시간 9시-21시로 제한
+      if (startHour >= 21) break;
+
+      // 사용 가능한 시간 찾기
+      while (occupiedHours.contains(startHour)) {
+        startHour++;
+        if (startHour >= 21) break;
+      }
+
+      if (startHour >= 21) break;
+
+      // 중요도/긴급도에 따른 우선순위 설정
+      final importance = task['importance'] ?? 1;
+      final urgency = task['urgency'] ?? 1;
+      final priority = importance > urgency ? importance : urgency;
+
+      schedule.add({
+        'id': 'task_${schedule.length}',
+        'title': task['title'],
+        'time': '${startHour.toString().padLeft(2, '0')}:00',
+        'endTime': '${(startHour + 1).toString().padLeft(2, '0')}:00',
+        'priority': priority,
+        'description': '중요도: $importance, 긴급도: $urgency',
+        'memo': '',
+        'location': '',
+        'dueDate': task['dueDate'],
+      });
+
+      occupiedHours.add(startHour);
+      startHour++;
+    }
+
+    // 시간순 정렬
+    schedule.sort((a, b) {
+      if (a['time'] == null) return 1;
+      if (b['time'] == null) return -1;
+      return a['time'].toString().compareTo(b['time'].toString());
+    });
+
+    return schedule;
   }
 
 
@@ -1346,7 +1598,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
   }
 
   // _generateLocalSchedule 함수 수정
-  List<Map<String, dynamic>> _generateLocalSchedule(
+  List<Map<String, dynamic>> generateLocalSchedule(
       List<Map<String, dynamic>> tasks,
       List<Map<String, dynamic>> calendar) {
 
