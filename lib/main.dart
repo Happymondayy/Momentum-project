@@ -16,14 +16,15 @@ import 'firebase_options.dart';
 import 'dart:async';
 import 'package:momentum_planner/Calendar/services/notification_service_calendar.dart';
 import 'package:momentum_planner/Calendar/services/notification_service_todolist.dart';
+import 'screens/api_test_screen.dart';  // 테스트용
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ 알림 및 권한 초기화
-  await NotificationService().init();
-  await NotificationServiceCalendar().init(); // 캘린더 일정 미리 알림 설정
-  await NotificationServiceTodolist().init(); // 캘린더 투두 미리 알림 설정
+ // await NotificationService().init();
+  //await NotificationServiceCalendar().init(); // 캘린더 일정 미리 알림 설정
+  //await NotificationServiceTodolist().init(); // 캘린더 투두 미리 알림 설정
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -54,7 +55,8 @@ class MyApp extends StatelessWidget {
       ),
       debugShowCheckedModeBanner: false,
       //home: NotificationTestPage(),
-      home: SplashScreen(),
+      home: SplashScreen(), //메인
+      //home: ApiTestScreen(), //스케쥴러 연결 테스트용
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;
 
