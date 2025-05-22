@@ -21,6 +21,11 @@ import 'package:momentum_planner/Todolist/screens/notification_service.dart';
 
 import 'firebase_options.dart';
 
+import 'dart:async';
+import 'package:momentum_planner/Calendar/services/notification_service_calendar.dart';
+import 'package:momentum_planner/Calendar/services/notification_service_todolist.dart';
+import 'screens/api_test_screen.dart';  // 테스트용
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -92,6 +97,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       home: SplashScreen(),
+      //home: ApiTestScreen(), //스케쥴러 연결 테스트용
       onGenerateRoute: (settings) {
         final args = settings.arguments as Map<String, dynamic>?;
         final userId = args?['userId'] ?? '';
