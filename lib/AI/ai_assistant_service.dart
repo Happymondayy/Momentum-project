@@ -92,6 +92,76 @@ class AIAssistantService {
     }
   }
 
+  // 🔹 서버에서 AI 일정 추천받기
+  Future<List<Map<String, dynamic>>> getAIScheduleRecommendation({
+    required List<Todo_Task> todos,
+    required List<Event> calendarEvents,
+  }) async {
+    try {
+      // 캘린더 데이터 준비
+      final calendarData = calendarEvents.map((event) => {
+        'title': event.title,
+        'date': event.startDate.toString().split(' ')[0],
+        'startTime': event.startTime != null ?
+        '${event.startTime!.hour.toString().padLeft(2, '0')}:${event.startTime!.minute.toString().padLeft(2, '0')}' : null,
+        'endTime': event.endTime != null ?
+        '${event.endTime!.hour.toString().padLeft(2, '0')}:${event.endTime!.minute.toString().padLeft(2, '0')}' : null,
+        'location': event.location,
+      }).toList();
+
+      // 할 일 데이터 준비
+      final todosData = todos.map((task) => {
+        'title': task.title,
+        'dueDate': task.dueDate?.toString().split(' ')[0],
+        'importance': task.importance,
+        'urgency': task.urgency,
+        'isCompleted': task.isCompleted,
+      }).toList();
+
+      const List<String> possibleUrls = [
+        'https://railwavve-production-68d4.up.railway.app',       // 안드로이드 에뮬레이터
+        'https://railwavve-production-68d4.up.railway.app/', // 서버 실제 IP (로컬 네트워크)
+        'https://railwavve-production-68d4.up.railway.app/',      // 로컬호스트
+        'https://railwavve-production-68d4.up.railway.app/'       // 로컬호스트 (이름)
+      ];
+
+
+      // 각 URL에 시도
+      for (final serverUrl in possibleUrls) {
+        try {
+          final url = Uri.parse('$serverUrl/schedule');
+          print('서버 연결 시도: $url');
+
+          final response = await http.post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'tasks': todosData,
+              'calendar': calendarData,
+            }),
+          ).timeout(const Duration(seconds: 5));
+
+          if (response.statusCode == 200) {
+            final scheduleSuggestions = jsonDecode(response.body);
+            return List<Map<String, dynamic>>.from(scheduleSuggestions);
+          } else {
+            print('$serverUrl 응답 오류: ${response.statusCode}');
+          }
+        } catch (e) {
+          print('$serverUrl 연결 시도 실패: $e');
+          // 다음 URL 시도
+        }
+      }
+
+      // 모든 URL이 실패한 경우
+      print('서버 오류: 모든 연결 시도 실패');
+      return [];
+    } catch (e) {
+      print('AI 일정 추천 오류: $e');
+      return [];
+    }
+  }
+
   // 🔹 Gemini 호출 및 처리
   Future<String> getGeminiSuggestion({
     required String userPrompt,
@@ -134,7 +204,7 @@ $userPrompt
 ✅ 위 일정을 Firestore에 저장하세요
 """;
 
-    final url = Uri.parse('http://192.168.219.110:5001/api/gemini');
+    final url = Uri.parse('http://127.0.0.1:5001/api/gemini');
 
     final response = await http.post(
       url,
@@ -148,6 +218,124 @@ $userPrompt
       return reply;
     } else {
       return '서버 오류: ${response.statusCode}';
+    }
+  }
+
+  // 특정 키워드에 대한 맞춤형 조언 생성
+  Future<String> generateContextualAdviceForKeyword(String keyword, List<Todo_Task> todos, List<Event> calendarEvents) async {
+    // 특정 키워드 (여행, 시험, 회의 등)에 맞는 맞춤형 조언 생성
+    final prompt = """
+당신은 사용자의 일정과 할 일을 관리해주는 AI 비서입니다.
+사용자가 "${keyword}"에 대한 맞춤형 조언을 원합니다.
+
+[오늘의 일정]
+${calendarEvents.isEmpty ? '없음' : calendarEvents.map((e) {
+      final start = _formatTimeOfDay(e.startTime);
+      final end = _formatTimeOfDay(e.endTime);
+      final timeString = (start.isNotEmpty && end.isNotEmpty) ? ' ($start - $end)' : '';
+      return "- ${e.title}${timeString}, 위치: ${e.location}";
+    }).join('\n')}
+
+[할 일 목록]
+${todos.isEmpty ? '없음' : todos.map((e) {
+      final timeStr = (e.time != null && e.time!.isNotEmpty) ? ' (${e.time})' : '';
+      return "- ${e.title}$timeStr";
+    }).join('\n')}
+
+위 정보를 바탕으로 "${keyword}"에 대한 맞춤형 조언을 제공해주세요. 사용자의 일정과 할 일을 분석하여 가장 도움이 될 만한 구체적인 조언을 준비해주세요.
+""";
+
+    final url = Uri.parse('http://127.0.0.1:5001/api/gemini');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'prompt': prompt}),
+      );
+
+      if (response.statusCode == 200) {
+        final reply = jsonDecode(response.body)['reply'] ?? '조언을 생성하지 못했습니다.';
+        return reply;
+      } else {
+        return '서버 오류: ${response.statusCode}';
+      }
+    } catch (e) {
+      return '서버 연결 오류: $e';
+    }
+  }
+
+  // 빈 시간대에 맞는 활동 추천
+  Future<List<Map<String, dynamic>>> recommendActivitiesForFreeTime(List<Event> calendarEvents) async {
+    final freeSlots = recommendFreeTimeSlots(calendarEvents);
+    if (freeSlots.isEmpty) {
+      return [];
+    }
+
+    final prompt = """
+당신은 사용자의 시간 관리를 돕는 AI 비서입니다.
+사용자에게 다음 빈 시간대에 할 수 있는 활동을 추천해주세요:
+
+[빈 시간대]
+${freeSlots.map((slot) => "- $slot").join('\n')}
+
+각 시간대에 적합한 활동 3가지를 추천해주세요. 다음 형식으로 응답해주세요:
+
+- 시간대: [시간대]
+ 1. [활동 1]
+ 2. [활동 2]
+ 3. [활동 3]
+""";
+
+    final url = Uri.parse('http://127.0.0.1:5001/api/gemini');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'prompt': prompt}),
+      );
+
+      if (response.statusCode == 200) {
+        final reply = jsonDecode(response.body)['reply'] ?? '';
+
+        // 응답 파싱
+        final recommendations = <Map<String, dynamic>>[];
+        final slotRegex = RegExp(r'- 시간대: (.*?)\n');
+        final matches = slotRegex.allMatches(reply);
+
+        for (final match in matches) {
+          final timeSlot = match.group(1) ?? '';
+          final start = match.end;
+          final end = (match.start + 1 < matches.length) ? matches.elementAt(match.start + 1).start : reply.length;
+          final activitiesText = reply.substring(start, end);
+
+          final activityRegex = RegExp(r'\d+\.\s+(.*?)(?=\n\d+\.|\n-|\Z)', dotAll: true);
+          final activityMatches = activityRegex.allMatches(activitiesText);
+
+          final activities = <String>[];
+          for (final activityMatch in activityMatches) {
+            final activity = activityMatch.group(1)?.trim() ?? '';
+            if (activity.isNotEmpty) {
+              activities.add(activity);
+            }
+          }
+
+          if (timeSlot.isNotEmpty && activities.isNotEmpty) {
+            recommendations.add({
+              'timeSlot': timeSlot,
+              'activities': activities,
+            });
+          }
+        }
+
+        return recommendations;
+      } else {
+        return [];
+      }
+    } catch (e) {
+      print('추천 활동 생성 오류: $e');
+      return [];
     }
   }
 }

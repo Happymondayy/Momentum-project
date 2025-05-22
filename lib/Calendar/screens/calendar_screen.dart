@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:momentum_planner/bottom_nav.dart';
 
+import '../../Planner/DailyPlannerPage.dart';
 import '../models/event.dart';
 import '../models/todo_item.dart';
 import '../dialogs/event_dialog.dart';
@@ -42,56 +43,74 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _loadEventsFromFirebase() {
     FirebaseFirestore.instance
         .collection('events')
-        .where('userId',isEqualTo: _currentUserId)
+        .where('userId', isEqualTo: _currentUserId)
         .snapshots()
-        .listen((snapshot){
+        .listen((snapshot) {
       Map<DateTime, List<Event>> events = {};
 
       for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final startDate = DateTime.parse(data['startDate']);
-        final endDate = DateTime.parse(data['endDate']);
+        try {
+          final data = doc.data();
 
-        final startTime = data['startTime'] != null
-            ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
-            : null;
-        final endTime = data['endTime'] != null
-            ? TimeOfDay(hour: data['endTime']['hour'], minute: data['endTime']['minute'])
-            : null;
+          // null 체크 추가
+          if (data['startDate'] == null) continue;
 
-        final event = Event(
-          userId: data['userId'],
-          id: doc.id,
-          title: data['title'],
-          description: data['description'] ?? '',
-          startDate: startDate,
-          endDate: endDate,
-          startTime: startTime,
-          endTime: endTime,
-          memo: data['memo'] ?? '',
-          location: data['location'] ?? '',
-          isRepeating: data['isRepeating'] ?? false,
-          repeatOption: data['repeatOption'],
-          repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
-          repeatCustomDays: data['repeatCustomDays'],
-          isAllDay: data['isAllDay'] ?? false,
-          reminder: data['reminder'],
-        );
+          final startDate = DateTime.parse(data['startDate']);
+          final endDate = data['endDate'] != null
+              ? DateTime.parse(data['endDate'])
+              : startDate;
 
-        // Use startDate for organizing events instead of a 'date' field
-        final key = DateTime(startDate.year, startDate.month, startDate.day);
-        if (events[key] != null) {
-          events[key]!.add(event);
-        } else {
-          events[key] = [event];
+          final startTime = data['startTime'] != null
+              ? TimeOfDay(
+              hour: data['startTime']['hour'] ?? 0,
+              minute: data['startTime']['minute'] ?? 0
+          )
+              : null;
+          final endTime = data['endTime'] != null
+              ? TimeOfDay(
+              hour: data['endTime']['hour'] ?? 0,
+              minute: data['endTime']['minute'] ?? 0
+          )
+              : null;
+
+          final event = Event(
+            userId: data['userId'] ?? _currentUserId ?? '',
+            id: doc.id,
+            title: data['title'] ?? '제목 없음',
+            description: data['description'] ?? '',
+            startDate: startDate,
+            endDate: endDate,
+            startTime: startTime,
+            endTime: endTime,
+            memo: data['memo'] ?? '',
+            location: data['location'] ?? '',
+            isRepeating: data['isRepeating'] ?? false,
+            repeatOption: data['repeatOption'],
+            repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+            repeatCustomDays: data['repeatCustomDays'],
+            isAllDay: data['isAllDay'] ?? false,
+            reminder: data['reminder'],
+          );
+
+          final key = DateTime(startDate.year, startDate.month, startDate.day);
+          if (events[key] != null) {
+            events[key]!.add(event);
+          } else {
+            events[key] = [event];
+          }
+        } catch (e) {
+          print('이벤트 로딩 오류: $e');
+          continue;
         }
       }
-      setState(() {
-        _events = events;
-      });
+
+      if (mounted) {
+        setState(() {
+          _events = events;
+        });
+      }
     });
   }
-
 
   void _loadTodosFromFirebase() {
     FirebaseFirestore.instance
@@ -102,60 +121,164 @@ class _CalendarScreenState extends State<CalendarScreen> {
       Map<DateTime, List<TodoItem>> todos = {};
 
       for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final date = DateTime.parse(data['date']);
+        try {
+          final data = doc.data();
 
-        final startTime = data['startTime'] != null
-            ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
-            : null;
-        final endTime = data['endTime'] != null
-            ? TimeOfDay(hour: data['endTime']['hour'], minute: data['endTime']['minute'])
-            : null;
+          // null 체크 추가
+          if (data['date'] == null) continue;
 
-        final todo = TodoItem(
-          userId: data['userId'],
-          id: doc.id,
-          title: data['title'],
-          date: date,
-          startTime: startTime,
-          endTime: endTime,
-          memo: data['memo'] ?? '',
-          location: data['location'] ?? '',
-          isRepeating: data['isRepeating'] ?? false,
-          repeatOption: data['repeatOption'],
-          repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
-          repeatCustomDays: data['repeatCustomDays'],
-          reminder: data['reminder'],
-          isCompleted: data['isCompleted'] ?? false,
-        );
+          final date = DateTime.parse(data['date']);
+          final isRepeating = data['isRepeating'] ?? false;
 
-        final key = DateTime(date.year, date.month, date.day);
-        if (todos[key] != null) {
-          todos[key]!.add(todo);
-        } else {
-          todos[key] = [todo];
+          final baseTodo = _createTodoFromData(data, doc.id, date);
+          _addTodoToMap(todos, baseTodo);
+
+          if (isRepeating) {
+            final repeatTodos = _generateRepeatTodos(baseTodo, data);
+            for (final repeatTodo in repeatTodos) {
+              _addTodoToMap(todos, repeatTodo);
+            }
+          }
+        } catch (e) {
+          print('투두 로딩 오류: $e');
+          continue;
         }
       }
 
-      setState(() {
-        _todoItems = todos;
-      });
+      if (mounted) {
+        setState(() {
+          _todoItems = todos;
+        });
+      }
     });
   }
 
   List<Event> _getEventsForDay(DateTime day) {
-    final key = DateTime(day.year, day.month, day.day);
-    return _events[key] ?? [];
+    try {
+      final key = DateTime(day.year, day.month, day.day);
+      final events = _events[key] ?? [];
+
+      return events;
+    } catch (e) {
+      print('이벤트 가져오기 오류: $e');
+      return [];
+    }
+  }
+
+  TimeOfDay? _parseTimeStringToTimeOfDay(String? timeString) {
+    if (timeString == null || timeString.isEmpty) return null;
+
+    try {
+      // "AM 09:30" 또는 "PM 03:45" 형식 파싱
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        bool isAM = timeString.startsWith('AM');
+        final timePart = timeString.substring(3).trim();
+        final parts = timePart.split(':');
+
+        if (parts.length != 2) return null;
+
+        int hour = int.parse(parts[0].trim());
+        int minute = int.parse(parts[1].trim());
+
+        // PM인 경우 12시간제 -> 24시간제로 변환
+        if (!isAM && hour < 12) {
+          hour += 12;
+        }
+        // AM인 경우 12시는 0시로 변환
+        if (isAM && hour == 12) {
+          hour = 0;
+        }
+
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+
+      // "09:30" 형식 파싱
+      if (timeString.contains(':')) {
+        final parts = timeString.split(':');
+        if (parts.length == 2) {
+          int hour = int.parse(parts[0].trim());
+          int minute = int.parse(parts[1].trim());
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('시간 파싱 오류: $e (입력: $timeString)');
+      return null;
+    }
   }
 
   List<TodoItem> _getTodosForDay(DateTime day) {
-    print("선택된 날짜: ${day.toString()}");
+    try {
+      print("선택된 날짜: ${day.toString()}");
+      final key = DateTime(day.year, day.month, day.day);
+      final todos = _todoItems[key] ?? [];
+      print("해당 날짜의 할 일 개수: ${todos.length}");
+      return todos;
+    } catch (e) {
+      print('투두 가져오기 오류: $e');
+      return [];
+    }
+  }
 
-    final key = DateTime(day.year, day.month, day.day);
-    final todos = _todoItems[key] ?? [];
+  TodoItem _createTodoFromData(Map<String, dynamic> data, String docId, DateTime date) {
+    try {
+      final startTime = data['startTime'] != null
+          ? TimeOfDay(
+          hour: data['startTime']['hour'] ?? 0,
+          minute: data['startTime']['minute'] ?? 0
+      )
+          : null;
+      final endTime = data['endTime'] != null
+          ? TimeOfDay(
+          hour: data['endTime']['hour'] ?? 0,
+          minute: data['endTime']['minute'] ?? 0
+      )
+          : null;
 
-    print("해당 날짜의 할 일 개수: ${todos.length}");
-    return todos;
+      return TodoItem(
+        userId: data['userId'] ?? _currentUserId ?? '',
+        id: docId,
+        title: data['title'] ?? '제목 없음',
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        importance: data['importance'] ?? 3,
+        urgency: data['urgency'] ?? 3,
+        memo: data['memo'] ?? '',
+        location: data['location'] ?? '',
+        isRepeating: data['isRepeating'] ?? false,
+        repeatOption: data['repeatOption'],
+        repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+        repeatCustomDays: data['repeatCustomDays'],
+        isAllDay: data['isAllDay'] ?? false,
+        reminder: data['reminder'],
+        isCompleted: data['isCompleted'] ?? false,
+      );
+    } catch (e) {
+      print('TodoItem 생성 오류: $e');
+      // 기본값으로 TodoItem 반환
+      return TodoItem(
+        userId: _currentUserId ?? '',
+        id: docId,
+        title: '제목 없음',
+        date: date,
+        startTime: null,
+        endTime: null,
+        importance: 3,
+        urgency: 3,
+        memo: '',
+        location: '',
+        isRepeating: false,
+        repeatOption: null,
+        repeatDays: null,
+        repeatCustomDays: null,
+        isAllDay: false,
+        reminder: null,
+        isCompleted: false,
+      );
+    }
   }
 
   void _addEvent(Event event) async {
@@ -171,15 +294,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       } : null;
 
       final eventDate = {
-        'userId': _currentUserId,
-        'title': event.title,
-        'description': event.description,
+        'userId': _currentUserId ?? '',
+        'title': event.title ?? '제목 없음',
+        'description': event.description ?? '',
         'startDate': event.startDate.toIso8601String(),
         'endDate': event.endDate.toIso8601String(),
         'startTime': startTimeMap,
         'endTime': endTimeMap,
-        'memo': event.memo,
-        'location': event.location,
+        'memo': event.memo ?? '',
+        'location': event.location ?? '',
         'isRepeating': event.isRepeating,
         'repeatOption': event.repeatOption,
         'repeatDays': event.repeatDays,
@@ -189,9 +312,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
       };
 
       await FirebaseFirestore.instance.collection('events').add(eventDate);
-      // No need to update state here as the Firestore listener will handle it
     } catch (e) {
-      print("Error adding event: $e");
+      print("이벤트 추가 오류: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('이벤트 추가 중 오류가 발생했습니다.')),
+        );
+      }
     }
   }
 
@@ -208,12 +335,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       } : null;
 
       final todoDate = {
-        'userId': _currentUserId,
-        'title': todo.title,
+        'userId': _currentUserId ?? '',
+        'title': todo.title ?? '제목 없음',
         'date': todo.date.toIso8601String(),
         'startTime': startTimeMap,
         'endTime': endTimeMap,
-        'memo': todo.memo,
+        'memo': todo.memo ?? '',
         'location': todo.location ?? '',
         'isRepeating': todo.isRepeating,
         'repeatOption': todo.repeatOption,
@@ -224,9 +351,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
       };
 
       await FirebaseFirestore.instance.collection('todos').add(todoDate);
-      // No need to update state here as the Firestore listener will handle it
     } catch (e) {
-      print("Error adding todo: $e");
+      print("투두 추가 오류: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('투두 추가 중 오류가 발생했습니다.')),
+        );
+      }
+    }
+  }
+
+
+
+
+  // 반복 투두 생성 함수
+  List<TodoItem> _generateRepeatTodos(TodoItem baseTodo, Map<String, dynamic> data) {
+    List<TodoItem> repeatTodos = [];
+    final repeatOption = data['repeatOption'];
+    final now = DateTime.now();
+    final endDate = now.add(Duration(days: 365)); // 1년간 반복 생성
+
+    DateTime currentDate = baseTodo.date.add(Duration(days: 1));
+
+    while (currentDate.isBefore(endDate)) {
+      bool shouldAdd = false;
+
+      switch (repeatOption) {
+        case '매일':
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case '매주':
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: 7));
+          break;
+        case '매달':
+          shouldAdd = true;
+          currentDate = DateTime(currentDate.year, currentDate.month + 1, baseTodo.date.day);
+          break;
+        case '매년':
+          shouldAdd = true;
+          currentDate = DateTime(currentDate.year + 1, baseTodo.date.month, baseTodo.date.day);
+          break;
+        case '매요일':
+          final repeatDays = data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : <int>[];
+          if (repeatDays.contains(currentDate.weekday - 1)) {
+            shouldAdd = true;
+          }
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case '기타':
+          final customDays = data['repeatCustomDays'] ?? 1;
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: customDays));
+          break;
+        default:
+          currentDate = currentDate.add(Duration(days: 1));
+      }
+
+      if (shouldAdd) {
+        final repeatTodo = baseTodo.copyWith(
+          id: '${baseTodo.id}_${currentDate.millisecondsSinceEpoch}',
+          date: currentDate,
+        );
+        repeatTodos.add(repeatTodo);
+      }
+    }
+
+    return repeatTodos;
+  }
+
+
+  // 투두를 맵에 추가하는 헬퍼 함수
+  void _addTodoToMap(Map<DateTime, List<TodoItem>> todos, TodoItem todo) {
+    final key = DateTime(todo.date.year, todo.date.month, todo.date.day);
+    if (todos[key] != null) {
+      todos[key]!.add(todo);
+    } else {
+      todos[key] = [todo];
     }
   }
 
