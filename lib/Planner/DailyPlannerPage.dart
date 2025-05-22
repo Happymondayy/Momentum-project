@@ -37,7 +37,8 @@ class TaskDataService {
     currentUserId = userId;
   }
 
-// loadTasksFromFirestore 함수 수정
+
+  // TaskDataService에서 loadTasksFromFirestore 함수 수정
   Future<void> loadTasksFromFirestore(String userId) async {
     setUserId(userId);
 
@@ -54,37 +55,18 @@ class TaskDataService {
       for (var doc in todoSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final dateTime = DateTime.parse(data['date']);
-        final dateKey = dateToKey(dateTime);
+        final isRepeating = data['isRepeating'] ?? false;
 
-        final task = Todo_Task(
-          title: data['title'],
-          description: data['description'],
-          time: data['time'],
-          endTime: data['endTime'],
-          date: dateTime,
-          isImportant: data['isImportant'] ?? false,
-          isUrgent: data['isUrgent'] ?? false,
-          memo: data['memo'],
-          location: data['location'],
-          importance: data['importance'] ?? 1,
-          urgency: data['urgency'] ?? 1,
-          isCompleted: data['isCompleted'] ?? false,
-          dueDate: data['dueDate'] != null
-              ? DateTime.parse(data['dueDate'])
-              : null,
-        );
+        // 기본 투두 태스크 생성
+        final baseTask = _createTodoTaskFromData(data, doc.id, dateTime);
+        _addTodoTaskToDateMap(baseTask);
 
-        if (!todoTasksByDate.containsKey(dateKey)) {
-          todoTasksByDate[dateKey] = [];
-        }
-
-        // 중복 체크: 동일한 제목과 날짜의 태스크가 있는지 확인
-        bool isDuplicate = todoTasksByDate[dateKey]!.any((t) =>
-        t.title == task.title && t.date.day == task.date.day &&
-            t.date.month == task.date.month && t.date.year == task.date.year);
-
-        if (!isDuplicate) {
-          todoTasksByDate[dateKey]!.add(task);
+        // 반복 설정이 있으면 반복 일정 생성
+        if (isRepeating) {
+          final repeatTasks = _generateRepeatTodos(baseTask, data);
+          for (final repeatTask in repeatTasks) {
+            _addTodoTaskToDateMap(repeatTask);
+          }
         }
       }
 
@@ -96,38 +78,9 @@ class TaskDataService {
       for (var doc in plannerSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final dateTime = DateTime.parse(data['date']);
-        final dateKey = dateToKey(dateTime);
 
-        final task = Todo_Task(
-          title: data['title'],
-          description: data['description'],
-          time: data['time'],
-          endTime: data['endTime'],
-          date: dateTime,
-          isImportant: data['isImportant'] ?? false,
-          isUrgent: data['isUrgent'] ?? false,
-          memo: data['memo'],
-          location: data['location'],
-          importance: data['importance'] ?? 1,
-          urgency: data['urgency'] ?? 1,
-          isCompleted: data['isCompleted'] ?? false,
-          dueDate: data['dueDate'] != null
-              ? DateTime.parse(data['dueDate'])
-              : null,
-        );
-
-        if (!plannerTasksByDate.containsKey(dateKey)) {
-          plannerTasksByDate[dateKey] = [];
-        }
-
-        // 중복 체크: 동일한 제목과 날짜의 태스크가 있는지 확인
-        bool isDuplicate = plannerTasksByDate[dateKey]!.any((t) =>
-        t.title == task.title && t.date.day == task.date.day &&
-            t.date.month == task.date.month && t.date.year == task.date.year);
-
-        if (!isDuplicate) {
-          plannerTasksByDate[dateKey]!.add(task);
-        }
+        final task = _createTodoTaskFromData(data, doc.id, dateTime);
+        _addPlannerTaskToDateMap(task);
       }
 
       print('Firestore 데이터 로드 완료: Todo ${todoTasksByDate.length}, Planner ${plannerTasksByDate.length}');
@@ -136,7 +89,196 @@ class TaskDataService {
     }
   }
 
-// Todo Task를 Firestore에 저장
+  List<Todo_Task> _generateRepeatTodos(Todo_Task baseTodo, Map<String, dynamic> data) {
+    List<Todo_Task> repeatTodos = [];
+    final repeatOption = data['repeatOption'];
+    final now = DateTime.now();
+    final endDate = now.add(Duration(days: 365)); // 1년간 반복 생성
+
+    DateTime currentDate = baseTodo.date.add(Duration(days: 1));
+
+    while (currentDate.isBefore(endDate)) {
+      bool shouldAdd = false;
+
+      switch (repeatOption) {
+        case '매일':
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case '매주':
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: 7));
+          break;
+        case '매달':
+          shouldAdd = true;
+          currentDate = DateTime(currentDate.year, currentDate.month + 1, baseTodo.date.day);
+          break;
+        case '매년':
+          shouldAdd = true;
+          currentDate = DateTime(currentDate.year + 1, baseTodo.date.month, baseTodo.date.day);
+          break;
+        case '매요일':
+          final repeatDays = data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : <int>[];
+          if (repeatDays.contains(currentDate.weekday - 1)) {
+            shouldAdd = true;
+          }
+          currentDate = currentDate.add(Duration(days: 1));
+          break;
+        case '기타':
+          final customDays = data['repeatCustomDays'] ?? 1;
+          shouldAdd = true;
+          currentDate = currentDate.add(Duration(days: customDays));
+          break;
+        default:
+          currentDate = currentDate.add(Duration(days: 1));
+      }
+
+      if (shouldAdd) {
+        final repeatTodo = Todo_Task(
+          id: '${baseTodo.id}_${currentDate.millisecondsSinceEpoch}',
+          userId: baseTodo.userId, // userId 추가
+          title: baseTodo.title,
+          description: baseTodo.description,
+          time: baseTodo.time,
+          endTime: baseTodo.endTime,
+          date: currentDate,
+          isImportant: baseTodo.isImportant,
+          isUrgent: baseTodo.isUrgent,
+          memo: baseTodo.memo,
+          location: baseTodo.location,
+          importance: baseTodo.importance,
+          urgency: baseTodo.urgency,
+          isCompleted: false, // 반복 일정은 기본적으로 미완료
+          color: baseTodo.color,
+          dueDate: baseTodo.dueDate,
+          notificationId: null,
+          reminderMinutesBefore: baseTodo.reminderMinutesBefore,
+          isRepeating: baseTodo.isRepeating,
+          repeatOption: baseTodo.repeatOption,
+          repeatDays: baseTodo.repeatDays,
+          repeatCustomDays: baseTodo.repeatCustomDays,
+        );
+        repeatTodos.add(repeatTodo);
+      }
+    }
+
+    return repeatTodos;
+  }
+
+// 다음 반복 날짜 계산 함수
+  DateTime _getNextRepeatDate(DateTime currentDate, String? repeatOption, Map<String, dynamic> data) {
+    switch (repeatOption) {
+      case '매일':
+        return currentDate.add(Duration(days: 1));
+
+      case '매주':
+        return currentDate.add(Duration(days: 7));
+
+      case '매달':
+        int nextMonth = currentDate.month + 1;
+        int nextYear = currentDate.year;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear++;
+        }
+        // 원래 일자 유지, 해당 월에 해당 일자가 없으면 마지막 날로
+        int targetDay = currentDate.day;
+        int daysInMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+        if (targetDay > daysInMonth) {
+          targetDay = daysInMonth;
+        }
+        return DateTime(nextYear, nextMonth, targetDay);
+
+      case '매년':
+        return DateTime(currentDate.year + 1, currentDate.month, currentDate.day);
+
+      case '매요일':
+        final repeatDays = data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : <int>[];
+        if (repeatDays.isEmpty) return currentDate.add(Duration(days: 1));
+
+        // 다음 해당 요일 찾기
+        DateTime nextDate = currentDate.add(Duration(days: 1));
+        while (!repeatDays.contains(nextDate.weekday - 1)) {
+          nextDate = nextDate.add(Duration(days: 1));
+        }
+        return nextDate;
+
+      case '기타':
+        final customDays = data['repeatCustomDays'] ?? 1;
+        return currentDate.add(Duration(days: customDays));
+
+      default:
+        return currentDate.add(Duration(days: 1));
+    }
+  }
+
+
+  Todo_Task _createTodoTaskFromData(Map<String, dynamic> data, String docId, DateTime dateTime) {
+    return Todo_Task(
+      id: docId,
+      userId: data['userId'] ?? currentUserId ?? '', // userId 추가
+      title: data['title'],
+      description: data['description']?.toString(),
+      time: data['time']?.toString(),
+      endTime: data['endTime']?.toString(),
+      date: dateTime,
+      isImportant: data['isImportant'] ?? false,
+      isUrgent: data['isUrgent'] ?? false,
+      memo: data['memo']?.toString(),
+      location: data['location']?.toString(),
+      importance: data['importance'] ?? 1,
+      urgency: data['urgency'] ?? 1,
+      isCompleted: data['isCompleted'] ?? false,
+      dueDate: data['dueDate']?.toString() != null
+          ? DateTime.parse(data['dueDate'])
+          : null,
+      isRepeating: data['isRepeating'] ?? false,
+      repeatOption: data['repeatOption']?.toString(),
+      repeatDays: data['repeatDays']?.toString() != null ? List<int>.from(data['repeatDays']) : null,
+      repeatCustomDays: data['repeatCustomDays'],
+    );
+  }
+
+  void _addTodoTaskToDateMap(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+    if (!todoTasksByDate.containsKey(dateKey)) {
+      todoTasksByDate[dateKey] = [];
+    }
+
+    // 중복 체크: 동일한 제목과 날짜의 태스크가 있는지 확인
+    bool isDuplicate = todoTasksByDate[dateKey]!.any((t) =>
+    t.title == task.title &&
+        _isSameDay(t.date, task.date));
+
+    if (!isDuplicate) {
+      todoTasksByDate[dateKey]!.add(task);
+    }
+  }
+
+  void _addPlannerTaskToDateMap(Todo_Task task) {
+    final dateKey = dateToKey(task.date);
+    if (!plannerTasksByDate.containsKey(dateKey)) {
+      plannerTasksByDate[dateKey] = [];
+    }
+
+    // 중복 체크
+    bool isDuplicate = plannerTasksByDate[dateKey]!.any((t) =>
+    t.title == task.title &&
+        _isSameDay(t.date, task.date));
+
+    if (!isDuplicate) {
+      plannerTasksByDate[dateKey]!.add(task);
+    }
+  }
+
+// 날짜 비교 헬퍼 함수
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  // Todo Task를 Firestore에 저장 (반복 필드 추가)
   Future<void> saveTodoTaskToFirestore(Todo_Task task) async {
     if (currentUserId == null) return;
 
@@ -156,6 +298,10 @@ class TaskDataService {
         'urgency': task.urgency,
         'isCompleted': task.isCompleted,
         'dueDate': task.dueDate?.toIso8601String(),
+        'isRepeating': task.isRepeating, // 반복 필드 추가
+        'repeatOption': task.repeatOption,
+        'repeatDays': task.repeatDays,
+        'repeatCustomDays': task.repeatCustomDays,
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -163,7 +309,7 @@ class TaskDataService {
     }
   }
 
-// Planner Task를 Firestore에 저장
+// Planner Task를 Firestore에 저장 (반복 필드 추가)
   Future<void> savePlannerTaskToFirestore(Todo_Task task) async {
     if (currentUserId == null) return;
 
@@ -183,6 +329,10 @@ class TaskDataService {
         'urgency': task.urgency,
         'isCompleted': task.isCompleted,
         'dueDate': task.dueDate?.toIso8601String(),
+        'isRepeating': task.isRepeating, // 반복 필드 추가
+        'repeatOption': task.repeatOption,
+        'repeatDays': task.repeatDays,
+        'repeatCustomDays': task.repeatCustomDays,
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -220,6 +370,8 @@ class TaskDataService {
       print('Task 상태 업데이트 오류: $e');
     }
   }
+
+
 
   // 특정 날짜의 Planner 작업 모두 삭제 (개선된 버전)
   Future<void> clearPlannerTasksForDate(DateTime date) async {
@@ -292,18 +444,112 @@ class TaskDataService {
         isSameDate(task.date, date)).toList() ?? [];
   }
 
-  // Todo List 추가 메서드 수정
+  // TaskDataService의 addTodoTask 메서드 수정
   void addTodoTask(Todo_Task task) {
     final dateKey = dateToKey(task.date);
     if (!todoTasksByDate.containsKey(dateKey)) {
       todoTasksByDate[dateKey] = [];
     }
+
+    // 기본 태스크 추가
     if (!todoTasksByDate[dateKey]!.any((existingTask) =>
-    isSameDate(existingTask.date, task.date) &&
+    _isSameDay(existingTask.date, task.date) &&
         existingTask.title == task.title)) {
       todoTasksByDate[dateKey]!.add(task);
       // Firestore에 저장
       saveTodoTaskToFirestore(task);
+
+      // 반복 설정이 있으면 반복 투두들도 생성
+      if (task.isRepeating) {
+        _generateAndAddRepeatTodos(task);
+      }
+    }
+  }
+
+// 반복 투두 생성 및 추가 함수
+  void _generateAndAddRepeatTodos(Todo_Task baseTask) {
+    final now = DateTime.now();
+    final endDate = now.add(Duration(days: 365)); // 1년간 반복 생성
+    DateTime currentDate = baseTask.date;
+
+    while (currentDate.isBefore(endDate)) {
+      DateTime nextDate = _getNextRepeatDateForTask(currentDate, baseTask);
+
+      if (nextDate.isAfter(endDate)) break;
+
+      // 원본 날짜가 아닌 경우에만 반복 태스크 생성
+      if (!_isSameDay(nextDate, baseTask.date)) {
+        final repeatTask = baseTask.copyWith(
+          id: '${baseTask.id}_repeat_${nextDate.millisecondsSinceEpoch}',
+          date: nextDate,
+          isCompleted: false, // 반복 일정은 항상 미완료로 시작
+          notificationId: null, // 새로운 알림 ID 필요
+        );
+
+        // 로컬 메모리에 추가
+        final dateKey = dateToKey(nextDate);
+        if (!todoTasksByDate.containsKey(dateKey)) {
+          todoTasksByDate[dateKey] = [];
+        }
+
+        // 중복 체크 후 추가
+        bool isDuplicate = todoTasksByDate[dateKey]!.any((t) =>
+        t.title == repeatTask.title &&
+            _isSameDay(t.date, repeatTask.date));
+
+        if (!isDuplicate) {
+          todoTasksByDate[dateKey]!.add(repeatTask);
+        }
+      }
+
+      currentDate = nextDate;
+    }
+  }
+
+// 태스크 기반 다음 반복 날짜 계산
+  DateTime _getNextRepeatDateForTask(DateTime currentDate, Todo_Task task) {
+    switch (task.repeatOption) {
+      case '매일':
+        return currentDate.add(Duration(days: 1));
+
+      case '매주':
+        return currentDate.add(Duration(days: 7));
+
+      case '매달':
+        int nextMonth = currentDate.month + 1;
+        int nextYear = currentDate.year;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear++;
+        }
+        int targetDay = currentDate.day;
+        int daysInMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+        if (targetDay > daysInMonth) {
+          targetDay = daysInMonth;
+        }
+        return DateTime(nextYear, nextMonth, targetDay);
+
+      case '매년':
+        return DateTime(currentDate.year + 1, currentDate.month, currentDate.day);
+
+      case '매요일':
+        if (task.repeatDays == null || task.repeatDays!.isEmpty) {
+          return currentDate.add(Duration(days: 1));
+        }
+
+        // 다음 해당 요일 찾기
+        DateTime nextDate = currentDate.add(Duration(days: 1));
+        while (!task.repeatDays!.contains(nextDate.weekday - 1)) {
+          nextDate = nextDate.add(Duration(days: 1));
+        }
+        return nextDate;
+
+      case '기타':
+        final customDays = task.repeatCustomDays ?? 1;
+        return currentDate.add(Duration(days: customDays));
+
+      default:
+        return currentDate.add(Duration(days: 1));
     }
   }
 
@@ -456,7 +702,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     _loadData();
   }
 
-// 파이어스토어에서 데이터 로드하는 메서드
+// 파이어스토어에서 데이터 로드하는 메서드 수정
   Future<void> _loadData() async {
     await _taskDataService.loadTasksFromFirestore(userId);
     updateProgress();
@@ -948,45 +1194,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       print('==== 전체 이벤트 덤프 ====');
       print('총 이벤트 수: ${snapshot.docs.length}');
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
 
-        print('\n## 이벤트 ID: ${doc.id}');
-        print('제목: ${data['title']}');
-        print('전체 데이터: $data');
 
-        // startDate 형식 확인
-        if (data.containsKey('startDate')) {
-          print('startDate 원본: ${data['startDate']}');
-          print('startDate 타입: ${data['startDate'].runtimeType}');
-
-          if (data['startDate'] is String) {
-            print('문자열 형식 날짜');
-            try {
-              final date = DateTime.parse(data['startDate']);
-              final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              print('파싱된 날짜: $dateStr');
-            } catch (e) {
-              print('날짜 파싱 실패: $e');
-            }
-          } else if (data['startDate'] is Timestamp) {
-            print('Timestamp 형식 날짜');
-            final date = (data['startDate'] as Timestamp).toDate();
-            final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-            print('변환된 날짜: $dateStr');
-          }
-        } else {
-          print('startDate 필드 없음');
-        }
-
-        // 시간 필드 확인
-        if (data.containsKey('startTime')) {
-          print('startTime 원본: ${data['startTime']}');
-          print('startTime 타입: ${data['startTime']?.runtimeType}');
-        }
-
-        print('--------------------');
-      }
     })
         .catchError((error) {
       print('이벤트 조회 오류: $error');
@@ -1640,6 +1849,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
       final task = Todo_Task(
         id: taskId,
+        userId: userId, // userId 추가 (현재 로그인한 사용자 ID)
         title: item['title'] ?? '제목 없음',
         date: selectedDate,
         time: _normalizeTime(item['time']),
@@ -1658,6 +1868,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
             : null,
         notificationId: null,
         reminderMinutesBefore: null,
+        isRepeating: false, // 기본값 추가
+        repeatOption: null,
+        repeatDays: null,
+        repeatCustomDays: null,
       );
 
       _taskDataService.addPlannerTask(task);
