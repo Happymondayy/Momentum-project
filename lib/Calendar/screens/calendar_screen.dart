@@ -49,8 +49,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        final startDate = DateTime.parse(data['startDate']);
-        final endDate = DateTime.parse(data['endDate']);
+        final startDate = (data['startDate'] as Timestamp).toDate();
+        final endDate = (data['endDate'] as Timestamp).toDate();
+        final repeatUntil = data['repeatUntil'] != null
+            ? (data['repeatUntil'] as Timestamp).toDate()
+            : null;
 
         final startTime = data['startTime'] != null
             ? TimeOfDay(hour: data['startTime']['hour'], minute: data['startTime']['minute'])
@@ -76,6 +79,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           repeatCustomDays: data['repeatCustomDays'],
           isAllDay: data['isAllDay'] ?? false,
           reminder: data['reminder'],
+          isReminderScheduled: data['isReminderScheduled'] ?? false,
+          repeatUntil: repeatUntil,
+          parentEventId: data['parentEventId'],
         );
 
         // Use startDate for organizing events instead of a 'date' field
@@ -174,8 +180,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         'userId': _currentUserId,
         'title': event.title,
         'description': event.description,
-        'startDate': event.startDate.toIso8601String(),
-        'endDate': event.endDate.toIso8601String(),
+        'startDate': event.startDate,
+        'endDate': event.endDate,
         'startTime': startTimeMap,
         'endTime': endTimeMap,
         'memo': event.memo,
@@ -186,6 +192,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         'repeatCustomDays': event.repeatCustomDays,
         'isAllDay': event.isAllDay,
         'reminder': event.reminder,
+        'isReminderScheduled': event.isReminderScheduled,
+        'repeatUntil': event.repeatUntil,
+        'parentEventId': event.id,
       };
 
       await FirebaseFirestore.instance.collection('events').add(eventDate);
@@ -297,8 +306,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       await FirebaseFirestore.instance.collection('events').doc(event.id).update({
         'title': event.title,
         'description': event.description,
-        'startDate': event.startDate.toIso8601String(),
-        'endDate': event.endDate.toIso8601String(),
+        'startDate': event.startDate,
+        'endDate': event.endDate,
         'startTime': startTimeMap,
         'endTime': endTimeMap,
         'memo': event.memo,
@@ -309,6 +318,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         'repeatCustomDays': event.repeatCustomDays,
         'isAllDay': event.isAllDay,
         'reminder': event.reminder,
+        'isReminderScheduled': event.isReminderScheduled,
+        'repeatUntil': event.repeatUntil,
+        'parentEventId': event.parentEventId,
       });
 
       print('Event updated successfully');
@@ -578,7 +590,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               child: EventCard(
                 event: event,
                 onEdit: () => _showEventDetailsDialog(event),
-                onDelete: () => _deleteEvent(event),
+                onDelete: _deleteEvent,
                 onMorePressed: () => _showEventDetailsDialog(event),
               ),
             );
@@ -635,35 +647,47 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // calendar_screen에서 사용할 수정된 _deleteEvent 함수
-  void _deleteEvent(Event event) async {
+  // calendar_screen에서 사용할 _deleteEvent 함수
+  void _deleteEvent(Event event, String deleteType) async {
     try {
-      // Firestore에서 이벤트 삭제
-      await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
+      switch (deleteType) {
+        case 'single': // 단일 일정 삭제(반복 일정이 아닌 경우)
+          await _deleteThis(event);
+          break;
+      }
 
-      // 상태 업데이트 - 로컬 상태도 즉시 업데이트
+      // 상태 업데이트
       if (mounted) {
-        setState(() {
-          // 필요한 경우 로컬 이벤트 리스트에서도 제거
-          // _events.removeWhere((e) => e.id == event.id);
-        });
-
-        // 삭제 성공 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정이 삭제되었습니다.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        setState(() {});
       }
     } catch (e) {
       print("Error deleting event: $e");
+      // 에러는 dialog에서 처리하므로 여기서는 다시 throw
+      rethrow;
+    }
+  }
+
+  //단일 일정 삭제(반복 일정이 아닌 경우)
+  Future<void> _deleteThis(Event event) async{
+    try {
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(event.id)
+          .delete();
+
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정 삭제 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
-          ),
+          const SnackBar(content: Text('일정이 삭제되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('삭제 중 오류가 발생했습니다: $e')),
         );
       }
     }

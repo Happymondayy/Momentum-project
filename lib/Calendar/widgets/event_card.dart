@@ -6,7 +6,7 @@ class EventCard extends StatelessWidget {
   final Event event;
   final void Function() onMorePressed;
   final void Function()? onEdit;  // Make optional with nullable type
-  final void Function()? onDelete;  // Make optional with nullable type
+  final void onDelete;  // Make optional with nullable type
 
   const EventCard({
     Key? key,

@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum RecurrencePattern {
+  daily,    // 매일
+  weekly,   // 매주
+  monthly,  // 매월
+  yearly,   // 매년
+}
 
 class Event {
   final String? userId;
@@ -18,6 +26,8 @@ class Event {
   final bool isAllDay;
   final String? reminder;
   bool isReminderScheduled;
+  final DateTime? repeatUntil;    // 반복 종료일
+  final String? parentEventId;    // 부모 반복 이벤트 ID
 
   Event({
     required this.userId,
@@ -37,6 +47,8 @@ class Event {
     this.isAllDay = false,
     this.reminder,
     this.isReminderScheduled = false,
+    this.repeatUntil,
+    this.parentEventId,
   });
 
   // Create a copy of this event with optional modified fields
@@ -58,6 +70,8 @@ class Event {
     bool? isAllDay,
     String? reminder,
     bool? isReminderScheduled,
+    DateTime? repeatUntil,
+    String? parentEventId,
   }) {
     return Event(
       userId: userId ?? this.userId,
@@ -77,7 +91,8 @@ class Event {
       isAllDay: isAllDay ?? this.isAllDay,
       reminder: reminder ?? this.reminder,
       isReminderScheduled: isReminderScheduled ?? this.isReminderScheduled,
-
+      repeatUntil: repeatUntil ?? this.repeatUntil,
+      parentEventId: parentEventId ?? this.parentEventId,
     );
   }
 
@@ -98,8 +113,8 @@ class Event {
       'id' : id,
       'title': title,
       'description': description,
-      'startDate': startDate.toIso8601String(),
-      'endDate': endDate.toIso8601String(),
+      'startDate': startDate,
+      'endDate': endDate,
       'startTime': startTimeMap,
       'endTime': endTimeMap,
       'memo': memo,
@@ -111,13 +126,18 @@ class Event {
       'isAllDay': isAllDay,
       'reminder': reminder,
       'isReminderScheduled': isReminderScheduled,
+      'repeatUntil': repeatUntil,
+      'parentEventId': parentEventId,
     };
   }
 
   // Firebase에서 불러온 데이터로 Event 생성 (CalendarScreen 코드와 일치하도록 수정)
   factory Event.fromMap(Map<String, dynamic> map, String userId, String docId) {
-    final startDate = DateTime.parse(map['startDate']);
-    final endDate = DateTime.parse(map['endDate']);
+    final startDate = (map['startDate'] as Timestamp).toDate();
+    final endDate = (map['endDate'] as Timestamp).toDate();
+    final repeatUntil = map['repeatUntil'] != null
+        ? (map['repeatUntil'] as Timestamp).toDate()
+        : null;
 
     final startTime = map['startTime'] != null
         ? TimeOfDay(hour: map['startTime']['hour'], minute: map['startTime']['minute'])
@@ -144,6 +164,8 @@ class Event {
       isAllDay: map['isAllDay'] ?? false,
       reminder: map['reminder'],
       isReminderScheduled: map['isReminderScheduled'] ?? false,
+      repeatUntil: repeatUntil,
+      parentEventId: map['parentEventId'],
     );
   }
 
