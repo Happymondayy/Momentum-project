@@ -645,6 +645,677 @@ ${jsonEncode(tasks)}
     return eventData;
   }
 
+  // 일정 분석 및 추천 요청 처리
+  static Future<Map<String, dynamic>> analyzeScheduleAndRecommend({
+    required String message,
+    required List<Map<String, dynamic>> calendar,
+    required List<Map<String, dynamic>> tasks,
+    required List<Map<String, dynamic>> history,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final today = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
+
+      // 오늘 일정 분석
+      final todayEvents = calendar.where((event) {
+        return event['date'] == today || (event['date'] != null && event['date'].startsWith(today));
+      }).toList();
+
+      final todayTasks = tasks.where((task) {
+        return task['date'] == today || (task['date'] != null && task['date'].startsWith(today));
+      }).toList();
+
+      // 분석 단계별 진행
+      if (message.contains('일정 분석') || message.contains('분석')) {
+        return _generateScheduleAnalysis(todayEvents, todayTasks);
+      } else if (message.contains('추천') || message.contains('뭐 해야')) {
+        return _generateScheduleRecommendation(todayEvents, todayTasks);
+      }
+
+      return {
+        "response": "일정 분석과 추천을 도와드릴게요. 어떤 것을 원하시나요?",
+        "actions": []
+      };
+    } catch (e) {
+      print('일정 분석 오류: $e');
+      return {
+        "response": "일정 분석 중 오류가 발생했습니다.",
+        "actions": []
+      };
+    }
+  }
+
+// 일정 분석 결과 생성
+  static Map<String, dynamic> _generateScheduleAnalysis(
+      List<Map<String, dynamic>> todayEvents,
+      List<Map<String, dynamic>> todayTasks
+      ) {
+    String analysis = "📊 **오늘 일정 분석 결과**\n\n";
+
+    // 시간 분석
+    analysis += "⏰ **시간 현황:**\n";
+    int busyHours = 0;
+    int freeHours = 24;
+
+    for (var event in todayEvents) {
+      if (event['startTime'] != null && event['endTime'] != null) {
+        // 대략적인 시간 계산
+        busyHours += 1;
+      }
+    }
+
+    freeHours -= busyHours;
+    analysis += "• 예정된 일정: ${todayEvents.length}개\n";
+    analysis += "• 예상 소요시간: 약 ${busyHours}시간\n";
+    analysis += "• 여유시간: 약 ${freeHours}시간\n\n";
+
+    // 할 일 분석
+    final completedTasks = todayTasks.where((task) => task['isCompleted'] == true).length;
+    final totalTasks = todayTasks.length;
+    final completionRate = totalTasks > 0 ? (completedTasks / totalTasks * 100).round() : 0;
+
+    analysis += "📝 **할 일 현황:**\n";
+    analysis += "• 총 할 일: ${totalTasks}개\n";
+    analysis += "• 완료: ${completedTasks}개\n";
+    analysis += "• 완료율: ${completionRate}%\n\n";
+
+    // 우선순위 분석
+    final importantTasks = todayTasks.where((task) =>
+    task['importance'] != null &&
+        int.tryParse(task['importance'].toString()) != null &&
+        int.parse(task['importance'].toString()) >= 4
+    ).toList();
+
+    analysis += "🔥 **우선순위 높은 할 일:**\n";
+    if (importantTasks.isNotEmpty) {
+      for (var task in importantTasks.take(3)) {
+        analysis += "• ${task['title']}\n";
+      }
+    } else {
+      analysis += "• 긴급한 할 일은 없어요!\n";
+    }
+
+    analysis += "\n💡 **오늘 하루를 더 효율적으로 보내고 싶으시다면 '추천 일정 만들어줘'라고 말씀해주세요!**";
+
+    return {
+      "response": analysis,
+      "actions": [
+        {
+          "action": "analyze_complete",
+          "data": {
+            "totalEvents": todayEvents.length,
+            "totalTasks": totalTasks,
+            "completionRate": completionRate,
+            "importantTasks": importantTasks.length
+          }
+        }
+      ]
+    };
+  }
+
+// 개인 맞춤 일정 추천 생성
+  static Map<String, dynamic> _generateScheduleRecommendation(
+      List<Map<String, dynamic>> todayEvents,
+      List<Map<String, dynamic>> todayTasks
+      ) {
+    String recommendation = "🎯 **맞춤 일정 추천**\n\n";
+    recommendation += "현재 일정을 분석해서 최적의 하루 계획을 만들어드릴게요!\n\n";
+
+    // 질문 단계 시작
+    recommendation += "📋 **몇 가지 질문에 답해주시면 더 정확한 추천을 드릴 수 있어요:**\n\n";
+    recommendation += "1. 오늘 가장 집중하고 싶은 활동은 무엇인가요?\n";
+    recommendation += "   (예: 공부, 운동, 휴식, 취미활동)\n\n";
+    recommendation += "2. 선호하는 활동 시간대는 언제인가요?\n";
+    recommendation += "   (예: 오전, 오후, 저녁)\n\n";
+    recommendation += "3. 하루에 얼마나 많은 활동을 원하시나요?\n";
+    recommendation += "   (예: 여유롭게, 보통, 빡빡하게)\n\n";
+
+    recommendation += "💬 **답변 예시:** '공부에 집중하고 싶고, 오전에 활동하는 걸 좋아해요. 여유롭게 하고 싶어요!'";
+
+    return {
+      "response": recommendation,
+      "actions": [
+        {
+          "action": "start_recommendation_questions",
+          "data": {
+            "step": 1,
+            "totalSteps": 3
+          }
+        }
+      ],
+      "expectingUserInput": true
+    };
+  }
+
+// 사용자 응답 기반 맞춤 일정 생성
+  static Future<Map<String, dynamic>> createPersonalizedSchedule({
+    required String userPreferences,
+    required List<Map<String, dynamic>> calendar,
+    required List<Map<String, dynamic>> tasks,
+  }) async {
+    final now = DateTime.now();
+    final today = "${now.year}-${_padZero(now.month)}-${_padZero(now.day)}";
+
+    // 사용자 선호도 분석
+    Map<String, dynamic> preferences = _parseUserPreferences(userPreferences);
+
+    // 빈 시간대 찾기
+    List<String> freeTimeSlots = _findAvailableTimeSlots(calendar, today);
+
+    // 추천 일정 생성
+    List<Map<String, dynamic>> recommendedSchedule = _generateRecommendedActivities(
+        preferences,
+        freeTimeSlots,
+        tasks
+    );
+
+    String response = "🌟 **맞춤 일정이 완성되었어요!**\n\n";
+    response += "당신의 선호도를 바탕으로 오늘 하루 일정을 만들어봤어요:\n\n";
+
+    for (int i = 0; i < recommendedSchedule.length; i++) {
+      final activity = recommendedSchedule[i];
+      response += "${i + 1}. **${activity['time']}** - ${activity['title']}\n";
+      response += "   ${activity['description']}\n\n";
+    }
+
+    response += "🤔 **이 일정들을 오늘 플래너에 추가하시겠어요?**\n";
+    response += "'네' 또는 '추가해줘'라고 답하시면 자동으로 플래너에 추가해드릴게요!";
+
+    return {
+      "response": response,
+      "actions": [
+        {
+          "action": "show_recommended_schedule",
+          "data": {
+            "schedule": recommendedSchedule,
+            "date": today
+          }
+        }
+      ],
+      "recommendedSchedule": recommendedSchedule
+    };
+  }
+
+// 사용자 선호도 파싱
+  static Map<String, dynamic> _parseUserPreferences(String userInput) {
+    final lowerInput = userInput.toLowerCase();
+
+    // 활동 유형 파악
+    String preferredActivity = 'general';
+    if (lowerInput.contains('공부') || lowerInput.contains('학습')) {
+      preferredActivity = 'study';
+    } else if (lowerInput.contains('운동') || lowerInput.contains('헬스')) {
+      preferredActivity = 'exercise';
+    } else if (lowerInput.contains('휴식') || lowerInput.contains('쉬')) {
+      preferredActivity = 'rest';
+    } else if (lowerInput.contains('취미') || lowerInput.contains('여가')) {
+      preferredActivity = 'hobby';
+    }
+
+    // 시간대 선호도
+    String preferredTime = 'all';
+    if (lowerInput.contains('오전')) {
+      preferredTime = 'morning';
+    } else if (lowerInput.contains('오후')) {
+      preferredTime = 'afternoon';
+    } else if (lowerInput.contains('저녁')) {
+      preferredTime = 'evening';
+    }
+
+    // 강도 선호도
+    String intensity = 'normal';
+    if (lowerInput.contains('여유') || lowerInput.contains('천천히')) {
+      intensity = 'light';
+    } else if (lowerInput.contains('빡빡') || lowerInput.contains('많이')) {
+      intensity = 'intense';
+    }
+
+    return {
+      'activity': preferredActivity,
+      'time': preferredTime,
+      'intensity': intensity
+    };
+  }
+
+// 빈 시간대 찾기
+  static List<String> _findAvailableTimeSlots(List<Map<String, dynamic>> calendar, String date) {
+    final busySlots = <String>[];
+
+    // 기존 일정의 시간대 수집
+    final todayEvents = calendar.where((event) =>
+    event['date'] == date || (event['date'] != null && event['date'].startsWith(date))
+    ).toList();
+
+    for (var event in todayEvents) {
+      if (event['startTime'] != null) {
+        if (event['startTime'] is Map) {
+          final hour = event['startTime']['hour'] ?? 0;
+          busySlots.add('${hour.toString().padLeft(2, '0')}:00');
+        } else if (event['startTime'] is String) {
+          busySlots.add(event['startTime'].toString());
+        }
+      }
+    }
+
+    // 9시부터 21시까지 1시간 단위로 빈 시간 찾기
+    final allSlots = <String>[];
+    for (int hour = 9; hour <= 20; hour++) {
+      final timeSlot = '${hour.toString().padLeft(2, '0')}:00';
+      if (!busySlots.contains(timeSlot)) {
+        allSlots.add(timeSlot);
+      }
+    }
+
+    return allSlots;
+  }
+
+// 추천 활동 생성
+  static List<Map<String, dynamic>> _generateRecommendedActivities(
+      Map<String, dynamic> preferences,
+      List<String> freeTimeSlots,
+      List<Map<String, dynamic>> tasks
+      ) {
+    final recommendedActivities = <Map<String, dynamic>>[];
+
+    if (freeTimeSlots.isEmpty) return recommendedActivities;
+
+    final activityType = preferences['activity'];
+    final timePreference = preferences['time'];
+    final intensity = preferences['intensity'];
+
+    // 시간대별 필터링
+    List<String> filteredSlots = freeTimeSlots;
+    if (timePreference != 'all') {
+      filteredSlots = freeTimeSlots.where((slot) {
+        final hour = int.parse(slot.split(':')[0]);
+        switch (timePreference) {
+          case 'morning':
+            return hour >= 9 && hour < 12;
+          case 'afternoon':
+            return hour >= 12 && hour < 18;
+          case 'evening':
+            return hour >= 18 && hour <= 20;
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
+    // 활동 수 결정
+    int maxActivities;
+    switch (intensity) {
+      case 'light':
+        maxActivities = 2;
+        break;
+      case 'intense':
+        maxActivities = min(5, filteredSlots.length);
+        break;
+      default:
+        maxActivities = min(3, filteredSlots.length);
+    }
+
+    // 활동 유형별 추천
+    final activities = _getActivityTemplates(activityType);
+
+    for (int i = 0; i < maxActivities && i < filteredSlots.length; i++) {
+      final activity = activities[i % activities.length];
+      final endHour = int.parse(filteredSlots[i].split(':')[0]) + 1;
+
+      recommendedActivities.add({
+        'title': activity['title'],
+        'description': activity['description'],
+        'time': filteredSlots[i],
+        'endTime': '${endHour.toString().padLeft(2, '0')}:00',
+        'type': activityType,
+        'importance': activity['importance'] ?? 3,
+        'urgency': activity['urgency'] ?? 3,
+      });
+    }
+
+    return recommendedActivities;
+  }
+
+  // 일정 검색 및 삭제 관련 함수들
+  static Map<String, dynamic> searchAndDeleteSchedule({
+    required String message,
+    required List<Map<String, dynamic>> calendar,
+    required List<Map<String, dynamic>> tasks,
+  }) {
+    final lowerMessage = message.toLowerCase();
+
+    // 삭제 키워드 확인
+    if (!lowerMessage.contains('삭제') && !lowerMessage.contains('지워') &&
+        !lowerMessage.contains('취소') && !lowerMessage.contains('제거')) {
+      return {
+        "response": "삭제하고 싶은 일정을 알려주세요. 예: '팀 회의 삭제해줘'",
+        "actions": []
+      };
+    }
+
+    // 검색어 추출
+    String searchKeyword = _extractDeleteKeyword(message);
+
+    if (searchKeyword.isEmpty) {
+      // 전체 일정 보기
+      return _showAllSchedulesForDeletion(calendar, tasks);
+    }
+
+    // 키워드로 일정 검색
+    Map<String, dynamic> searchResults = _searchSchedulesByKeyword(searchKeyword, calendar, tasks);
+
+    if (searchResults['total'] == 0) {
+      return {
+        "response": "'$searchKeyword'와 관련된 일정을 찾을 수 없어요. 다른 키워드로 검색해보세요.",
+        "actions": []
+      };
+    } else if (searchResults['total'] == 1) {
+      // 1개 발견 시 즉시 삭제 확인
+      return _confirmSingleDeletion(searchResults);
+    } else {
+      // 여러 개 발견 시 선택 요청
+      return _showMultipleOptionsForDeletion(searchResults);
+    }
+  }
+
+// 삭제 키워드 추출
+  static String _extractDeleteKeyword(String message) {
+    // "팀 회의 삭제해줘" -> "팀 회의"
+    // "회의 지워줘" -> "회의"
+
+    final deleteWords = ['삭제해줘', '삭제해', '삭제', '지워줘', '지워', '취소해줘', '취소', '제거해줘', '제거', '없애줘', '없애'];
+
+    for (String deleteWord in deleteWords) {
+      if (message.contains(deleteWord)) {
+        // 삭제 키워드 앞의 단어들 추출
+        int index = message.indexOf(deleteWord);
+        String beforeDelete = message.substring(0, index).trim();
+
+        // 불필요한 단어 제거
+        final unnecessaryWords = ['일정', '할일', '할 일', '을', '를', '이', '가', '의', '에', '그', '그거', '저거'];
+        for (String word in unnecessaryWords) {
+          beforeDelete = beforeDelete.replaceAll(word, '').trim();
+        }
+
+        return beforeDelete;
+      }
+    }
+
+    return '';
+  }
+
+// 전체 일정 보기 (삭제용)
+  static Map<String, dynamic> _showAllSchedulesForDeletion(
+      List<Map<String, dynamic>> calendar,
+      List<Map<String, dynamic>> tasks
+      ) {
+    String response = "📋 **삭제 가능한 일정 목록:**\n\n";
+    List<Map<String, dynamic>> allItems = [];
+
+    // 캘린더 일정 추가
+    for (int i = 0; i < calendar.length; i++) {
+      final event = calendar[i];
+      allItems.add({
+        'type': 'calendar',
+        'index': i,
+        'id': event['id'],
+        'title': event['title'],
+        'date': event['date'],
+        'data': event
+      });
+
+      response += "${allItems.length}. 📅 캘린더: '${event['title']}' (${event['date']})\n";
+    }
+
+    // 투두리스트 추가
+    for (int i = 0; i < tasks.length; i++) {
+      final task = tasks[i];
+      allItems.add({
+        'type': 'todo',
+        'index': i,
+        'id': task['id'],
+        'title': task['title'],
+        'date': task['date'],
+        'data': task
+      });
+
+      response += "${allItems.length}. 📝 투두: '${task['title']}' (${task['date'] ?? '날짜 없음'})\n";
+    }
+
+    if (allItems.isEmpty) {
+      response = "삭제할 수 있는 일정이 없어요.";
+      return {
+        "response": response,
+        "actions": []
+      };
+    }
+
+    response += "\n번호를 선택하거나 제목을 말씀해주세요!";
+
+    return {
+      "response": response,
+      "actions": [
+        {
+          "action": "show_deletion_list",
+          "data": {
+            "items": allItems
+          }
+        }
+      ]
+    };
+  }
+
+// 키워드로 일정 검색
+  static Map<String, dynamic> _searchSchedulesByKeyword(
+      String keyword,
+      List<Map<String, dynamic>> calendar,
+      List<Map<String, dynamic>> tasks
+      ) {
+    List<Map<String, dynamic>> foundItems = [];
+
+    // 캘린더에서 검색
+    for (int i = 0; i < calendar.length; i++) {
+      final event = calendar[i];
+      if (event['title'] != null &&
+          event['title'].toString().toLowerCase().contains(keyword.toLowerCase())) {
+        foundItems.add({
+          'type': 'calendar',
+          'index': i,
+          'id': event['id'],
+          'title': event['title'],
+          'date': event['date'],
+          'data': event
+        });
+      }
+    }
+
+    // 투두리스트에서 검색
+    for (int i = 0; i < tasks.length; i++) {
+      final task = tasks[i];
+      if (task['title'] != null &&
+          task['title'].toString().toLowerCase().contains(keyword.toLowerCase())) {
+        foundItems.add({
+          'type': 'todo',
+          'index': i,
+          'id': task['id'],
+          'title': task['title'],
+          'date': task['date'],
+          'data': task
+        });
+      }
+    }
+
+    return {
+      'keyword': keyword,
+      'total': foundItems.length,
+      'items': foundItems
+    };
+  }
+
+// 단일 항목 삭제 확인
+  static Map<String, dynamic> _confirmSingleDeletion(Map<String, dynamic> searchResults) {
+    final item = searchResults['items'][0];
+    final type = item['type'] == 'calendar' ? '캘린더' : '투두리스트';
+    final emoji = item['type'] == 'calendar' ? '📅' : '📝';
+
+    String response = "🗑️ **삭제 확인**\n\n";
+    response += "다음 일정을 삭제하시겠어요?\n";
+    response += "$emoji $type: '${item['title']}' (${item['date'] ?? '날짜 없음'})\n\n";
+    response += "'네' 또는 '삭제'라고 답하시면 삭제됩니다.";
+
+    return {
+      "response": response,
+      "actions": [
+        {
+          "action": "confirm_single_deletion",
+          "data": item
+        }
+      ]
+    };
+  }
+
+// 다중 항목 선택 요청
+  static Map<String, dynamic> _showMultipleOptionsForDeletion(Map<String, dynamic> searchResults) {
+    final keyword = searchResults['keyword'];
+    final items = searchResults['items'] as List<Map<String, dynamic>>;
+
+    String response = "🔍 **'$keyword'와 관련된 일정이 ${items.length}개 있어요:**\n\n";
+
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      final type = item['type'] == 'calendar' ? '캘린더' : '투두리스트';
+      final emoji = item['type'] == 'calendar' ? '📅' : '📝';
+
+      response += "${i + 1}. $emoji $type: '${item['title']}' (${item['date'] ?? '날짜 없음'})\n";
+    }
+
+    response += "\n어떤 것을 삭제하시겠어요? 번호로 선택해주세요!";
+
+    return {
+      "response": response,
+      "actions": [
+        {
+          "action": "show_multiple_deletion_options",
+          "data": {
+            "items": items,
+            "keyword": keyword
+          }
+        }
+      ]
+    };
+  }
+
+// 활동 유형별 템플릿
+  static List<Map<String, dynamic>> _getActivityTemplates(String activityType) {
+    switch (activityType) {
+      case 'study':
+        return [
+          {
+            'title': '집중 공부 시간',
+            'description': '가장 중요한 학습 내용에 집중하는 시간',
+            'importance': 4,
+            'urgency': 4,
+          },
+          {
+            'title': '복습 및 정리',
+            'description': '배운 내용을 정리하고 복습하는 시간',
+            'importance': 3,
+            'urgency': 3,
+          },
+          {
+            'title': '문제 풀이',
+            'description': '연습 문제를 풀어보며 실력을 향상시키는 시간',
+            'importance': 4,
+            'urgency': 3,
+          },
+        ];
+      case 'exercise':
+        return [
+          {
+            'title': '유산소 운동',
+            'description': '건강한 몸을 위한 유산소 운동 시간',
+            'importance': 3,
+            'urgency': 2,
+          },
+          {
+            'title': '근력 운동',
+            'description': '근력 향상을 위한 웨이트 트레이닝',
+            'importance': 3,
+            'urgency': 2,
+          },
+          {
+            'title': '스트레칭',
+            'description': '몸의 긴장을 풀어주는 스트레칭 시간',
+            'importance': 2,
+            'urgency': 2,
+          },
+        ];
+      case 'rest':
+        return [
+          {
+            'title': '명상 및 휴식',
+            'description': '마음의 평안을 찾는 명상 시간',
+            'importance': 2,
+            'urgency': 1,
+          },
+          {
+            'title': '여유로운 산책',
+            'description': '자연을 느끼며 걷는 힐링 시간',
+            'importance': 2,
+            'urgency': 1,
+          },
+          {
+            'title': '음악 감상',
+            'description': '좋아하는 음악을 들으며 휴식하는 시간',
+            'importance': 1,
+            'urgency': 1,
+          },
+        ];
+      case 'hobby':
+        return [
+          {
+            'title': '취미 활동',
+            'description': '좋아하는 취미를 즐기는 시간',
+            'importance': 2,
+            'urgency': 1,
+          },
+          {
+            'title': '독서 시간',
+            'description': '책을 읽으며 지식을 쌓는 시간',
+            'importance': 3,
+            'urgency': 2,
+          },
+          {
+            'title': '영화/드라마 감상',
+            'description': '재미있는 영상 콘텐츠를 즐기는 시간',
+            'importance': 1,
+            'urgency': 1,
+          },
+        ];
+      default:
+        return [
+          {
+            'title': '계획 세우기',
+            'description': '앞으로의 일정을 계획하고 정리하는 시간',
+            'importance': 3,
+            'urgency': 3,
+          },
+          {
+            'title': '정리 정돈',
+            'description': '주변 환경을 깔끔하게 정리하는 시간',
+            'importance': 2,
+            'urgency': 2,
+          },
+          {
+            'title': '자기계발',
+            'description': '새로운 것을 배우고 성장하는 시간',
+            'importance': 3,
+            'urgency': 2,
+          },
+        ];
+    }
+  }
+
+
 // 오늘 일정 요약 응답 생성
   Map<String, dynamic> _generateTodayScheduleResponse(
       List<Map<String, dynamic>> calendar,

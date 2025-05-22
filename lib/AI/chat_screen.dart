@@ -44,6 +44,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   late String userId;
 
+  Map<String, dynamic> _deletionState = {
+    'isDeletingSchedule': false,
+    'awaitingConfirmation': false,
+    'awaitingSelection': false,
+    'targetItem': null,
+    'availableItems': <Map<String, dynamic>>[],
+  };
+
+
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +81,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
   }
+
+  Map<String, dynamic> _recommendationState = {
+    'isReceivingRecommendation': false,
+    'step': 0, // 0: 시작, 1: 질문 단계, 2: 일정 생성 완료
+    'userPreferences': '',
+    'recommendedSchedule': <Map<String, dynamic>>[],
+  };
 
   // 메시지 저장 함수
   Future<void> _saveMessages() async {
@@ -401,56 +418,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // Todo 항목 삭제 함수
-  Future<void> _deleteTodo(Map<String, dynamic> todoData) async {
-    try {
-      String? todoId;
-      String title = todoData['title'] ?? '';
 
-      // ID로 삭제
-      if (todoData['id'] != null) {
-        todoId = todoData['id'].toString();
-      }
-      // 제목으로 찾아서 삭제
-      else if (title.isNotEmpty) {
-        // 원본 todoData에서 제목으로 검색
-        for (var todo in widget.todoData) {
-          if (todo['title'] == title) {
-            todoId = todo['id'].toString();
-            break;
-          }
-        }
-      }
-
-      if (todoId == null || todoId.isEmpty) {
-        _addSystemMessage("삭제할 할 일을 찾을 수 없습니다.");
-        return;
-      }
-
-      // Firestore에서 삭제
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('todos')
-          .where('userId', isEqualTo: widget.userId)
-          .where('title', isEqualTo: title)
-          .get();
-
-      for (var doc in querySnapshot.docs) {
-        await doc.reference.delete();
-      }
-
-      // 로컬 데이터 업데이트
-      setState(() {
-        widget.todoData.removeWhere((todo) =>
-        todo['id'] == todoId || todo['title'] == title
-        );
-      });
-
-      _addSystemMessage("'$title' 할 일이 삭제되었습니다.");
-    } catch (e) {
-      print('할 일 삭제 오류: $e');
-      _addSystemMessage("할 일 삭제 중 오류가 발생했습니다: $e");
-    }
-  }
 
   void _addSystemMessage(String message) {
     setState(() {
@@ -502,26 +470,37 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       Map<String, dynamic> response;
 
-      if (_isOfflineMode) {
-        // 오프라인 모드일 경우 기본 응답 생성
-        response = _chatService.generateOfflineResponse(message);
-      } else {
-        // 온라인 모드 - 타임아웃 설정
-        response = await _chatService.chatWithAssistant(
-          message: message,
-          calendar: widget.calendarData,
-          tasks: widget.todoData,
-          history: _messages,
-        ).timeout(
-            const Duration(seconds: 15),
-            onTimeout: () {
-              // 타임아웃 발생 시 오프라인 모드로 전환
-              setState(() {
-                _isOfflineMode = true;
-              });
-              return _chatService.generateOfflineResponse(message);
-            }
-        );
+      // 삭제 단계 확인
+      if (_deletionState['isDeletingSchedule'] == true) {
+        response = await _handleDeletionFlow(message);
+      }
+      // 삭제 요청 확인
+      else if (message.toLowerCase().contains('삭제') ||
+          message.toLowerCase().contains('지워') ||
+          message.toLowerCase().contains('취소') ||
+          message.toLowerCase().contains('제거')) {
+        response = _handleScheduleDeletion(message);
+      }
+      // 일반적인 메시지 처리
+      else {
+        if (_isOfflineMode) {
+          response = _chatService.generateOfflineResponse(message);
+        } else {
+          response = await _chatService.chatWithAssistant(
+            message: message,
+            calendar: widget.calendarData,
+            tasks: widget.todoData,
+            history: _messages,
+          ).timeout(
+              const Duration(seconds: 15),
+              onTimeout: () {
+                setState(() {
+                  _isOfflineMode = true;
+                });
+                return _chatService.generateOfflineResponse(message);
+              }
+          );
+        }
       }
 
       setState(() {
@@ -532,13 +511,12 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         _isLoading = false;
 
-        // 새로운 추천 옵션 업데이트
         if (response['options'] != null) {
           _quickOptions = List<Map<String, dynamic>>.from(response['options']);
         }
       });
 
-      _saveMessages(); // 변경 내용 저장
+      _saveMessages();
       _scrollToBottom();
 
       // 액션 처리
@@ -555,20 +533,367 @@ class _ChatScreenState extends State<ChatScreen> {
           'content': '죄송합니다. 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
         });
         _isLoading = false;
-        _isOfflineMode = true; // 오류 발생 시 오프라인 모드로 전환
+        _isOfflineMode = true;
       });
 
-      _saveMessages(); // 변경 내용 저장
+      _saveMessages();
       _scrollToBottom();
     }
   }
 
-  // 빠른 옵션 클릭 처리 함수 추가
+
+  // 일정 분석 및 추천 처리
+  Future<Map<String, dynamic>> _handleScheduleAnalysisAndRecommendation(String message) async {
+    if (message.toLowerCase().contains('분석')) {
+      // 일정 분석 수행
+      return AIAdviceService.analyzeScheduleAndRecommend(
+        message: message,
+        calendar: widget.calendarData,
+        tasks: widget.todoData,
+        history: _messages,
+      );
+    } else {
+      // 추천 일정 생성 시작
+      setState(() {
+        _recommendationState['isReceivingRecommendation'] = true;
+        _recommendationState['step'] = 1;
+      });
+
+      return AIAdviceService.analyzeScheduleAndRecommend(
+        message: message,
+        calendar: widget.calendarData,
+        tasks: widget.todoData,
+        history: _messages,
+      );
+    }
+  }
+
+// 추천 일정 플로우 처리
+  Future<Map<String, dynamic>> _handleRecommendationFlow(String message) async {
+    final step = _recommendationState['step'];
+
+    if (step == 1) {
+      // 사용자 선호도 저장
+      _recommendationState['userPreferences'] = message;
+      _recommendationState['step'] = 2;
+
+      // 맞춤 일정 생성
+      final response = await AIAdviceService.createPersonalizedSchedule(
+        userPreferences: message,
+        calendar: widget.calendarData,
+        tasks: widget.todoData,
+      );
+
+      _recommendationState['recommendedSchedule'] = response['recommendedSchedule'] ?? [];
+
+      return response;
+
+    } else if (step == 2) {
+      // 일정 추가 확인
+      if (message.toLowerCase().contains('네') ||
+          message.toLowerCase().contains('추가') ||
+          message.toLowerCase().contains('예') ||
+          message.toLowerCase().contains('좋아')) {
+
+        // 추천된 일정들을 플래너에 추가
+        await _addRecommendedSchedulesToPlanner();
+
+        // 상태 초기화
+        _recommendationState = {
+          'isReceivingRecommendation': false,
+          'step': 0,
+          'userPreferences': '',
+          'recommendedSchedule': <Map<String, dynamic>>[],
+        };
+
+        return {
+          "response": "🎉 **완료!** 추천 일정이 모두 플래너에 추가되었어요!\n\n플래너 화면에서 확인해보세요. 언제든지 수정하거나 삭제할 수 있어요.",
+          "actions": []
+        };
+
+      } else if (message.toLowerCase().contains('아니') ||
+          message.toLowerCase().contains('싫어') ||
+          message.toLowerCase().contains('안 해')) {
+
+        // 상태 초기화
+        _recommendationState = {
+          'isReceivingRecommendation': false,
+          'step': 0,
+          'userPreferences': '',
+          'recommendedSchedule': <Map<String, dynamic>>[],
+        };
+
+        return {
+          "response": "알겠어요! 다른 도움이 필요하시면 언제든 말씀해주세요. 😊",
+          "actions": []
+        };
+      } else {
+        return {
+          "response": "'네' 또는 '아니요'로 답해주세요! 추천된 일정을 플래너에 추가하시겠어요?",
+          "actions": []
+        };
+      }
+    }
+
+    return {
+      "response": "죄송해요, 다시 처음부터 시작해주세요.",
+      "actions": []
+    };
+  }
+
+// 추천 일정을 플래너에 추가
+  Future<void> _addRecommendedSchedulesToPlanner() async {
+    final recommendedSchedule = _recommendationState['recommendedSchedule'] as List<Map<String, dynamic>>;
+
+    for (var activity in recommendedSchedule) {
+      try {
+        // 일정 데이터 준비
+        final eventData = {
+          'title': activity['title'],
+          'date': DateTime.now().toString().split(' ')[0], // 오늘 날짜
+          'time': activity['time'],
+          'endTime': activity['endTime'],
+          'description': activity['description'],
+          'importance': activity['importance'] ?? 3,
+          'urgency': activity['urgency'] ?? 3,
+          'type': 'todo', // 투두리스트에 추가
+        };
+
+        // 투두리스트에 추가
+        await _addTodo(eventData);
+
+        // 잠시 대기 (너무 빠른 연속 요청 방지)
+        await Future.delayed(Duration(milliseconds: 200));
+
+      } catch (e) {
+        print('추천 일정 추가 오류: $e');
+      }
+    }
+  }
+
+  // 일정 삭제 처리
+  Map<String, dynamic> _handleScheduleDeletion(String message) {
+    setState(() {
+      _deletionState['isDeletingSchedule'] = true;
+    });
+
+    return AIAdviceService.searchAndDeleteSchedule(
+      message: message,
+      calendar: widget.calendarData,
+      tasks: widget.todoData,
+    );
+  }
+
+// 삭제 플로우 처리
+  Future<Map<String, dynamic>> _handleDeletionFlow(String message) async {
+    // 확인 대기 중인 경우
+    if (_deletionState['awaitingConfirmation'] == true) {
+      if (message.toLowerCase().contains('네') ||
+          message.toLowerCase().contains('삭제') ||
+          message.toLowerCase().contains('예') ||
+          message.toLowerCase().contains('응') ||
+          message.toLowerCase().contains('맞아') ||
+          message.toLowerCase().contains('좋아')) {
+
+        // 실제 삭제 수행
+        final targetItem = _deletionState['targetItem'];
+        await _performActualDeletion(targetItem);
+
+        // 상태 초기화
+        _deletionState = {
+          'isDeletingSchedule': false,
+          'awaitingConfirmation': false,
+          'awaitingSelection': false,
+          'targetItem': null,
+          'availableItems': <Map<String, dynamic>>[],
+        };
+
+        return {
+          "response": "✅ '${targetItem['title']}' ${targetItem['type'] == 'calendar' ? '캘린더 일정' : '투두리스트'}이 삭제되었습니다!",
+          "actions": []
+        };
+
+      } else if (message.toLowerCase().contains('아니') ||
+          message.toLowerCase().contains('싫어') ||
+          message.toLowerCase().contains('안 해') ||
+          message.toLowerCase().contains('취소')) {
+        // 삭제 취소
+        _deletionState = {
+          'isDeletingSchedule': false,
+          'awaitingConfirmation': false,
+          'awaitingSelection': false,
+          'targetItem': null,
+          'availableItems': <Map<String, dynamic>>[],
+        };
+
+        return {
+          "response": "삭제를 취소했습니다. 다른 도움이 필요하시면 말씀해주세요!",
+          "actions": []
+        };
+      } else {
+        return {
+          "response": "'네' 또는 '아니요'로 답해주세요! 정말 삭제하시겠어요?",
+          "actions": []
+        };
+      }
+    }
+
+    // 선택 대기 중인 경우
+    if (_deletionState['awaitingSelection'] == true) {
+      final availableItems = _deletionState['availableItems'] as List<Map<String, dynamic>>;
+
+      // 숫자 선택 확인
+      final selectedNumber = int.tryParse(message.trim().replaceAll('번', ''));
+      if (selectedNumber != null && selectedNumber > 0 && selectedNumber <= availableItems.length) {
+        final selectedItem = availableItems[selectedNumber - 1];
+
+        // 삭제 확인 단계로 이동
+        setState(() {
+          _deletionState['awaitingConfirmation'] = true;
+          _deletionState['awaitingSelection'] = false;
+          _deletionState['targetItem'] = selectedItem;
+        });
+
+        final type = selectedItem['type'] == 'calendar' ? '캘린더' : '투두리스트';
+        final emoji = selectedItem['type'] == 'calendar' ? '📅' : '📝';
+
+        return {
+          "response": "🗑️ **삭제 확인**\n\n다음 일정을 삭제하시겠어요?\n$emoji $type: '${selectedItem['title']}' (${selectedItem['date'] ?? '날짜 없음'})\n\n'네' 또는 '삭제'라고 답하시면 삭제됩니다.",
+          "actions": []
+        };
+      } else {
+        return {
+          "response": "올바른 번호를 선택해주세요. (1~${availableItems.length})",
+          "actions": []
+        };
+      }
+    }
+
+    return {
+      "response": "삭제 과정에서 오류가 발생했습니다. 다시 시도해주세요.",
+      "actions": []
+    };
+  }
+
+// 실제 삭제 수행
+  Future<void> _performActualDeletion(Map<String, dynamic> targetItem) async {
+    try {
+      if (targetItem['type'] == 'calendar') {
+        // 캘린더 일정 삭제
+        await _deleteEvent(targetItem['data']);
+      } else {
+        // 투두리스트 삭제
+        await _deleteTodo(targetItem['data']);
+      }
+    } catch (e) {
+      print('삭제 수행 오류: $e');
+      throw e;
+    }
+  }
+  // _deleteEvent 함수 완전 수정
+  Future<void> _deleteEvent(Map<String, dynamic> eventData) async {
+    try {
+      String? eventId;
+      String title = eventData['title'] ?? '';
+
+      // ID로 삭제
+      if (eventData['id'] != null) {
+        eventId = eventData['id'].toString();
+      }
+      // 제목으로 찾아서 삭제
+      else if (title.isNotEmpty) {
+        // 원본 캘린더 데이터에서 제목으로 검색
+        for (var event in widget.calendarData) {
+          if (event['title'] == title) {
+            eventId = event['id'].toString();
+            break;
+          }
+        }
+      }
+
+      if (eventId == null || eventId.isEmpty) {
+        _addSystemMessage("삭제할 일정을 찾을 수 없습니다.");
+        return;
+      }
+
+      // Firestore에서 삭제
+      await _firestore.collection('events').doc(eventId).delete();
+
+      // 로컬 데이터 업데이트
+      setState(() {
+        widget.calendarData.removeWhere((event) =>
+        event['id'] == eventId || event['title'] == title
+        );
+      });
+
+      // 부모에게 삭제 알림
+      widget.onEventDeleted(eventId);
+
+      print('캘린더 일정 삭제됨: $title');
+    } catch (e) {
+      print('일정 삭제 오류: $e');
+      _addSystemMessage("일정 삭제 중 오류가 발생했습니다: $e");
+    }
+  }
+
+// _deleteTodo 함수 완전 수정
+  Future<void> _deleteTodo(Map<String, dynamic> todoData) async {
+    try {
+      String? todoId;
+      String title = todoData['title'] ?? '';
+
+      // ID로 삭제
+      if (todoData['id'] != null) {
+        todoId = todoData['id'].toString();
+      }
+      // 제목으로 찾아서 삭제
+      else if (title.isNotEmpty) {
+        // 원본 todoData에서 제목으로 검색
+        for (var todo in widget.todoData) {
+          if (todo['title'] == title) {
+            todoId = todo['id'].toString();
+            break;
+          }
+        }
+      }
+
+      if (todoId == null || todoId.isEmpty) {
+        _addSystemMessage("삭제할 할 일을 찾을 수 없습니다.");
+        return;
+      }
+
+      // Firestore에서 삭제 (userId로 검색해서 삭제)
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('todos')
+          .where('userId', isEqualTo: widget.userId)
+          .where('title', isEqualTo: title)
+          .get();
+
+      for (var doc in querySnapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      // 로컬 데이터 업데이트
+      setState(() {
+        widget.todoData.removeWhere((todo) =>
+        todo['id'] == todoId || todo['title'] == title
+        );
+      });
+
+      print('투두리스트 삭제됨: $title');
+    } catch (e) {
+      print('할 일 삭제 오류: $e');
+      _addSystemMessage("할 일 삭제 중 오류가 발생했습니다: $e");
+    }
+  }
+
+
   void _handleQuickOptionTap(Map<String, dynamic> option) async {
     final action = option['action'];
+    final text = option['text'];
 
     if (action != null) {
-      _addUserMessage(option['text']);
+      _addUserMessage(text);
 
       setState(() {
         _isLoading = true;
@@ -577,24 +902,34 @@ class _ChatScreenState extends State<ChatScreen> {
       try {
         Map<String, dynamic> response;
 
-        if (_isOfflineMode) {
-          response = _chatService.generateOfflineResponse(option['text']);
+        // 특별한 액션들 처리
+        if (action == 'analyze_schedule') {
+          response = await _handleScheduleAnalysisAndRecommendation(text);
+        } else if (action == 'suggest_tasks') {
+          response = await _handleScheduleAnalysisAndRecommendation('추천 일정 만들어줘');
+        } else if (action == 'delete_task') {
+          response = _handleScheduleDeletion(text);
         } else {
-          response = await _chatService.chatWithAssistant(
-            message: option['text'],
-            calendar: widget.calendarData,
-            tasks: widget.todoData,
-            history: _messages,
-            action: action,
-          ).timeout(
-              const Duration(seconds: 15),
-              onTimeout: () {
-                setState(() {
-                  _isOfflineMode = true;
-                });
-                return _chatService.generateOfflineResponse(option['text']);
-              }
-          );
+          // 기본 처리
+          if (_isOfflineMode) {
+            response = _chatService.generateOfflineResponse(text);
+          } else {
+            response = await _chatService.chatWithAssistant(
+              message: text,
+              calendar: widget.calendarData,
+              tasks: widget.todoData,
+              history: _messages,
+              action: action,
+            ).timeout(
+                const Duration(seconds: 15),
+                onTimeout: () {
+                  setState(() {
+                    _isOfflineMode = true;
+                  });
+                  return _chatService.generateOfflineResponse(text);
+                }
+            );
+          }
         }
 
         setState(() {
@@ -606,13 +941,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
           _isLoading = false;
 
-          // 새로운 추천 옵션 업데이트
           if (response['options'] != null) {
             _quickOptions = List<Map<String, dynamic>>.from(response['options']);
           }
         });
 
-        _saveMessages(); // 변경 내용 저장
+        _saveMessages();
         _scrollToBottom();
 
         if (response['actions'] != null && (response['actions'] as List).isNotEmpty) {
@@ -626,13 +960,12 @@ class _ChatScreenState extends State<ChatScreen> {
             'content': '죄송합니다. 요청을 처리하는 중 오류가 발생했습니다.',
           });
         });
-        _saveMessages(); // 변경 내용 저장
+        _saveMessages();
         print('빠른 옵션 처리 오류: $e');
       }
     }
   }
 
-  // _addEvent 함수 수정
   Future<void> _addEvent(Map<String, dynamic> eventData) async {
     try {
       // 필수 데이터 확인
@@ -669,7 +1002,6 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
       } else if (startTime != null && eventData['duration'] != null) {
-        // 시작 시간 + 지속 시간으로 종료 시간 계산
         final durationParts = eventData['duration'].toString().split(':');
         if (durationParts.length >= 2) {
           final durationHours = int.parse(durationParts[0]);
@@ -703,10 +1035,10 @@ class _ChatScreenState extends State<ChatScreen> {
       final eventDocData = {
         'id': eventId,
         'userId': userId,
-        'title': eventData['title'],
+        'title': eventData['title'], // 제목 확실히 저장
         'date': Timestamp.fromDate(eventDate),
-        'startDate': Timestamp.fromDate(eventDate), // 캘린더 이벤트용
-        'endDate': Timestamp.fromDate(eventDate), // 캘린더 이벤트용
+        'startDate': Timestamp.fromDate(eventDate),
+        'endDate': Timestamp.fromDate(eventDate),
         'startTime': startTime != null ? {
           'hour': startTime.hour,
           'minute': startTime.minute,
@@ -720,7 +1052,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'memo': eventData['memo'] ?? '',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'color': eventData['color'] ?? '#9D8CFF', // 기본 색상
+        'color': eventData['color'] ?? '#9D8CFF',
         'isCompleted': false,
         'isAllDay': eventData['isAllDay'] ?? false,
         'importance': eventData['importance'] ?? 3,
@@ -732,10 +1064,10 @@ class _ChatScreenState extends State<ChatScreen> {
         // Todo 컬렉션에 저장
         await _firestore.collection('todos').doc(eventId).set(eventDocData);
 
-        // 로컬 데이터 업데이트 (투두리스트에 즉시 반영)
+        // 로컬 데이터 업데이트
         final todo = {
           'id': eventId,
-          'title': eventData['title'],
+          'title': eventData['title'], // 제목 확실히 설정
           'date': eventDate.toString().split(' ')[0],
           'time': startTimeStr,
           'endTime': endTimeStr,
@@ -755,10 +1087,10 @@ class _ChatScreenState extends State<ChatScreen> {
         // Events 컬렉션에 저장 (캘린더용)
         await _firestore.collection('events').doc(eventId).set(eventDocData);
 
-        // 로컬 데이터 업데이트 (캘린더에 즉시 반영)
+        // 로컬 데이터 업데이트
         final event = {
           'id': eventId,
-          'title': eventData['title'],
+          'title': eventData['title'], // 제목 확실히 설정
           'date': eventDate.toString().split(' ')[0],
           'startDate': eventDate.toString().split(' ')[0],
           'endDate': eventDate.toString().split(' ')[0],
@@ -793,10 +1125,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-// 액션 처리 함수
+  // _processActions 함수에 추가할 케이스들
   void _processActions(List<dynamic> actions) {
     try {
-      // 여기서 각 액션 유형에 따라 처리
       for (var action in actions) {
         if (action is Map<String, dynamic>) {
           final actionType = action['action'];
@@ -804,47 +1135,42 @@ class _ChatScreenState extends State<ChatScreen> {
 
           switch (actionType) {
             case 'add_task':
-            // 일정 추가 로직
-              print('일정 추가 액션: $actionData');
-
-              // TodoList 항목이면 type을 todo로 설정
-              if (actionData != null && actionData is Map<String, dynamic>) {
-                // 텍스트에 (할일) 또는 (todo)가 들어있으면 todo 타입으로 처리
-                final title = actionData['title'] ?? '';
-                if (title.toLowerCase().contains('할일') ||
-                    title.toLowerCase().contains('할 일') ||
-                    title.toLowerCase().contains('todo') ||
-                    (actionData['importance'] != null && actionData['urgency'] != null)) {
-                  actionData['type'] = 'todo';
-                } else {
-                  actionData['type'] = 'event';
-                }
-              }
-
               _addEvent(actionData);
               break;
 
             case 'delete_task':
-            // 일정 삭제 로직
-              print('일정 삭제 액션: $actionData');
               _deleteEvent(actionData);
               break;
 
             case 'recommend_task':
-            // 일정 추천 로직
-              print('일정 추천 액션: $actionData');
-
-              // 추천 확인 대화상자 표시
               _showRecommendationDialog(actionData);
               break;
 
+            case 'confirm_single_deletion':
+              setState(() {
+                _deletionState['awaitingConfirmation'] = true;
+                _deletionState['targetItem'] = actionData;
+              });
+              break;
+
+            case 'show_multiple_deletion_options':
+              setState(() {
+                _deletionState['awaitingSelection'] = true;
+                _deletionState['availableItems'] = List<Map<String, dynamic>>.from(actionData['items']);
+              });
+              break;
+
+            case 'show_deletion_list':
+              setState(() {
+                _deletionState['awaitingSelection'] = true;
+                _deletionState['availableItems'] = List<Map<String, dynamic>>.from(actionData['items']);
+              });
+              break;
+
             case 'view_calendar':
-            // 캘린더 보기 로직
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('캘린더 화면으로 이동합니다...')),
               );
-
-              // 메인 캘린더 화면으로 이동
               Future.delayed(Duration(seconds: 1), () {
                 Navigator.pushReplacementNamed(
                   context,
@@ -855,12 +1181,9 @@ class _ChatScreenState extends State<ChatScreen> {
               break;
 
             case 'view_tasks':
-            // 할 일 목록 보기 로직
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('플래너 화면으로 이동합니다...')),
               );
-
-              // 플래너 화면으로 이동
               Future.delayed(Duration(seconds: 1), () {
                 Navigator.pushReplacementNamed(
                   context,
@@ -878,49 +1201,9 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       print('액션 처리 오류: $e');
-      // 오류가 있어도 채팅은 계속 진행
     }
   }
 
-// 일정 삭제 함수
-  Future<void> _deleteEvent(Map<String, dynamic> eventData) async {
-    try {
-      String? eventId;
-      String title = eventData['title'] ?? '';
-
-      // ID로 삭제
-      if (eventData['id'] != null) {
-        eventId = eventData['id'].toString();
-      }
-      // 제목으로 찾아서 삭제
-      else if (title.isNotEmpty) {
-        // 원본 캘린더 데이터에서 제목으로 검색
-        for (var event in widget.calendarData) {
-          if (event['title'] == title) {
-            eventId = event['id'].toString();
-            break;
-          }
-        }
-      }
-
-      if (eventId == null || eventId.isEmpty) {
-        _addSystemMessage("삭제할 일정을 찾을 수 없습니다.");
-        return;
-      }
-
-      // Firestore에서 삭제
-      await _firestore.collection('events').doc(eventId).delete();
-
-      // 부모에게 삭제 알림
-      widget.onEventDeleted(eventId);
-
-      // 성공 메시지
-      _addSystemMessage("'$title' 일정이 삭제되었습니다.");
-    } catch (e) {
-      print('일정 삭제 오류: $e');
-      _addSystemMessage("일정 삭제 중 오류가 발생했습니다: $e");
-    }
-  }
 
 // 추천 확인 대화상자
   void _showRecommendationDialog(Map<String, dynamic> recommendation) {

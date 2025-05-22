@@ -84,7 +84,6 @@ class Todo_Task {
     };
   }
 
-  // Firestore 문서를 Todo_Task 객체로 변환하는 팩토리 생성자
   factory Todo_Task.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
@@ -93,9 +92,66 @@ class Todo_Task {
       taskColor = Color(data['color']);
     }
 
+    // repeatDays 안전하게 파싱하는 헬퍼 함수
+    List<int>? _parseRepeatDaysFromFirestore(dynamic repeatDaysData) {
+      if (repeatDaysData == null) return null;
+
+      try {
+        if (repeatDaysData is List) {
+          return repeatDaysData.map((e) {
+            if (e is int) return e;
+            if (e is String) {
+              final parsed = int.tryParse(e);
+              return parsed ?? 0;
+            }
+            return 0;
+          }).where((e) => e >= 0 && e <= 6).toList();
+        } else if (repeatDaysData is String) {
+          String cleanString = repeatDaysData.replaceAll('[', '').replaceAll(']', '').replaceAll(' ', '');
+          if (cleanString.isEmpty) return null;
+
+          return cleanString
+              .split(',')
+              .map((s) {
+            final parsed = int.tryParse(s.trim());
+            return parsed ?? 0;
+          })
+              .where((e) => e >= 0 && e <= 6)
+              .toList();
+        }
+      } catch (e) {
+        print('fromFirestore repeatDays 파싱 오류: $e, 데이터: $repeatDaysData');
+      }
+
+      return null;
+    }
+
+
+
+    List<int>? _parseReminderMinutes(dynamic reminderData) {
+      if (reminderData == null) return null;
+
+      try {
+        if (reminderData is List) {
+          return reminderData.map((e) {
+            if (e is int) return e;
+            if (e is String) {
+              final parsed = int.tryParse(e);
+              return parsed ?? 0;
+            }
+            return 0;
+          }).toList();
+        }
+      } catch (e) {
+        print('reminderMinutesBefore 파싱 오류: $e');
+      }
+
+      return null;
+    }
+
     return Todo_Task(
       id: doc.id,
-      userId: data['userId'] ?? '', // 추가
+      userId: data['userId'] ?? '',
       title: data['title'] ?? '',
       description: data['description'],
       time: data['time'],
@@ -111,14 +167,15 @@ class Todo_Task {
       color: taskColor,
       dueDate: data['dueDate'] != null ? (data['dueDate'] as Timestamp).toDate() : null,
       notificationId: data['notificationId'],
-      reminderMinutesBefore: List<int>.from(data['reminderMinutesBefore'] ?? []),
+      // 수정된 부분: 안전하게 파싱
+      reminderMinutesBefore: _parseReminderMinutes(data['reminderMinutesBefore']),
       isRepeating: data['isRepeating'] ?? false,
       repeatOption: data['repeatOption'],
-      repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+      // 수정된 부분: 안전하게 파싱
+      repeatDays: _parseRepeatDaysFromFirestore(data['repeatDays']),
       repeatCustomDays: data['repeatCustomDays'],
     );
   }
-
   // Todo_Task 객체를 Firestore 문서로 변환하는 메서드
   Map<String, dynamic> toFirestore() {
     return {
@@ -381,8 +438,18 @@ class _WeeklyCalendarState extends State<WeeklyCalendar> {
     return date.subtract(Duration(days: date.weekday - 1));
   }
 
-  String _getWeekdayString(int weekday) {
-    switch (weekday) {
+  String _getWeekdayString(dynamic weekday) {
+    // weekday를 안전하게 int로 변환
+    int day;
+    if (weekday is String) {
+      day = int.tryParse(weekday) ?? 1;
+    } else if (weekday is int) {
+      day = weekday;
+    } else {
+      day = 1; // 기본값
+    }
+
+    switch (day) {
       case 1: return '월';
       case 2: return '화';
       case 3: return '수';
@@ -803,124 +870,117 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   Widget _buildTaskItem(Todo_Task task) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            spreadRadius: 0,
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                // 체크박스
-                Transform.scale(
-                  scale: 1.0,
-                  child: Checkbox(
-                    value: task.isCompleted,
-                    onChanged: (bool? value) async {
-                      setState(() {
-                        if (!task.isCompleted && value == true && task.notificationId != null) {
-                          _notificationService.cancelNotification(task.notificationId!);
-                          _notificationService.cancelNotification(task.notificationId! + 1000);
+    return GestureDetector(
+      onTap: () {
+        // 태스크 클릭 시 수정 폼 열기
+        showTaskDetailDialog(context, task);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200, width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.05),
+              spreadRadius: 0,
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // 체크박스
+                  Transform.scale(
+                    scale: 1.0,
+                    child: Checkbox(
+                      value: task.isCompleted,
+                      onChanged: (bool? value) async {
+                        setState(() {
+                          if (!task.isCompleted && value == true && task.notificationId != null) {
+                            _notificationService.cancelNotification(task.notificationId!);
+                            _notificationService.cancelNotification(task.notificationId! + 1000);
+                          }
+                          task.isCompleted = value ?? false;
+                          calculateProgress();
+                          if (widget.onTaskStatusChanged != null) {
+                            widget.onTaskStatusChanged!();
+                          }
+                        });
+                        if (value == true) {
+                          await _notificationService.showTaskCompletedNotification(task.title);
                         }
-                        task.isCompleted = value ?? false;
-                        calculateProgress();
-                        if (widget.onTaskStatusChanged != null) {
-                          widget.onTaskStatusChanged!();
-                        }
-                      });
-                      if (value == true) {
-                        await _notificationService.showTaskCompletedNotification(task.title);
-                      }
-                    },
-                    shape: CircleBorder(),
-                    activeColor: Color(0xFFD1B3F3),
-                    checkColor: Colors.white,
+                      },
+                      shape: CircleBorder(),
+                      activeColor: Color(0xFFD1B3F3),
+                      checkColor: Colors.white,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
 
-                // 제목과 날짜 열
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 제목과 반복 아이콘
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              task.title,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: task.isCompleted ? Colors.grey : Colors.black,
-                                decoration: task.isCompleted
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
+                  // 제목과 날짜 열
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 제목과 반복 아이콘
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: task.isCompleted ? Colors.grey : Colors.black,
+                                  decoration: task.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                ),
                               ),
                             ),
-                          ),
-                          // 반복 아이콘 표시
-                          if (task.isRepeating) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.repeat, size: 12, color: Colors.blue.shade700),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    _getRepeatText(task.repeatOption),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.blue.shade700,
-                                      fontWeight: FontWeight.w500,
+                            // 반복 아이콘 표시
+                            if (task.isRepeating) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.repeat, size: 12, color: Colors.blue.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      _getRepeatText(task.repeatOption),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.blue.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
+                        ),
+                        const SizedBox(height: 4),
 
-                      // 날짜와 시간
-                      Row(
-                        children: [
-                          Text(
-                            DateFormat('MMM d').format(task.date),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
-                              decoration: task.isCompleted
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                            ),
-                          ),
-                          // 시간이 있을 때만 표시
-                          if (task.time != null && task.time!.isNotEmpty) ...[
+                        // 날짜와 시간
+                        Row(
+                          children: [
                             Text(
-                              ', ${task.time}',
+                              DateFormat('MMM d').format(task.date),
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey.shade600,
@@ -929,9 +989,10 @@ class TodoListScreenState extends State<TodoListScreen> {
                                     : TextDecoration.none,
                               ),
                             ),
-                            if (task.endTime != null && task.endTime!.isNotEmpty)
+                            // 시간이 있을 때만 표시
+                            if (task.time != null && task.time!.isNotEmpty) ...[
                               Text(
-                                ' - ${task.endTime}',
+                                ', ${task.time}',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey.shade600,
@@ -940,175 +1001,187 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       : TextDecoration.none,
                                 ),
                               ),
+                              if (task.endTime != null && task.endTime!.isNotEmpty)
+                                Text(
+                                  ' - ${task.endTime}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade600,
+                                    decoration: task.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                  ),
+                                ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+
+                  // 상태 표시기
+                  if (task.isCompleted)
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Completed',
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+
+              // 메모가 있는 경우 보라색 점 표시
+              if (task.memo != null && task.memo!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(top: 6, right: 8, left: 8),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Color(0xFF9575CD),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        task.memo!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: task.isCompleted ? Colors.grey : Colors.grey.shade700,
+                          decoration: task.isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-
-                // 상태 표시기
-                if (task.isCompleted)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Completed',
-                      style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
               ],
-            ),
 
-            // 메모가 있는 경우 보라색 점 표시
-            if (task.memo != null && task.memo!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: EdgeInsets.only(top: 6, right: 8, left: 8),
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF9575CD),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      task.memo!,
+              // 위치가 있는 경우
+              if (task.location != null && task.location!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 24),
+                    Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      task.location!,
                       style: TextStyle(
+                        color: task.isCompleted ? Colors.grey : Colors.grey.shade600,
                         fontSize: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.grey.shade700,
                         decoration: task.isCompleted
                             ? TextDecoration.lineThrough
                             : TextDecoration.none,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
 
-            // 위치가 있는 경우
-            if (task.location != null && task.location!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const SizedBox(width: 24),
-                  Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Text(
-                    task.location!,
-                    style: TextStyle(
-                      color: task.isCompleted ? Colors.grey : Colors.grey.shade600,
-                      fontSize: 14,
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
+              // 마감일이 있는 경우
+              if (task.dueDate != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 24),
+                    Icon(Icons.calendar_today, size: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.deepOrange),
+                    const SizedBox(width: 4),
+                    Text(
+                      '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.deepOrange,
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
 
-            // 마감일이 있는 경우
-            if (task.dueDate != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const SizedBox(width: 24),
-                  Icon(Icons.calendar_today, size: 14,
-                      color: task.isCompleted ? Colors.grey : Colors.deepOrange),
-                  const SizedBox(width: 4),
-                  Text(
-                    '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: task.isCompleted ? Colors.grey : Colors.deepOrange,
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
+              // 반복 정보 상세 표시
+              if (task.isRepeating) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 24),
+                    Icon(Icons.repeat, size: 14, color: Colors.blue.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      _getDetailedRepeatText(task.repeatOption, task.repeatDays, task.repeatCustomDays),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.blue.shade600,
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
 
-            // 반복 정보 상세 표시
-            if (task.isRepeating) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const SizedBox(width: 24),
-                  Icon(Icons.repeat, size: 14, color: Colors.blue.shade600),
-                  const SizedBox(width: 4),
-                  Text(
-                    _getDetailedRepeatText(task.repeatOption, task.repeatDays, task.repeatCustomDays),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: task.isCompleted ? Colors.grey : Colors.blue.shade600,
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            // 참여자 아바타 (기존 코드 유지)
-            if (task.title.contains('Client')) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const SizedBox(width: 24),
-                  Container(
-                    height: 24,
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Colors.grey.shade300,
-                          child: Text(
-                            task.title.substring(0, 1),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 16,
-                          child: CircleAvatar(
+              // 참여자 아바타 (기존 코드 유지)
+              if (task.title.contains('Client')) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const SizedBox(width: 24),
+                    Container(
+                      height: 24,
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
                             radius: 12,
-                            backgroundColor: Colors.grey.shade400,
+                            backgroundColor: Colors.grey.shade300,
                             child: Text(
-                              'P',
+                              task.title.substring(0, 1),
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.black,
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                          Positioned(
+                            left: 16,
+                            child: CircleAvatar(
+                              radius: 12,
+                              backgroundColor: Colors.grey.shade400,
+                              child: Text(
+                                'P',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text('9+', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
+                    const SizedBox(width: 4),
+                    Text('9+', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1153,7 +1226,6 @@ class TodoListScreenState extends State<TodoListScreen> {
         return '반복 없음';
     }
   }
-
 
   void showTaskDetailDialog(BuildContext context, Todo_Task task) {
     final titleController = TextEditingController(text: task.title);
@@ -1212,7 +1284,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                           ),
                           const Expanded(
                             child: Text(
-                              '일정 상세 정보',
+                              '일정 수정',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 16,
@@ -1356,31 +1428,78 @@ class TodoListScreenState extends State<TodoListScreen> {
                               ),
                               const SizedBox(height: 30),
 
+                              // 수정 및 삭제 버튼
                               Center(
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
+                                    // 삭제 버튼
                                     SizedBox(
-                                      width: 150,
+                                      width: 120,
                                       child: ElevatedButton(
-                                        onPressed: () => Navigator.of(context).pop(),
+                                        onPressed: () {
+                                          // 삭제 확인 다이얼로그
+                                          showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: Text('일정 삭제'),
+                                              content: Text('정말로 이 일정을 삭제하시겠습니까?'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(context),
+                                                  child: Text('취소'),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () async {
+                                                    // 알림 취소
+                                                    if (task.notificationId != null) {
+                                                      _notificationService.cancelNotification(task.notificationId!);
+                                                      _notificationService.cancelNotification(task.notificationId! + 1000);
+                                                    }
+
+                                                    // Firestore에서 삭제
+                                                    await _taskDataService.removeTaskFromFirestore(task);
+
+                                                    // 로컬 데이터에서 삭제
+                                                    await _taskDataService.removeTask(task);
+
+                                                    Navigator.pop(context); // 확인 다이얼로그 닫기
+                                                    Navigator.pop(context); // 수정 다이얼로그 닫기
+
+                                                    this.setState(() {
+                                                      calculateProgress();
+                                                    });
+
+                                                    if (widget.onTaskStatusChanged != null) {
+                                                      widget.onTaskStatusChanged!();
+                                                    }
+
+                                                    _showSnackBar(context, '일정이 삭제되었습니다');
+                                                  },
+                                                  child: Text('삭제', style: TextStyle(color: Colors.red)),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.grey.shade300,
-                                          foregroundColor: Color(0xFF5F6368),
+                                          backgroundColor: Colors.red.shade400,
+                                          foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(vertical: 12),
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(24),
                                           ),
                                           elevation: 0,
                                         ),
-                                        child: const Text('취소'),
+                                        child: const Text('삭제'),
                                       ),
                                     ),
                                     const SizedBox(width: 16),
+                                    // 수정 버튼
                                     SizedBox(
-                                      width: 150,
+                                      width: 120,
                                       child: ElevatedButton(
-                                        onPressed: () {
+                                        onPressed: () async {
                                           if (titleController.text.isEmpty) {
                                             _showSnackBar(context, '제목을 입력해주세요');
                                             return;
@@ -1411,6 +1530,7 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                                           // 태스크 업데이트
                                           task.title = titleController.text;
+                                          task.date = taskDate; // 날짜 변경도 반영
                                           task.time = formattedStart;
                                           task.endTime = formattedEnd;
                                           task.isImportant = isImportant;
@@ -1430,8 +1550,11 @@ class TodoListScreenState extends State<TodoListScreen> {
                                             _scheduleNotificationsForTask(task);
                                           }
 
+                                          // Firestore 업데이트 (새로운 함수 사용)
+                                          await _taskDataService.updateTaskInFirestore(task);
+
                                           Navigator.of(context).pop();
-                                          setState(() {
+                                          this.setState(() {
                                             calculateProgress();
                                           });
 
@@ -1450,7 +1573,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                           ),
                                           elevation: 0,
                                         ),
-                                        child: const Text('수정하기'),
+                                        child: const Text('수정'),
                                       ),
                                     ),
                                   ],
@@ -1470,9 +1593,10 @@ class TodoListScreenState extends State<TodoListScreen> {
       },
     ).then((_) {
       repeatCustomDaysController.dispose();
-      setState(() {});
+      this.setState(() {});
     });
   }
+
 
 
 // 3. 시간 문자열을 TimeOfDay로 변환하는 유틸리티 함수 추가
