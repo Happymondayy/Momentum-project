@@ -18,6 +18,7 @@ class TodoItem {
   final bool isAllDay;
   final String? reminder;
   final bool isCompleted;
+  final DateTime? dueDate;
 
   TodoItem({
     required this.userId,
@@ -37,6 +38,7 @@ class TodoItem {
     this.isAllDay = false,
     this.reminder,
     this.isCompleted = false,
+    this.dueDate,
   });
 
   // Create a copy of this event with optional modified fields
@@ -58,6 +60,7 @@ class TodoItem {
     bool? isAllDay,
     String? reminder,
     bool? isCompleted,
+    DateTime? dueDate,
   }) {
     return TodoItem(
       userId: userId ?? this.userId,
@@ -77,10 +80,10 @@ class TodoItem {
       isAllDay: isAllDay ?? this.isAllDay,
       reminder: reminder ?? this.reminder,
       isCompleted: isCompleted ?? this.isCompleted,
+      dueDate: dueDate ?? this.dueDate,
     );
   }
 
-  // Firebase에 저장하기 위한 Map 변환 메서드 (CalendarScreen 코드와 일치하도록 수정)
   Map<String, dynamic> toMap() {
     final startTimeMap = !isAllDay && startTime != null ? {
       'hour': startTime!.hour,
@@ -99,8 +102,8 @@ class TodoItem {
       'date': date.toIso8601String(),
       'startTime': startTimeMap,
       'endTime': endTimeMap,
-      'important': importance,
-      'urgent': urgency,
+      'importance': importance,
+      'urgency': urgency,
       'memo': memo,
       'location': location,
       'isRepeating': isRepeating,
@@ -110,12 +113,14 @@ class TodoItem {
       'isAllDay': isAllDay,
       'reminder': reminder,
       'isCompleted': isCompleted,
+      'dueDate': dueDate?.toIso8601String(), // 마감일 추가
     };
   }
 
-  // Firebase에서 불러온 데이터로 TosoItem 생성 (CalendarScreen 코드와 일치하도록 수정)
+
   factory TodoItem.fromMap(Map<String, dynamic> map, String docId) {
     final date = DateTime.parse(map['date']);
+    final dueDate = map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null; // 마감일 파싱
 
     final startTime = map['startTime'] != null
         ? TimeOfDay(hour: map['startTime']['hour'], minute: map['startTime']['minute'])
@@ -142,13 +147,19 @@ class TodoItem {
       isAllDay: map['isAllDay'] ?? false,
       reminder: map['reminder'],
       isCompleted: map['isCompleted'] ?? false,
+      dueDate: dueDate, // 마감일 추가
     );
   }
 
-  // Event의 시작 시간을 문자열로 반환하는 메서드 추가 (표시용)
   String getFormattedStartTime(BuildContext context) {
     if (isAllDay) return '종일';
     if (startTime == null) return '';
     return startTime!.format(context);
+  }
+
+  // 마감일을 문자열로 반환하는 메서드 추가 (표시용)
+  String getFormattedDueDate() {
+    if (dueDate == null) return '';
+    return '${dueDate!.year}-${dueDate!.month.toString().padLeft(2, '0')}-${dueDate!.day.toString().padLeft(2, '0')}';
   }
 }

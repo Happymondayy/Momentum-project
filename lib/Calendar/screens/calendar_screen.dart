@@ -233,11 +233,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
       )
           : null;
 
+      // 마감일 파싱 추가
+      final dueDate = data['dueDate'] != null ? DateTime.parse(data['dueDate']) : null;
+
       return TodoItem(
         userId: data['userId'] ?? _currentUserId ?? '',
         id: docId,
         title: data['title'] ?? '제목 없음',
         date: date,
+        dueDate: dueDate, // 마감일 추가
         startTime: startTime,
         endTime: endTime,
         importance: data['importance'] ?? 3,
@@ -260,6 +264,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         id: docId,
         title: '제목 없음',
         date: date,
+        dueDate: null, // 마감일 기본값
         startTime: null,
         endTime: null,
         importance: 3,
@@ -274,6 +279,86 @@ class _CalendarScreenState extends State<CalendarScreen> {
         reminder: null,
         isCompleted: false,
       );
+    }
+  }
+
+  void _addTodo(TodoItem todo) async {
+    try {
+      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
+        'hour': todo.startTime!.hour,
+        'minute': todo.startTime!.minute,
+      } : null;
+
+      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
+        'hour': todo.endTime!.hour,
+        'minute': todo.endTime!.minute,
+      } : null;
+
+      final todoDate = {
+        'userId': _currentUserId ?? '',
+        'title': todo.title ?? '제목 없음',
+        'date': todo.date.toIso8601String(),
+        'dueDate': todo.dueDate?.toIso8601String(), // 마감일 추가
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'importance': todo.importance,
+        'urgency': todo.urgency,
+        'memo': todo.memo ?? '',
+        'location': todo.location ?? '',
+        'isRepeating': todo.isRepeating,
+        'repeatOption': todo.repeatOption,
+        'repeatDays': todo.repeatDays,
+        'repeatCustomDays': todo.repeatCustomDays,
+        'isAllDay': todo.isAllDay,
+        'reminder': todo.reminder,
+        'isCompleted': false,
+      };
+
+      await FirebaseFirestore.instance.collection('todos').add(todoDate);
+    } catch (e) {
+      print("투두 추가 오류: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('투두 추가 중 오류가 발생했습니다.')),
+        );
+      }
+    }
+  }
+
+  void _updateTodo(TodoItem todo) async {
+    try {
+      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
+        'hour': todo.startTime!.hour,
+        'minute': todo.startTime!.minute,
+      } : null;
+
+      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
+        'hour': todo.endTime!.hour,
+        'minute': todo.endTime!.minute,
+      } : null;
+
+      await FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
+        'title': todo.title,
+        'date': todo.date.toIso8601String(),
+        'dueDate': todo.dueDate?.toIso8601String(), // 마감일 추가
+        'startTime': startTimeMap,
+        'endTime': endTimeMap,
+        'importance': todo.importance,
+        'urgency': todo.urgency,
+        'memo': todo.memo,
+        'location': todo.location,
+        'isRepeating': todo.isRepeating,
+        'repeatOption': todo.repeatOption,
+        'repeatDays': todo.repeatDays,
+        'repeatCustomDays': todo.repeatCustomDays,
+        'isAllDay': todo.isAllDay,
+        'reminder': todo.reminder,
+      });
+
+      print('Todo updated successfully');
+      Navigator.pop(context); // Close the dialog
+    } catch (e) {
+      print('Error updating todo: $e');
     }
   }
 
@@ -320,48 +405,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
     }
   }
-
-  void _addTodo(TodoItem todo) async {
-    try {
-      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
-        'hour': todo.startTime!.hour,
-        'minute': todo.startTime!.minute,
-      } : null;
-
-      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
-        'hour': todo.endTime!.hour,
-        'minute': todo.endTime!.minute,
-      } : null;
-
-      final todoDate = {
-        'userId': _currentUserId ?? '',
-        'title': todo.title ?? '제목 없음',
-        'date': todo.date.toIso8601String(),
-        'startTime': startTimeMap,
-        'endTime': endTimeMap,
-        'memo': todo.memo ?? '',
-        'location': todo.location ?? '',
-        'isRepeating': todo.isRepeating,
-        'repeatOption': todo.repeatOption,
-        'repeatDays': todo.repeatDays,
-        'repeatCustomDays': todo.repeatCustomDays,
-        'reminder': todo.reminder,
-        'isCompleted': false,
-      };
-
-      await FirebaseFirestore.instance.collection('todos').add(todoDate);
-    } catch (e) {
-      print("투두 추가 오류: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('투두 추가 중 오류가 발생했습니다.')),
-        );
-      }
-    }
-  }
-
-
-
 
   // 반복 투두 생성 함수
   List<TodoItem> _generateRepeatTodos(TodoItem baseTodo, Map<String, dynamic> data) {
@@ -522,39 +565,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  void _updateTodo(TodoItem todo) async {
-    try {
-      final startTimeMap = !todo.isAllDay && todo.startTime != null ? {
-        'hour': todo.startTime!.hour,
-        'minute': todo.startTime!.minute,
-      } : null;
-
-      final endTimeMap = !todo.isAllDay && todo.endTime != null ? {
-        'hour': todo.endTime!.hour,
-        'minute': todo.endTime!.minute,
-      } : null;
-
-      await FirebaseFirestore.instance.collection('todos').doc(todo.id).update({
-        'title': todo.title,
-        'date': todo.date.toIso8601String(),
-        'startTime': startTimeMap,
-        'endTime': endTimeMap,
-        'memo': todo.memo,
-        'location': todo.location,
-        'isRepeating': todo.isRepeating,
-        'repeatOption': todo.repeatOption,
-        'repeatDays': todo.repeatDays,
-        'repeatCustomDays': todo.repeatCustomDays,
-        'isAllDay': todo.isAllDay,
-        'reminder': todo.reminder,
-      });
-
-      print('Todo updated successfully');
-      Navigator.pop(context); // Close the dialog
-    } catch (e) {
-      print('Error updating todo: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

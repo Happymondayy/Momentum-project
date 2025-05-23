@@ -37,8 +37,9 @@ class _TodoDialogState extends State<TodoDialog> {
   final NotificationServiceTodolist _notificationService = NotificationServiceTodolist();
 
   late DateTime _date;
-  TimeOfDay? _startTime = TimeOfDay(hour: 9, minute: 0);
-  TimeOfDay? _endTime = TimeOfDay(hour: 10, minute: 0);
+  DateTime? _dueDate; // 마감일 추가
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
 
   int _importance = 3;
   int _urgency = 3;
@@ -58,7 +59,10 @@ class _TodoDialogState extends State<TodoDialog> {
   String? _previousReminder; // 기존 알림 설정 저장 변수
 
   // Check if required fields are filled
-  bool get _isFormValid => _titleController.text.trim().isNotEmpty;
+  bool get _isFormValid =>
+      _titleController.text
+          .trim()
+          .isNotEmpty;
 
   @override
   void initState() {
@@ -71,6 +75,9 @@ class _TodoDialogState extends State<TodoDialog> {
       _initializeWithTodo(widget.todo!);
     } else {
       _date = widget.selectedDay;
+      // 기본 시간 값 확실히 설정
+      _startTime = null;
+      _endTime = null;
     }
 
     // Auto focus the title field and show keyboard
@@ -84,16 +91,20 @@ class _TodoDialogState extends State<TodoDialog> {
     _memoController.text = todo.memo ?? '';
     _locationController.text = todo.location ?? '';
     _date = todo.date;
+    _dueDate = todo.dueDate; // 마감일 초기화
     _importance = todo.importance;
     _urgency = todo.urgency;
     _isCompleted = todo.isCompleted;
 
     _isAllDay = todo.isAllDay;
-    if (!_isAllDay && todo.startTime != null) {
-      _startTime = todo.startTime!;
-    }
-    if (!_isAllDay && todo.endTime != null) {
-      _endTime = todo.endTime!;
+
+    // 시간 초기화 - null 체크와 기본값 설정
+    if (!_isAllDay) {
+      _startTime = todo.startTime;
+      _endTime = todo.endTime;
+    } else {
+      _startTime = null;
+      _endTime = null;
     }
 
     _isRepeating = todo.isRepeating;
@@ -111,6 +122,7 @@ class _TodoDialogState extends State<TodoDialog> {
     // 알림 설정 로딩 로직 개선
     if (todo.reminder != null) {
       _hasReminder = true;
+      _previousReminder = todo.reminder; // 기존 알림 설정 저장
 
       // 알림 옵션 확인 - 표준 옵션 먼저 검사
       final standardOptions = ['1분 전', '5분 전', '10분 전', '30분 전', '1시간 전'];
@@ -175,7 +187,8 @@ class _TodoDialogState extends State<TodoDialog> {
           // 안전한 알림 ID 생성 (todo ID 해시)
           final notificationId = todo.id.hashCode.abs();
 
-          print('⏰ 알림 예약: ID=${notificationId}, 이벤트=${todo.title}, 시작=${todoStartDateTime}');
+          print('⏰ 알림 예약: ID=${notificationId}, 이벤트=${todo
+              .title}, 시작=${todoStartDateTime}');
 
           // 알림 예약
           await _notificationService.scheduleReminderNotification(
@@ -231,8 +244,10 @@ class _TodoDialogState extends State<TodoDialog> {
     print('🗑️ 알림 취소: ID=${notificationId}');
   }
 
-  void _validateAndSave() async{
-    if (_titleController.text.trim().isEmpty) {
+  void _validateAndSave() async {
+    if (_titleController.text
+        .trim()
+        .isEmpty) {
       setState(() {
         _titleError = true;
       });
@@ -247,19 +262,29 @@ class _TodoDialogState extends State<TodoDialog> {
 
     final todo = TodoItem(
       userId: widget.currentUserId,
-      id: widget.todo?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), // Use existing ID if editing
+      id: widget.todo?.id ?? DateTime
+          .now()
+          .millisecondsSinceEpoch
+          .toString(),
+      // Use existing ID if editing
       title: _titleController.text,
       date: _date,
+      dueDate: _dueDate,
+      // 마감일 추가
       importance: _importance,
       urgency: _urgency,
       memo: _memoController.text.isNotEmpty ? _memoController.text : '',
-      location: _locationController.text.isNotEmpty ? _locationController.text : '',
-      startTime: _isAllDay ? null : _startTime,
-      endTime: _isAllDay ? null : _endTime,
+      location: _locationController.text.isNotEmpty
+          ? _locationController.text
+          : '',
+      startTime: _startTime,
+      endTime: _endTime,
       isRepeating: _isRepeating,
       repeatOption: _isRepeating ? _repeatOption : null,
       repeatDays: _isRepeating && _repeatOption == '매요일' ? _repeatDays : null,
-      repeatCustomDays: _isRepeating && _repeatOption == '기타' ? _repeatCustomDays : null,
+      repeatCustomDays: _isRepeating && _repeatOption == '기타'
+          ? _repeatCustomDays
+          : null,
       isAllDay: _isAllDay,
       reminder: _getReminderValue(),
       isCompleted: _isCompleted,
@@ -311,8 +336,12 @@ class _TodoDialogState extends State<TodoDialog> {
 
   String _getFormattedTimeWithAmPm(TimeOfDay time) {
     final String period = time.hour >= 12 ? 'PM' : 'AM';
-    final int hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
-    return '$period ${hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    final int hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0
+        ? 12
+        : time.hour);
+    return '$period ${hour.toString().padLeft(2, '0')}:${time.minute
+        .toString()
+        .padLeft(2, '0')}';
   }
 
   String _getFormattedDate(DateTime date) {
@@ -381,7 +410,6 @@ class _TodoDialogState extends State<TodoDialog> {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-
     } catch (e) {
       print('이벤트 삭제 중 오류 발생: $e');
 
@@ -403,41 +431,120 @@ class _TodoDialogState extends State<TodoDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text('날짜', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-          ],
+        const Text(
+          '날짜',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
         ),
-        SizedBox(height: 10),
-        InkWell(
-          onTap: () async {
-            final DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: _date,
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2100),
-            );
-            if (pickedDate != null) {
-              setState(() {
-                _date = pickedDate;
-              });
-            }
-          },
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _date,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _date = pickedDate;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _getFormattedDate(_date),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const Icon(Icons.calendar_today, size: 20, color: Color(0xFF5F6368)),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _getFormattedDate(_date),
-                  style: TextStyle(fontSize: 16),
-                ),
-                Icon(Icons.calendar_today, size: 20),
-              ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDueDateSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '마감일',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _dueDate ?? _date.add(Duration(days: 1)),
+                firstDate: _date, // 작업 날짜보다 이전은 선택할 수 없음
+                lastDate: DateTime(2100),
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _dueDate = pickedDate;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _dueDate != null
+                        ? _getFormattedDate(_dueDate!)
+                        : '마감일을 선택하세요 (선택사항)',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: _dueDate != null ? Colors.black : Color(0xFF9AA0A6),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      if (_dueDate != null)
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _dueDate = null;
+                            });
+                          },
+                          child: Icon(Icons.clear, size: 20, color: Colors.grey),
+                        ),
+                      SizedBox(width: 8),
+                      Icon(Icons.calendar_today, size: 20, color: Color(0xFF5F6368)),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -494,34 +601,35 @@ class _TodoDialogState extends State<TodoDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(
                   5,
-                      (index) => GestureDetector(
-                    onTap: () => onChanged(index + 1),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: importance == index + 1
-                            ? _getImportanceColor(index + 1)
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: _getImportanceColor(index + 1),
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
+                      (index) =>
+                      GestureDetector(
+                        onTap: () => onChanged(index + 1),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
                             color: importance == index + 1
-                                ? Colors.white
-                                : _getImportanceColor(index + 1),
-                            fontWeight: FontWeight.bold,
+                                ? _getImportanceColor(index + 1)
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: _getImportanceColor(index + 1),
+                              width: 2,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: importance == index + 1
+                                    ? Colors.white
+                                    : _getImportanceColor(index + 1),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -539,118 +647,43 @@ class _TodoDialogState extends State<TodoDialog> {
     );
   }
 
-  Widget _buildTimeSelector() {
+  Widget _buildTimeSelector(BuildContext context,
+      TimeOfDay? startTime,
+      TimeOfDay? endTime,
+      Function(TimeOfDay?, TimeOfDay?) onTimeChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          '시간 설정 (선택사항)',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 8),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('하루종일', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-            Switch(
-              value: _isAllDay,
-              onChanged: (value) {
-                setState(() {
-                  _isAllDay = value;
-                });
-              },
-              activeColor: Colors.deepPurple[300],
+            Expanded(
+              child: _buildOptionalTimePicker(
+                context,
+                startTime,
+                '시작 시간',
+                    (time) => onTimeChanged(time, endTime),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildOptionalTimePicker(
+                context,
+                endTime,
+                '종료 시간',
+                    (time) => onTimeChanged(startTime, time),
+              ),
             ),
           ],
         ),
-        if (!_isAllDay) ...[
-          SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final TimeOfDay? time = await showTimePicker(
-                      context: context,
-                      initialTime: _startTime!,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (time != null) {
-                      setState(() {
-                        _startTime = time;
-                        // 시작 시간이 종료 시간보다 늦다면 종료 시간을 1시간 뒤로 설정
-                        if (_isSameDay() && _isTimeAfter(_startTime!, _endTime!)) {
-                          final int hour = (_startTime!.hour + 1) % 24;
-                          _endTime = TimeOfDay(hour: hour, minute: _startTime!.minute);
-                        }
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _getFormattedTimeWithAmPm(_startTime!),
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        Icon(Icons.access_time, size: 20),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 15),
-              Text('~', style: TextStyle(fontSize: 16)),
-              SizedBox(width: 15),
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final TimeOfDay? time = await showTimePicker(
-                      context: context,
-                      initialTime: _endTime!,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (time != null) {
-                      setState(() {
-                        _endTime = time;
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _getFormattedTimeWithAmPm(_endTime!),
-                          style: TextStyle(fontSize: 16),
-                        ),
-                        Icon(Icons.access_time, size: 20),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ],
     );
   }
@@ -704,34 +737,35 @@ class _TodoDialogState extends State<TodoDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(
                   5,
-                      (index) => GestureDetector(
-                    onTap: () => onChanged(index + 1),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: urgency == index + 1
-                            ? _getUrgencyColor(index + 1)
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: _getUrgencyColor(index + 1),
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
+                      (index) =>
+                      GestureDetector(
+                        onTap: () => onChanged(index + 1),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
                             color: urgency == index + 1
-                                ? Colors.white
-                                : _getUrgencyColor(index + 1),
-                            fontWeight: FontWeight.bold,
+                                ? _getUrgencyColor(index + 1)
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: _getUrgencyColor(index + 1),
+                              width: 2,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: urgency == index + 1
+                                    ? Colors.white
+                                    : _getUrgencyColor(index + 1),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -816,6 +850,7 @@ class _TodoDialogState extends State<TodoDialog> {
         return Colors.orange.shade600;
     }
   }
+
   // 시작 시간이 종료 시간보다 이후인지 확인하는 헬퍼 메서드
   bool _isTimeAfter(TimeOfDay time1, TimeOfDay time2) {
     return time1.hour > time2.hour ||
@@ -829,7 +864,8 @@ class _TodoDialogState extends State<TodoDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('미리 알림', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text('미리 알림',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             Switch(
               value: _hasReminder,
               onChanged: (value) {
@@ -916,7 +952,8 @@ class _TodoDialogState extends State<TodoDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('반복', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text('반복',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             Switch(
               value: _isRepeating,
               onChanged: (value) {
@@ -1002,38 +1039,139 @@ class _TodoDialogState extends State<TodoDialog> {
                   ),
               ],
             ),
-          ] else if (_repeatOption == '기타') ...[
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    padding: EdgeInsets.symmetric(horizontal: 15),
-                    child: TextField(
-                      controller: _repeatCustomDaysController,
-                      decoration: InputDecoration(
-                        hintText: '날짜 간격',
-                        border: InputBorder.none,
+          ] else
+            if (_repeatOption == '기타') ...[
+              SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) {
-                        _repeatCustomDays = int.tryParse(value);
-                      },
+                      padding: EdgeInsets.symmetric(horizontal: 15),
+                      child: TextField(
+                        controller: _repeatCustomDaysController,
+                        decoration: InputDecoration(
+                          hintText: '날짜 간격',
+                          border: InputBorder.none,
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (value) {
+                          _repeatCustomDays = int.tryParse(value);
+                        },
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(width: 10),
-                Text('일마다', style: TextStyle(fontSize: 16)),
-              ],
-            ),
-          ],
+                  SizedBox(width: 10),
+                  Text('일마다', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            ],
         ],
       ],
+    );
+  }
+
+  Widget _buildOptionalTimePicker(
+      BuildContext context,
+      TimeOfDay? selectedTime,
+      String label,
+      Function(TimeOfDay?) onTimePicked,
+      ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final TimeOfDay? picked = await showTimePicker(
+                context: context,
+                initialTime: selectedTime ?? TimeOfDay.now(),
+              );
+              if (picked != null) {
+                onTimePicked(picked);
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    selectedTime != null
+                        ? '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'
+                        : '시간 선택',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: selectedTime != null ? Colors.black : Color(0xFF9AA0A6),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      if (selectedTime != null)
+                        GestureDetector(
+                          onTap: () => onTimePicked(null),
+                          child: Icon(Icons.clear, size: 16, color: Colors.grey),
+                        ),
+                      if (selectedTime != null) SizedBox(width: 4),
+                      Icon(Icons.access_time, size: 16, color: Color(0xFF5F6368)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF202124),
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Color(0xFF9575CD),
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: Colors.grey.shade300,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1047,99 +1185,91 @@ class _TodoDialogState extends State<TodoDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final String dialogTitle = widget.todo != null ? 'Todo 수정' : '새 Todo 추가';
+    final String dialogTitle = widget.todo != null
+        ? 'Todo 수정'
+        : '새 Todolist 추가';
 
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      elevation: 5,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24.0),
+      ),
       child: Container(
-        width: double.infinity,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
+        width: MediaQuery
+            .of(context)
+            .size
+            .width,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Fixed app bar with close button
+            // 다이얼로그 헤더
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(15),
-                  topRight: Radius.circular(15),
-                ),
+                border: Border(
+                    bottom: BorderSide(color: Colors.black12, width: 0.5)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.close, color: Colors.grey[700]),
-                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Color(0xFF5F6368)),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
-                  Text(
-                    dialogTitle,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Text(
+                      dialogTitle,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF202124),
+                        letterSpacing: 0.15,
+                      ),
                     ),
                   ),
-                  // Empty container for balanced spacing
-                  Container(width: 48),
+                  const SizedBox(width: 48),
                 ],
               ),
             ),
-            Divider(height: 1, color: Colors.grey[300]),
 
-            // Scrollable content
+            // 폼 영역
             Flexible(
               child: SingleChildScrollView(
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title field
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _titleController,
-                              decoration: InputDecoration(
-                                hintText: '제목',
-                                hintStyle: TextStyle(color: Colors.grey),
-                                border: InputBorder.none,
-                                errorText: _titleError ? '제목을 입력해주세요' : null,
-                                contentPadding: EdgeInsets.symmetric(vertical: 8),
-                              ),
-                              style: TextStyle(fontSize: 18),
-                              autofocus: true,
-                              onChanged: (_) => setState(() {
-                                _titleError = false;
-                              }),
-                            ),
-                          ),
-                          if (_titleError)
-                            Icon(Icons.error_outline, color: Colors.red, size: 18)
-                          else
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
+                      _buildTextField(
+                        _titleController,
+                        '제목',
+                        '제목을 입력하세요 (필수)',
+                            (value) {
+                          if (value.isEmpty) {
+                            setState(() {
+                              _titleError = true;
+                            });
+                          }
+                        },
+                        prefixIcon: Icon(Icons.title, color: Color(0xFF5F6368)),
                       ),
-                      Divider(color: Colors.grey[300]),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                      // Date selector
                       _buildDateSelector(),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
+
+                      // 시간 설정 (선택사항)
+                      _buildTimeSelector(
+                          context, _startTime, _endTime, (start, end) {
+                        setState(() {
+                          _startTime = start;
+                          _endTime = end;
+                        });
+                      }),
+                      const SizedBox(height: 20),
 
                       buildImportanceSelector(
                         importance: _importance,
@@ -1149,7 +1279,7 @@ class _TodoDialogState extends State<TodoDialog> {
                           });
                         },
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
                       buildUrgencySelector(
                         urgency: _urgency,
@@ -1159,112 +1289,84 @@ class _TodoDialogState extends State<TodoDialog> {
                           });
                         },
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                      // Time selector
-                      _buildTimeSelector(),
-                      SizedBox(height: 20),
+                      // 마감일 선택기 추가
+                      _buildDueDateSelector(),
+                      const SizedBox(height: 20),
 
                       // Reminder selector
                       _buildReminderSelector(),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
                       // Repeat selector
                       _buildRepeatSelector(),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                      // Location field
-                      TextField(
-                        controller: _locationController,
-                        decoration: InputDecoration(
-                          hintText: '장소 (선택)',
-                          hintStyle: TextStyle(color: Colors.grey),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          contentPadding: EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                        ),
+                      _buildTextField(
+                        _locationController,
+                        '위치',
+                        '위치를 입력하세요.',
+                        null,
+                        prefixIcon: Icon(Icons.location_on, color: Color(
+                            0xFF5F6368)),
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                      // Memo field
-                      TextField(
-                        controller: _memoController,
-                        decoration: InputDecoration(
-                          hintText: '메모 (선택)',
-                          hintStyle: TextStyle(color: Colors.grey),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          contentPadding: EdgeInsets.all(15),
-                        ),
+                      _buildTextField(
+                        _memoController,
+                        '메모',
+                        '메모를 입력하세요.',
+                        null,
                         maxLines: 3,
+                        prefixIcon: Icon(Icons.note, color: Color(0xFF5F6368)),
                       ),
-                      SizedBox(height: 30),
+                      const SizedBox(height: 30),
 
-                      // Save button
-                      // 저장 버튼 부분 수정
+                      // Save and Delete buttons
                       Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ElevatedButton(
-                              onPressed: _validateAndSave,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple[300],
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
+                            // 기존 Todo가 있을 때만 삭제 버튼 표시
+                            if (widget.isEditing &&
+                                widget.onDelete != null) ...[
+                              SizedBox(
+                                width: 120,
+                                child: ElevatedButton(
+                                  onPressed: _deleteTodo,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red.shade400,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: const Text('삭제'),
                                 ),
-                                elevation: 2,
                               ),
-                              child: Text(
-                                '저장',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                              const SizedBox(width: 16),
+                            ],
+                            SizedBox(
+                              width: widget.isEditing ? 120 : 150,
+                              child: ElevatedButton(
+                                onPressed: _validateAndSave,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF9575CD),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  elevation: 0,
                                 ),
+                                child: const Text('저장'),
                               ),
                             ),
-                            // 기존 Todo가 있을 때만 삭제 버튼 표시
-                            if (widget.isEditing && widget.onDelete != null) ...[
-                              SizedBox(width: 15),
-                              ElevatedButton(
-                                onPressed: _deleteTodo,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red[400],
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                  elevation: 2,
-                                ),
-                                child: Text(
-                                  '삭제',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-
-                              ),
-                            ],
                           ],
                         ),
                       ),
@@ -1276,6 +1378,71 @@ class _TodoDialogState extends State<TodoDialog> {
           ],
         ),
       ),
+    );
+  }
+
+// TextField 위젯 (새로 추가)
+  Widget _buildTextField(TextEditingController controller,
+      String label,
+      String hint,
+      Function(String)? validator, {
+        int maxLines = 1,
+        Widget? prefixIcon,
+      }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Color(0xFF9AA0A6)),
+            prefixIcon: prefixIcon,
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFFDADCE0), width: 0.5),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFF9575CD), width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Colors.red, width: 1.0),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Colors.red, width: 1.5),
+            ),
+            errorText: _titleError && controller == _titleController
+                ? '제목을 입력해주세요'
+                : null,
+          ),
+          onChanged: (value) {
+            if (validator != null) {
+              validator(value);
+            }
+            if (controller == _titleController && _titleError) {
+              setState(() {
+                _titleError = false;
+              });
+            }
+          },
+        ),
+      ],
     );
   }
 }
