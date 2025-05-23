@@ -1946,6 +1946,23 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
 
 
 
+  String convertTimeIfNeeded(dynamic timeValue) {
+    if (timeValue == null) return '';
+
+    String timeStr = timeValue.toString();
+
+    // 이미 :가 있으면 그대로 반환
+    if (timeStr.contains(':')) {
+      return timeStr;
+    }
+
+    // :가 없으면 변환
+    double time = double.tryParse(timeStr) ?? 0.0;
+    int hours = time.floor();
+    int minutes = ((time - hours) * 100).round();
+
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+  }
 
   void _generateAIPlanner() async {
     // Show loading indicator while processing
@@ -2006,10 +2023,245 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       return;
     }
 
-    // AI에게 일정 + 투두 보내서 시간 배정 포함 스케줄 요청
-    final aiSchedule = await _getScheduleFromAI(allTasksData, calendarEvents);
 
-    if (aiSchedule.isEmpty) {
+
+
+
+
+
+    // AI에게 일정 + 투두 보내서 시간 배정 포함 스케줄 요청
+    //final aiSchedule = await _getScheduleFromAI(allTasksData, calendarEvents);
+
+
+    // ========== 새로운 AI 스케줄링 로직 (두 번째 코드에서 가져옴) ==========
+
+    int _calculateDuration(String? start, String? end) {
+      if (start == null || end == null) return 1;
+
+      try {
+        final startParts = start.split(':').map(int.parse).toList();
+        final endParts = end.split(':').map(int.parse).toList();
+
+        final startMinutes = startParts[0] * 60 + startParts[1];
+        final endMinutes = endParts[0] * 60 + endParts[1];
+
+        final duration = ((endMinutes - startMinutes) / 60).round();
+        return duration > 0 ? duration : 1;
+      } catch (e) {
+        return 1;
+      }
+    }
+
+    //이벤트 넣기 작업들을 새로운 형식 포맷팅
+
+    final List<String> formattedCalendarEvents = [];
+
+    for (var event in calendarEvents) {
+      // aiSchedule에 추가
+
+      // 포맷팅된 문자열 생성
+      final name = event['title'] ?? '';
+      final importance = 1; // 캘린더 이벤트는 기본값 1
+      final urgency = 1; // 캘린더 이벤트는 기본값 1
+      final duration = _calculateDuration(event['startTime'], event['endTime']);
+      final startTime = event['startTime'] ?? '0';
+      final endTime = event['endTime'] ?? '0';
+
+      final formattedEvent = '(N: $name, I: $importance, U: $urgency, D: $duration, T: $startTime, T: $endTime)';
+      formattedCalendarEvents.add(formattedEvent);
+    }
+
+// 또는 map을 사용해서 한 번에 처리하는 방법:
+    final List<String> formattedCalendarEvents2 = calendarEvents.map((event) {
+
+      // 포맷팅된 문자열 생성
+      final name = event['title'] ?? '';
+      final importance = 5;
+      final urgency = 5;
+      final duration = _calculateDuration(event['startTime'], event['endTime']);
+      final startTime = event['startTime'] ?? '0';
+      final endTime = event['endTime'] ?? '0';
+
+      return '(N: $name, I: $importance, U: $urgency, D: $duration, T: $startTime, T: $endTime)';
+    }).toList();
+
+    print("일정포멧팅");
+    print(formattedCalendarEvents2);
+
+
+    // Todo 작업들을 새로운 형식으로 포맷팅
+    final List<String> formattedList = todoTasks.map((task) {
+      final name = task.title;
+      final importance = task.importance ?? 1;
+      final urgency = task.urgency ?? 1;
+      final duration = _calculateDuration(task.time, task.endTime);
+      final startTime = task.time ?? '0';
+      final endTime = task.endTime ?? '0';
+
+      return '(N: $name, I: $importance, U: $urgency, D: $duration, T: $startTime, T: $endTime)';
+    }).toList();
+
+    // 유저 선호도 정리
+    Map<String, dynamic> userPreferences = await _getUserPreferences();
+
+    // 🔹 1. 수면 종료 시간 파싱 (S)
+    String sleepSchedule = userPreferences['sleepSchedule'] ?? 'PM 11:00 ~ AM 07:00';
+    int sleepEndHour = 7; // 기본값
+
+    try {
+      final sleepEndStr = sleepSchedule.split('~').last.trim();
+      final parts = sleepEndStr.split(' ');
+      final ampm = parts[0];
+      final hourMinute = parts[1];
+      int hour = int.parse(hourMinute.split(':')[0]);
+
+      if (ampm == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (ampm == 'AM' && hour == 12) {
+        hour = 0;
+      }
+
+      sleepEndHour = hour;
+    } catch (e) {
+      print('수면 종료 시간 파싱 실패: $e');
+    }
+
+    // 🔹 2. 휴식 시간 파싱 (H)
+    String breakFrequency = userPreferences['breakFrequency'] ?? '1시간마다';
+    int breakHour = 1; // 기본값
+
+    try {
+      final hourMatch = RegExp(r'\d+').firstMatch(breakFrequency);
+      if (hourMatch != null) {
+        int value = int.parse(hourMatch.group(0)!);
+
+        if (breakFrequency.contains('분')) {
+          breakHour = (value / 60).ceil();
+        } else {
+          breakHour = value;
+        }
+      }
+    } catch (e) {
+      print('휴식 시간 파싱 실패: $e');
+    }
+
+    // 🔹 최종 문자열로 조합
+    String result = '[S: $sleepEndHour, H: $breakHour]';
+    String fullOutput = '$result${formattedList.join('')}${formattedCalendarEvents2.join('')}';
+
+    print(fullOutput);
+
+    // 서버 URL 설정
+    final String serverUrl = 'https://railwavve-production-68d4.up.railway.app/schedule_';
+
+    List<Map<String, dynamic>> aiSchedule_ = [];
+
+    try {
+      // HTTP POST 요청 보내기
+      final response = await http.post(
+        Uri.parse(serverUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'input_text': fullOutput}),
+      );
+
+      if (response.statusCode == 200) {
+        // 성공적으로 응답 받음
+        final data = json.decode(response.body);
+
+        String algorithmOutput = data['algorithm_output'] ?? '결과 없음';
+        String geminiOutput = data['gemini_output'] ?? '결과 없음';
+
+        print("연결됨: $algorithmOutput");
+        print("연결됨: $geminiOutput");
+
+        // Gemini 출력에서 작업 정보 파싱
+        final RegExp taskRegExp = RegExp(r'\(N: (.*?),.*?T: (.*?), T: (.*?)\)');
+        final matches = taskRegExp.allMatches(geminiOutput);
+
+        // AI 응답을 기존 Todo 작업들에 적용하고 aiSchedule 생성
+        for (final match in matches) {
+          final title = match.group(1)?.trim();
+          final startTime = match.group(2)?.trim();
+          final endTime = match.group(3)?.trim();
+
+          if (title != null && startTime != null && endTime != null) {
+            // 기존 todo 작업에서 해당 제목 찾기
+            for (var task in todoTasks) {
+              if (task.title.trim() == title) {
+                print('🛠 업데이트 중: $title → $startTime ~ $endTime');
+
+                // aiSchedule에 추가할 데이터 생성
+                aiSchedule_.add({
+                  'id': task.id,
+                  'title': title,
+                  'time': startTime,
+                  'endTime': endTime,
+                  'priority': task.importance ?? 1,
+                  'description': task.description,
+                  'memo': task.memo,
+                  'location': task.location,
+                  'dueDate': task.dueDate?.toIso8601String().split('T').first ?? "없음",
+                });
+                break;
+              }
+            }
+            for (var task in calendarEvents) {
+              if (task['title'] == title) {
+                print('🛠 업데이트 중: $title → $startTime ~ $endTime');
+
+                // aiSchedule에 추가할 데이터 생성
+                aiSchedule_.add({
+                  'id': DateTime.now().millisecondsSinceEpoch.toString() + '_event',
+                  'title': title,
+                  'time': startTime,
+                  'endTime': endTime,
+                  'priority': 1,
+                  'description': '캘린더 이벤트',
+                  'memo': null,
+                  'location': null,
+                  'dueDate': "없음",
+                });
+
+                break;
+              }
+            }
+          }
+        }
+
+        // 캘린더 이벤트들도 aiSchedule에 추가 (시간이 고정된 이벤트들)
+        /*for (var event in calendarEvents) {
+          aiSchedule_.add({
+            'id': DateTime.now().millisecondsSinceEpoch.toString() + '_event',
+            'title': event['title'],
+            'time': event['startTime'],
+            'endTime': event['endTime'],
+            'priority': 1,
+            'description': '캘린더 이벤트',
+            'memo': null,
+            'location': null,
+            'dueDate': "없음",
+          });
+        }*/
+
+      } else {
+        throw Exception('서버 오류: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI 스케줄링 실패: $e')),
+      );
+      return;
+    }
+
+    //으앙
+
+
+
+
+    if (aiSchedule_.isEmpty) {
       setState(() {
         isLoading = false;
       });
@@ -2019,14 +2271,34 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       return;
     }
 
+
+
+
     // 기존 스케줄 초기화
     final dateKey = _taskDataService.dateToKey(selectedDate);
     _taskDataService.plannerTasksByDate[dateKey] = [];
 
-    // AI가 준 스케줄대로 Todo_Task 생성 및 저장
-    for (var item in aiSchedule) {
-      final int priority = item['priority'] ?? 1;
 
+    for (var item in aiSchedule_){
+      print("현세");
+      print(item);
+
+      if (item['time'] != null) {
+        item['time'] = convertTimeIfNeeded(item['time']);
+      }
+      if (item['endTime'] != null) {
+        item['endTime'] = convertTimeIfNeeded(item['endTime']);
+      }
+
+      print("변환 후:");
+      print("time: ${item['time']}, endTime: ${item['endTime']}");
+    }
+
+
+
+    // AI가 준 스케줄대로 Todo_Task 생성 및 저장
+    for (var item in aiSchedule_) {
+      final int priority = item['priority'] ?? 1;
       // Generate unique ID for new tasks if not provided
       String taskId = item['id'] ?? DateTime.now().millisecondsSinceEpoch.toString() + '_${_taskDataService.plannerTasksByDate[dateKey]?.length ?? 0}';
 
@@ -2035,7 +2307,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         userId: userId, // userId 추가 (현재 로그인한 사용자 ID)
         title: item['title'] ?? '제목 없음',
         date: selectedDate,
-        time: _normalizeTime(item['time']),
+        time: item['time'],
         endTime: _normalizeTime(item['endTime']),
         importance: priority,
         urgency: priority,
@@ -2082,10 +2354,13 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       });
     });
 
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('AI 플래너가 생성되었습니다!')),
     );
   }
+
+
 
   Future<Map<String, dynamic>> _getUserPreferences() async {
     Map<String, dynamic> preferences = {

@@ -665,6 +665,8 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 
   void calculateProgress() {
+
+    if (!mounted) return;
     setState(() {
       progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
     });
