@@ -19,6 +19,36 @@ class TodoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 마감일까지 남은 일수 계산
+    int? daysUntilDue;
+    Color? dueDateColor;
+    String? dueDateText;
+
+    if (todo.dueDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final dueDate = DateTime(todo.dueDate!.year, todo.dueDate!.month, todo.dueDate!.day);
+
+      daysUntilDue = dueDate.difference(today).inDays;
+
+      if (daysUntilDue < 0) {
+        dueDateColor = Colors.red;
+        dueDateText = '${(-daysUntilDue)}일 지남';
+      } else if (daysUntilDue == 0) {
+        dueDateColor = Colors.orange;
+        dueDateText = '오늘까지';
+      } else if (daysUntilDue == 1) {
+        dueDateColor = Colors.orange;
+        dueDateText = '내일까지';
+      } else if (daysUntilDue <= 3) {
+        dueDateColor = Colors.amber;
+        dueDateText = '${daysUntilDue}일 남음';
+      } else {
+        dueDateColor = Colors.grey;
+        dueDateText = '${daysUntilDue}일 남음';
+      }
+    }
+
     return Card(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       elevation: 1,
@@ -72,6 +102,25 @@ class TodoCard extends StatelessWidget {
                               ),
                             ],
                           ),
+                        // 마감일 표시 추가
+                        if (dueDateText != null)
+                          Row(
+                            children: [
+                              SizedBox(width: 8),
+                              Icon(Icons.schedule, size: 12, color: dueDateColor),
+                              SizedBox(width: 2),
+                              Text(
+                                dueDateText,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: todo.isCompleted ? Colors.grey : dueDateColor,
+                                  fontWeight: daysUntilDue != null && daysUntilDue <= 1
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ],
@@ -92,8 +141,6 @@ class TodoCard extends StatelessWidget {
       ),
     );
   }
-
-
 
   Widget _buildPriorityChip(BuildContext context, String symbol, int value, Color baseColor) {
     return Container(

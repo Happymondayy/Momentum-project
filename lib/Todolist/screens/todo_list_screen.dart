@@ -1041,6 +1041,84 @@ class TodoListScreenState extends State<TodoListScreen> {
                 ],
               ),
 
+              // 중요도와 긴급도 표시 (메모 전에 추가)
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(width: 24),
+                  // 중요도 표시
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _getImportanceColor(task.importance),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.star, size: 12, color: Colors.white),
+                        const SizedBox(width: 2),
+                        Text(
+                          '중요도 ${task.importance}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 긴급도 표시
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _getUrgencyColor(task.urgency),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.schedule, size: 12, color: Colors.white),
+                        const SizedBox(width: 2),
+                        Text(
+                          '긴급도 ${task.urgency}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              // 마감일이 있는 경우
+              if (task.dueDate != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const SizedBox(width: 24),
+                    Icon(Icons.calendar_today, size: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.deepOrange),
+                    const SizedBox(width: 4),
+                    Text(
+                      '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: task.isCompleted ? Colors.grey : Colors.deepOrange,
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
               // 메모가 있는 경우 보라색 점 표시
               if (task.memo != null && task.memo!.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -1094,29 +1172,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                 ),
               ],
 
-              // 마감일이 있는 경우
-              if (task.dueDate != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    Icon(Icons.calendar_today, size: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.deepOrange),
-                    const SizedBox(width: 4),
-                    Text(
-                      '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.deepOrange,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-
               // 반복 정보 상세 표시
               if (task.isRepeating) ...[
                 const SizedBox(height: 8),
@@ -1138,56 +1193,13 @@ class TodoListScreenState extends State<TodoListScreen> {
                   ],
                 ),
               ],
-
-              // 참여자 아바타 (기존 코드 유지)
-              if (task.title.contains('Client')) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    Container(
-                      height: 24,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundColor: Colors.grey.shade300,
-                            child: Text(
-                              task.title.substring(0, 1),
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: 16,
-                            child: CircleAvatar(
-                              radius: 12,
-                              backgroundColor: Colors.grey.shade400,
-                              child: Text(
-                                'P',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text('9+', style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
   }
+
 
 // 반복 텍스트 헬퍼 함수들
   String _getRepeatText(String? repeatOption) {
@@ -1227,6 +1239,240 @@ class TodoListScreenState extends State<TodoListScreen> {
       default:
         return '반복 없음';
     }
+  }
+
+  // TodoListScreenState 클래스 내부에 추가할 누락된 함수들
+
+// 중요도 라벨 반환 함수
+  String _getImportanceLabel(int importance) {
+    switch (importance) {
+      case 1:
+        return '매우 낮음';
+      case 2:
+        return '낮음';
+      case 3:
+        return '보통';
+      case 4:
+        return '높음';
+      case 5:
+        return '매우 높음';
+      default:
+        return '보통';
+    }
+  }
+
+// 긴급도 라벨 반환 함수
+  String _getUrgencyLabel(int urgency) {
+    switch (urgency) {
+      case 1:
+        return '매우 낮음';
+      case 2:
+        return '낮음';
+      case 3:
+        return '보통';
+      case 4:
+        return '높음';
+      case 5:
+        return '매우 높음';
+      default:
+        return '보통';
+    }
+  }
+
+// 중요도 선택기 위젯
+  Widget _buildImportanceSelector(StateSetter setState, int importance, Function(int) onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '중요도',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('낮음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                  Expanded(
+                    child: Slider(
+                      value: importance.toDouble(),
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      activeColor: Color(0xFF9575CD),
+                      inactiveColor: Colors.grey.shade300,
+                      onChanged: (value) {
+                        setState(() {
+                          onChanged(value.round());
+                        });
+                      },
+                    ),
+                  ),
+                  const Text('높음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (index) {
+                  final level = index + 1;
+                  final isSelected = importance == level;
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        onChanged(level);
+                      });
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? _getImportanceColor(level) : Colors.transparent,
+                        border: Border.all(
+                          color: _getImportanceColor(level),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$level',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : _getImportanceColor(level),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '현재: ${_getImportanceLabel(importance)}',
+                style: TextStyle(
+                  color: _getImportanceColor(importance),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+// 긴급도 선택기 위젯
+  Widget _buildUrgencySelector(StateSetter setState, int urgency, Function(int) onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '긴급도',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('낮음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                  Expanded(
+                    child: Slider(
+                      value: urgency.toDouble(),
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      activeColor: Color(0xFF9575CD),
+                      inactiveColor: Colors.grey.shade300,
+                      onChanged: (value) {
+                        setState(() {
+                          onChanged(value.round());
+                        });
+                      },
+                    ),
+                  ),
+                  const Text('높음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (index) {
+                  final level = index + 1;
+                  final isSelected = urgency == level;
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        onChanged(level);
+                      });
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? _getUrgencyColor(level) : Colors.transparent,
+                        border: Border.all(
+                          color: _getUrgencyColor(level),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$level',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : _getUrgencyColor(level),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '현재: ${_getUrgencyLabel(urgency)}',
+                style: TextStyle(
+                  color: _getUrgencyColor(urgency),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   void showTaskDetailDialog(BuildContext context, Todo_Task task) {
@@ -1338,11 +1584,19 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
+                              // 중요도
                               _buildImportanceSelector(setState, importanceLevel, (level) {
                                 importanceLevel = level;
                               }),
                               const SizedBox(height: 20),
 
+                              // 긴급도 (중요도 아래)
+                              _buildUrgencySelector(setState, urgencyLevel, (level) {
+                                urgencyLevel = level;
+                              }),
+                              const SizedBox(height: 20),
+
+                              // 마감일 (긴급도 아래)
                               _buildDueDatePicker(context, dueDate, (pickedDate) {
                                 setState(() {
                                   dueDate = pickedDate;
@@ -1870,16 +2124,18 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
+  // showAddTaskDialog 함수와 showTaskDetailDialog 함수의 폼 부분 수정
 
+// 1. showAddTaskDialog 함수의 폼 부분
   void showAddTaskDialog(BuildContext context) {
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
-    TimeOfDay? startTime; // 선택사항으로 변경
-    TimeOfDay? endTime;   // 선택사항으로 변경
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
 
     bool isImportant = false;
     bool isUrgent = false;
-    bool isRepeating = false; // 반복 설정 추가
+    bool isRepeating = false;
     String? repeatOption;
     List<int> repeatDays = [];
     int? repeatCustomDays;
@@ -1888,7 +2144,6 @@ class TodoListScreenState extends State<TodoListScreen> {
     int urgencyLevel = 1;
     List<int> selectedReminders = [];
 
-    // 반복 커스텀 일수 컨트롤러 추가
     final TextEditingController repeatCustomDaysController = TextEditingController();
 
     showDialog(
@@ -1967,21 +2222,28 @@ class TodoListScreenState extends State<TodoListScreen> {
                               }),
                               const SizedBox(height: 20),
 
-                              // 시간 설정 (선택사항으로 변경)
+                              // 시간 설정 (선택사항)
                               _buildOptionalTimeSelector(context, startTime, endTime, (start, end) {
                                 setState(() {
                                   startTime = start;
                                   endTime = end;
                                 });
                               }),
-
                               const SizedBox(height: 20),
 
+                              // 중요도 (세로 배치)
                               _buildImportanceSelector(setState, importanceLevel, (level) {
                                 importanceLevel = level;
                               }),
                               const SizedBox(height: 20),
 
+                              // 긴급도 (중요도 아래)
+                              _buildUrgencySelector(setState, urgencyLevel, (level) {
+                                urgencyLevel = level;
+                              }),
+                              const SizedBox(height: 20),
+
+                              // 마감일 (긴급도 아래)
                               _buildDueDatePicker(
                                   context,
                                   selectedDueDate,
@@ -1991,7 +2253,6 @@ class TodoListScreenState extends State<TodoListScreen> {
                                     });
                                   }
                               ),
-
                               const SizedBox(height: 20),
 
                               _buildSwitchRow('알림 설정', isImportant, (value) {
@@ -2096,7 +2357,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       }
 
                                       final newTask = Todo_Task(
-                                        userId: _taskDataService.currentUserId ?? '', // userId 추가
+                                        userId: _taskDataService.currentUserId ?? '',
                                         title: titleController.text,
                                         date: taskDate,
                                         time: formattedStart,
@@ -2159,7 +2420,7 @@ class TodoListScreenState extends State<TodoListScreen> {
         );
       },
     ).then((_) {
-      repeatCustomDaysController.dispose(); // 컨트롤러 해제
+      repeatCustomDaysController.dispose();
       setState(() {});
     });
   }
@@ -2297,47 +2558,90 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-
-
-  // 중요도 선택기 메서드
-  Widget _buildImportanceSelector(StateSetter setState, int importanceLevel, Function(int) onLevelSelected) {
+  Widget buildImportanceSelector({
+    required int importance,
+    required Function(int) onChanged,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('중요도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const Text(
+          '중요도',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
             children: [
-              const Text('중요도 (필수):'),
               Row(
-                children: List.generate(3, (index) {
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        onLevelSelected(index + 1);
-                      });
-                    },
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('낮음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                  Expanded(
+                    child: Slider(
+                      value: importance.toDouble(),
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      activeColor: Color(0xFF9575CD),
+                      inactiveColor: Colors.grey.shade300,
+                      onChanged: (value) => onChanged(value.round()),
+                    ),
+                  ),
+                  const Text('높음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (index) {
+                  final level = index + 1;
+                  final isSelected = importance == level;
+                  return GestureDetector(
+                    onTap: () => onChanged(level),
                     child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
-                        color: importanceLevel == index + 1 ? Colors.blue.shade300 : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(20),
+                        shape: BoxShape.circle,
+                        color: isSelected ? _getImportanceColor(level) : Colors.transparent,
+                        border: Border.all(
+                          color: _getImportanceColor(level),
+                          width: 1.5,
+                        ),
                       ),
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          color: importanceLevel == index + 1 ? Colors.white : Colors.black87,
-                          fontWeight: importanceLevel == index + 1 ? FontWeight.bold : FontWeight.normal,
+                      child: Center(
+                        child: Text(
+                          '$level',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : _getImportanceColor(level),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
                   );
                 }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '현재: ${_getImportanceLabel(importance)}',
+                style: TextStyle(
+                  color: _getImportanceColor(importance),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -2345,6 +2649,101 @@ class TodoListScreenState extends State<TodoListScreen> {
       ],
     );
   }
+
+// 4. buildUrgencySelector 함수 완전 교체
+  Widget buildUrgencySelector({
+    required int urgency,
+    required Function(int) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '긴급도',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Color(0xFFDADCE0), width: 0.5),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('낮음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                  Expanded(
+                    child: Slider(
+                      value: urgency.toDouble(),
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      activeColor: Color(0xFF9575CD),
+                      inactiveColor: Colors.grey.shade300,
+                      onChanged: (value) => onChanged(value.round()),
+                    ),
+                  ),
+                  const Text('높음', style: TextStyle(fontSize: 12, color: Color(0xFF5F6368))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (index) {
+                  final level = index + 1;
+                  final isSelected = urgency == level;
+                  return GestureDetector(
+                    onTap: () => onChanged(level),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? _getUrgencyColor(level) : Colors.transparent,
+                        border: Border.all(
+                          color: _getUrgencyColor(level),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$level',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : _getUrgencyColor(level),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '현재: ${_getUrgencyLabel(urgency)}',
+                style: TextStyle(
+                  color: _getUrgencyColor(urgency),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+
 
   // 마감일 선택기 메서드 (DatePicker 기반)
   Widget _buildDueDatePicker(BuildContext context, DateTime? dueDate, Function(DateTime) onPicked) {
@@ -2423,6 +2822,44 @@ class TodoListScreenState extends State<TodoListScreen> {
 
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+// TodoListScreenState 클래스 내부에 추가할 메서드들
+
+// 중요도 색상 반환 함수 (1-5 레벨)
+Color _getImportanceColor(int importance) {
+  switch (importance) {
+    case 1:
+      return Colors.blue.shade300;
+    case 2:
+      return Colors.green.shade400;
+    case 3:
+      return Colors.orange.shade400;
+    case 4:
+      return Colors.red.shade400;
+    case 5:
+      return Colors.purple.shade500;
+    default:
+      return Colors.grey.shade400;
+  }
+}
+
+// 긴급도 색상 반환 함수 (1-5 레벨)
+Color _getUrgencyColor(int urgency) {
+  switch (urgency) {
+    case 1:
+      return Colors.teal.shade300;
+    case 2:
+      return Colors.cyan.shade400;
+    case 3:
+      return Colors.amber.shade500;
+    case 4:
+      return Colors.deepOrange.shade400;
+    case 5:
+      return Colors.red.shade600;
+    default:
+      return Colors.grey.shade400;
   }
 }
 

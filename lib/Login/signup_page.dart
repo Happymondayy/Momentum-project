@@ -27,7 +27,6 @@ class _SignupPageState extends State<SignupPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // 닉네임 중복 체크 함수
   Future<bool> isNicknameDuplicate(String nickname) async {
     final querySnapshot = await _firestore
         .collection('user')
@@ -188,6 +187,7 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('회원가입'),
@@ -199,84 +199,86 @@ class _SignupPageState extends State<SignupPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildInputField(emailController, emailFocusNode, passwordFocusNode, '이메일 등록'),
-            const SizedBox(height: 16),
-            buildInputField(passwordController, passwordFocusNode, nicknameFocusNode, '비밀번호 등록', obscure: true),
-            const SizedBox(height: 16),
-            buildInputField(nicknameController, nicknameFocusNode, null, '닉네임 등록', onSubmit: () {
-              if (isOver14 &&
-                  emailController.text.isNotEmpty &&
-                  passwordController.text.isNotEmpty &&
-                  nicknameController.text.isNotEmpty) {
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              buildInputField(emailController, emailFocusNode, passwordFocusNode, '이메일 등록'),
+              const SizedBox(height: 16),
+              buildInputField(passwordController, passwordFocusNode, nicknameFocusNode, '비밀번호 등록', obscure: true),
+              const SizedBox(height: 16),
+              buildInputField(nicknameController, nicknameFocusNode, null, '닉네임 등록', onSubmit: () {
+                if (isOver14 &&
+                    emailController.text.isNotEmpty &&
+                    passwordController.text.isNotEmpty &&
+                    nicknameController.text.isNotEmpty) {
+                  _signUpWithEmailAndPassword();
+                }
+              }),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        isOver14 = !isOver14;
+                      });
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isOver14 ? Colors.red : Colors.grey,
+                          width: 2,
+                        ),
+                        color: isOver14 ? Colors.red : Colors.white,
+                      ),
+                      child: isOver14
+                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '필수',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('만 14세 이상입니다.'),
+                ],
+              ),
+              const SizedBox(height: 40),
+              buildMainButton('가입하기', onPressed: isOver14
+                  ? () async {
+                if (emailController.text.isEmpty ||
+                    passwordController.text.isEmpty ||
+                    nicknameController.text.isEmpty) {
+                  showErrorSnackBar('이메일, 비밀번호, 닉네임을 모두 입력해주세요.');
+                  return;
+                }
+
+                bool duplicate = await isNicknameDuplicate(nicknameController.text.trim());
+                if (duplicate) {
+                  showErrorSnackBar('이미 사용 중인 닉네임입니다.');
+                  return;
+                }
+
                 _signUpWithEmailAndPassword();
               }
-            }),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      isOver14 = !isOver14;
-                    });
-                  },
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isOver14 ? Colors.red : Colors.grey,
-                        width: 2,
-                      ),
-                      color: isOver14 ? Colors.red : Colors.white,
-                    ),
-                    child: isOver14
-                        ? const Icon(Icons.check, size: 16, color: Colors.white)
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '필수',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text('만 14세 이상입니다.'),
-              ],
-            ),
-            const SizedBox(height: 40),
-            buildMainButton('가입하기', onPressed: isOver14
-                ? () async {
-              if (emailController.text.isEmpty ||
-                  passwordController.text.isEmpty ||
-                  nicknameController.text.isEmpty) {
-                showErrorSnackBar('이메일, 비밀번호, 닉네임을 모두 입력해주세요.');
-                return;
-              }
-
-              bool duplicate = await isNicknameDuplicate(nicknameController.text.trim());
-              if (duplicate) {
-                showErrorSnackBar('이미 사용 중인 닉네임입니다.');
-                return;
-              }
-
-              _signUpWithEmailAndPassword();
-            }
-                : null),
-            const SizedBox(height: 16),
-            buildMainButton('구글로 가입하기',
-                onPressed: isOver14 ? signInWithGoogle : null,
-                isGoogle: true),
-          ],
+                  : null),
+              const SizedBox(height: 16),
+              buildMainButton('구글로 가입하기',
+                  onPressed: isOver14 ? signInWithGoogle : null,
+                  isGoogle: true),
+            ],
+          ),
         ),
       ),
     );
