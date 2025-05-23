@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/diary_entry.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class DiaryDialog extends StatefulWidget {
   final Function(
@@ -49,7 +47,6 @@ class _DiaryDialogState extends State<DiaryDialog> {
     _selectedMood = widget.initialMood ?? MoodState.neutral;
     _contentController.text = widget.initialContent ?? '';
     _editing = widget.isEditing;
-    final user = FirebaseAuth.instance.currentUser; // 현재 로그인한 사용자의 user 객체 가져옴
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(FocusNode());
@@ -188,11 +185,10 @@ class _DiaryDialogState extends State<DiaryDialog> {
           decoration: BoxDecoration(
             color: Colors.grey[100],
             borderRadius: BorderRadius.circular(12),
-            border:  _editing ? Border.all(color: Colors.grey.shade300) : null,
+            border: Border.all(color: Colors.grey.shade300),
           ),
           padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-          child: _editing
-              ? DropdownButtonHideUnderline(
+          child: DropdownButtonHideUnderline(
             child: DropdownButton<MoodState>(
               isExpanded: true,
               value: _selectedMood,
@@ -216,16 +212,6 @@ class _DiaryDialogState extends State<DiaryDialog> {
                   });
                 }
               },
-            ),
-          )
-              : Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                _selectedMood.getGradientCircle(),
-                SizedBox(width: 8),
-                Text(_selectedMood.koreanName),
-              ],
             ),
           ),
         ),
@@ -308,57 +294,61 @@ class _DiaryDialogState extends State<DiaryDialog> {
                       SizedBox(height: 20),
                       _buildMoodSelector(),
                       SizedBox(height: 30),
-                      _editing
-                          ? Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: _validateAndSave,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple[300],
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              elevation: 2,
+                  _editing
+                      ? Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _validateAndSave,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple[300],
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
                             ),
-                            child: Text(
-                              '저장',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            elevation: 2,
+                          ),
+                          child: Text(
+                            '저장',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(width: 16),
-
-                          OutlinedButton(
-                            onPressed: _confirmDelete,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              side: BorderSide(color: Colors.red),
-                              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                            ),
-                            child: Text(
-                              '삭제',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _confirmDelete,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: BorderSide(color: Colors.red),
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
                             ),
                           ),
-                        ],
-                      ) :
-                      ElevatedButton(
+                          child: Text(
+                            '삭제',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                      : SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
                       onPressed: _validateAndSave,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple[300],
                         foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                        padding: EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
@@ -372,6 +362,7 @@ class _DiaryDialogState extends State<DiaryDialog> {
                         ),
                       ),
                     ),
+                  )
                     ],
                   ),
                 ),
