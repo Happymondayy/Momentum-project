@@ -1988,10 +1988,15 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
       } else {
         throw Exception("Unsupported startDate type: ${rawStartDate.runtimeType}");
       }
+      userId = widget.userId;
+      print(data['userId']);
+      print(userId);
 
       if (startDate.year == selectedDate.year &&
           startDate.month == selectedDate.month &&
-          startDate.day == selectedDate.day) {
+          startDate.day == selectedDate.day&&
+          data['userId'] == userId) {
+
         calendarEvents.add({
           'title': data['title'],
           'startTime': data['startTime'] != null
@@ -2002,6 +2007,8 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               : null,
         });
       }
+      print("오잉");
+      print(calendarEvents);
     }
 
     final allTasksData = todoTasks.map((task) => {
@@ -2353,6 +2360,10 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         });
       });
     });
+
+
+
+
 
 
     ScaffoldMessenger.of(context).showSnackBar(
