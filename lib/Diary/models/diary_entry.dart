@@ -91,19 +91,25 @@ extension MoodStateExtension on MoodState {
   Color get color {
     switch (this) {
       case MoodState.veryGood:
-        return Colors.green;
+        return Color(0xFF5E9157);
       case MoodState.good:
-        return Colors.lightGreen;
+        return Color(0xFF97C193);
       case MoodState.neutral:
-        return Colors.blue;
+        return Color(0xFF84B0EC);
       case MoodState.bad:
-        return Colors.orange;
+        return Color(0xFFE38254);
       case MoodState.veryBad:
-        return Colors.red;
+        return Color(0xFFC84D4D);
     }
   }
 
   Widget getGradientCircle({double size = 24.0}) {
+    // color를 파스텔톤으로 변환 (채도 낮추고 밝기 올리기)
+    final pastelColor = HSLColor.fromColor(color)
+        .withSaturation(0.3) // 채도 낮춤
+        .withLightness(0.8)  // 밝기 올림
+        .toColor();
+
     return Container(
       width: size,
       height: size,
@@ -111,23 +117,26 @@ extension MoodStateExtension on MoodState {
         shape: BoxShape.circle,
         gradient: RadialGradient(
           colors: [
-            color,
-            color.withOpacity(0.7),
-            color.withOpacity(0.3),
+            pastelColor.withOpacity(1.0),
+            pastelColor.withOpacity(0.6),
+            pastelColor.withOpacity(0.3),
+            Colors.white.withOpacity(0.05),
           ],
-          stops: [0.4, 0.7, 1.0],
-          radius: 0.8,
+          stops: [0.3, 0.6, 0.85, 1.0],
+          radius: 1.0,
+          center: Alignment.center,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 3,
-            spreadRadius: 1,
+            color: pastelColor.withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 3,
           ),
         ],
       ),
     );
   }
+
 
   IconData get icon {
     switch (this) {

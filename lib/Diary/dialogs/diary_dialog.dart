@@ -299,6 +299,27 @@ class _DiaryDialogState extends State<DiaryDialog> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
+                          onPressed: _confirmDelete,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[400],
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          child: Text(
+                            '삭제',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton(
                           onPressed: _validateAndSave,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.deepPurple[300],
@@ -311,27 +332,6 @@ class _DiaryDialogState extends State<DiaryDialog> {
                           ),
                           child: Text(
                             '저장',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _confirmDelete,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: BorderSide(color: Colors.red),
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                          ),
-                          child: Text(
-                            '삭제',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,

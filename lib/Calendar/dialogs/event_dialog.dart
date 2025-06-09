@@ -4,6 +4,7 @@ import 'package:momentum_planner/Calendar/models/event.dart';
 import 'package:momentum_planner/Calendar/services/notification_service_calendar.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
@@ -240,7 +241,6 @@ class _EventDialogState extends State<EventDialog> {
     print('🗑️ 알림 취소: ID=${notificationId}');
   }
 
-  // _validateAndSave 메소드 수정
   void _validateAndSave() async {
     if (_titleController.text.trim().isEmpty) {
       setState(() {
@@ -257,12 +257,16 @@ class _EventDialogState extends State<EventDialog> {
       return;
     }
 
+    print('=== 일정 저장 시작 ===');
+
     // 이벤트 ID 생성 또는 기존 ID 유지
     final String eventId = widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    print('이벤트 ID: $eventId');
 
     final event = Event(
+      createdAt: DateTime.now(),
       userId: widget.currentUserId,
-      id: widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id: eventId,
       title: _titleController.text,
       description: _descriptionController.text,
       startDate: _startDate,
@@ -279,288 +283,416 @@ class _EventDialogState extends State<EventDialog> {
       reminder: _getReminderValue(),
       repeatUntil: _isRepeating && _hasRepeatEnd ? _repeatUntil : null,
       parentEventId: widget.event?.parentEventId ?? (_isRepeating ? eventId : null),
+      isLongTerm: _startDate != _endDate ? eventId : '',
+      term: 0,
     );
 
+    print('Event 객체 생성 완료');
+    print('제목: ${event.title}');
+    print('시작일: ${event.startDate}');
+    print('종료일: ${event.endDate}');
+    print('장기일정: ${event.isLongTerm}');
+    print('반복: ${event.isRepeating}');
+
     try {
+      print('알림 처리 시작...');
       // 알림 관련 처리
       await _handleNotificationChanges(event);
+      print('알림 처리 완료');
 
+      // 장기 일정 처리 (시작날짜와 종료날짜가 다른 경우)
+      if (_startDate != _endDate) {
+        print('장기 일정 처리 시작...');
+        await _handleLongTermEvent(event);
+        print('장기 일정 처리 완료');
+      }
       // 반복 이벤트 생성 처리
-      if (_isRepeating && !widget.isEditing) {
+      else if (_isRepeating && !widget.isEditing) {
+        print('반복 이벤트 생성 시작...');
         // 새 이벤트 생성 시에만 반복 이벤트 생성
         await _handleRecurringEventCreation(event);
+        print('반복 이벤트 생성 완료');
       } else if (_isRepeating && widget.isEditing && widget.event != null) {
+        print('반복 이벤트 수정 시작...');
         // 기존 이벤트 수정 시 반복 처리
         await _handleRecurringEventUpdate(event);
+        print('반복 이벤트 수정 완료');
       } else {
+        print('일반 이벤트 저장 시작...');
         // 반복 아닌 일반 이벤트
         widget.onSave(event);
+        print('일반 이벤트 저장 완료');
       }
 
-      // 약간의 지연 후 다이얼로그 닫기
-      await Future.delayed(Duration(milliseconds: 100));
+      print('=== 일정 저장 성공 ===');
 
-      // 다이얼로그 닫기 (추가 안전 장치)
+      // 다이얼로그 닫기
       if (mounted && Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      print('일정 저장 중 오류 발생: $e');
+      print('=== 일정 저장 오류 ===');
+      print('오류 타입: ${e.runtimeType}');
+      print('오류 내용: $e');
+      print('스택 트레이스: ${StackTrace.current}');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('일정 저장 중 오류가 발생했습니다.'),
-            duration: Duration(seconds: 2),
+            content: Text('일정 저장 중 오류가 발생했습니다: ${e.toString()}'),
+            duration: Duration(seconds: 3),
           ),
         );
       }
     }
   }
 
-  // 5. 반복 이벤트 생성 메서드 추가
-  Future<void> _handleRecurringEventCreation(Event baseEvent) async {
-    // 기본 이벤트(첫 번째 일정) 저장
-    widget.onSave(baseEvent);
+  // 장기 일정 처리 메소드
+  Future<void> _handleLongTermEvent(Event baseEvent) async {
+    final List<Event> longTermEvents = [];
 
-    // 반복 이벤트 종료일이 없으면 기본 1년까지만 생성 (월 오버플로우 방지)
-    final DateTime untilDate = baseEvent.repeatUntil ??
-        DateTime(baseEvent.startDate.year, baseEvent.startDate.month)
-            .add(Duration(days: 365));
+    DateTime currentDate = DateTime(
+      baseEvent.startDate.year,
+      baseEvent.startDate.month,
+      baseEvent.startDate.day,
+    );
 
-    List<Event> recurringEvents = [];
+    DateTime endDate = DateTime(
+      baseEvent.endDate.year,
+      baseEvent.endDate.month,
+      baseEvent.endDate.day,
+    );
 
-    switch (baseEvent.repeatOption) {
-      case '매일':
-        recurringEvents = _createDailyEvents(baseEvent, untilDate);
-        break;
-      case '매주':
-        recurringEvents = _createWeeklyEvents(baseEvent, untilDate);
-        break;
-      case '매달':
-        recurringEvents = _createMonthlyEvents(baseEvent, untilDate);
-        break;
-      case '매년':
-        recurringEvents = _createYearlyEvents(baseEvent, untilDate);
-        break;
-      case '매요일':
-        recurringEvents = _createWeekdayEvents(baseEvent, untilDate);
-        break;
-      case '기타':
-        if (baseEvent.repeatCustomDays != null && baseEvent.repeatCustomDays! > 0) {
-          recurringEvents = _createCustomEvents(baseEvent, untilDate);
-        }
-        break;
-      default:
-        break;
+    int dayIndex = 0;
+
+    while (currentDate.isBefore(endDate) || currentDate.isAtSameMomentAs(endDate)) {
+      // 장기 일정의 각 날짜별 이벤트 ID 생성
+      final String eventId = widget.event?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+      final Event dailyEvent = Event(
+        createdAt: DateTime.now(),
+        userId: baseEvent.userId,
+        id: eventId,
+        title: baseEvent.title,
+        description: baseEvent.description,
+        startDate: baseEvent.startDate, // 원본 시작일 유지
+        endDate: baseEvent.endDate,     // 원본 종료일 유지
+        startTime: dayIndex == 0 ? baseEvent.startTime : null, // 첫날만 시작시간
+        endTime: currentDate.isAtSameMomentAs(endDate) ? baseEvent.endTime : null, // 마지막날만 종료시간
+        memo: baseEvent.memo,
+        location: baseEvent.location,
+        isRepeating: false,
+        repeatOption: null,
+        repeatDays: null,
+        repeatCustomDays: null,
+        isAllDay: baseEvent.isAllDay,
+        reminder: dayIndex == 0 ? baseEvent.reminder : null, // 첫날만 알림
+        repeatUntil: null,
+        parentEventId: baseEvent.parentEventId,
+        isLongTerm: baseEvent.id,
+        term: dayIndex,
+      );
+
+      longTermEvents.add(dailyEvent);
+
+      currentDate = currentDate.add(Duration(days: 1));
+      dayIndex++;
     }
 
-    // 반복 이벤트 각각 저장 및 알림 등록
-    for (final event in recurringEvents) {
+    // 모든 장기 일정 이벤트들을 저장
+    for (final event in longTermEvents) {
       widget.onSave(event);
-
-      if (event.reminder != null && !event.isAllDay) {
-        await _scheduleNotification(event);
-      }
-
-      await Future.delayed(Duration(milliseconds: 10)); // UI 멈춤 방지
     }
   }
 
+  // 반복 이벤트 생성 메서드 수정
+  Future<void> _handleRecurringEventCreation(Event baseEvent) async {
+    try {
+      // 기본 이벤트(첫 번째 일정) 저장
+      widget.onSave(baseEvent);
+      print('기본 이벤트 저장 완료: ${baseEvent.title}');
 
+      // 반복 이벤트 종료일 설정 (기본 1년)
+      final DateTime untilDate = baseEvent.repeatUntil ??
+          baseEvent.startDate.add(Duration(days: 365));
+
+      print('반복 옵션: ${baseEvent.repeatOption}, 종료일: $untilDate');
+
+      List<Event> recurringEvents = [];
+
+      switch (baseEvent.repeatOption) {
+        case '매일':
+          recurringEvents = _createDailyEvents(baseEvent, untilDate);
+          break;
+        case '매주':
+          recurringEvents = _createWeeklyEvents(baseEvent, untilDate);
+          break;
+        case '매달':
+          recurringEvents = _createMonthlyEvents(baseEvent, untilDate);
+          break;
+        case '매년':
+          recurringEvents = _createYearlyEvents(baseEvent, untilDate);
+          break;
+        case '매요일':
+          if (baseEvent.repeatDays != null && baseEvent.repeatDays!.isNotEmpty) {
+            recurringEvents = _createWeekdayEvents(baseEvent, untilDate);
+          }
+          break;
+        case '기타':
+          if (baseEvent.repeatCustomDays != null && baseEvent.repeatCustomDays! > 0) {
+            recurringEvents = _createCustomEvents(baseEvent, untilDate);
+          }
+          break;
+        default:
+          print('알 수 없는 반복 옵션: ${baseEvent.repeatOption}');
+          break;
+      }
+
+      print('생성된 반복 이벤트 수: ${recurringEvents.length}');
+
+      // 반복 이벤트 각각 저장
+      for (int i = 0; i < recurringEvents.length; i++) {
+        final event = recurringEvents[i];
+        widget.onSave(event);
+        print('반복 이벤트 ${i + 1} 저장 완료: ${event.startDate}');
+
+        // 알림 등록
+        if (event.reminder != null && !event.isAllDay) {
+          try {
+            await _scheduleNotification(event);
+          } catch (e) {
+            print('알림 등록 실패: $e');
+          }
+        }
+
+        // UI 블로킹 방지
+        if (i % 10 == 0) {
+          await Future.delayed(Duration(milliseconds: 1));
+        }
+      }
+
+      print('모든 반복 이벤트 생성 완료');
+    } catch (e) {
+      print('반복 이벤트 생성 중 오류: $e');
+      rethrow;
+    }
+  }
+
+// 매일 반복 이벤트 생성 수정
   List<Event> _createDailyEvents(Event baseEvent, DateTime untilDate) {
     List<Event> events = [];
 
-    // 시작일 다음 날부터 반복 시작
-    DateTime currentDate = baseEvent.startDate.add(Duration(days: 1));
+    try {
+      DateTime currentDate = baseEvent.startDate.add(Duration(days: 1));
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      int count = 0;
 
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      // 새 이벤트 생성
-      final newEvent = _createRecurringEventInstance(
-        baseEvent: baseEvent,
-        startDate: currentDate,
-        endDate: baseEvent.startDate == baseEvent.endDate
-            ? currentDate
-            : currentDate.add(
-          Duration(days: baseEvent.endDate.difference(baseEvent.startDate).inDays),
-        ),
-      );
-
-      events.add(newEvent);
-      currentDate = currentDate.add(Duration(days: 1)); // 하루씩 증가
-    }
-
-    return events;
-  }
-
-
-  // 7. 매주 반복 이벤트 생성 메서드
-  List<Event> _createWeeklyEvents(Event baseEvent, DateTime untilDate) {
-    List<Event> events = [];
-
-    // 시작일 일주일 후부터 종료일까지
-    DateTime currentDate = baseEvent.startDate.add(Duration(days: 7));
-
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      // 새 이벤트 생성
-      final newEvent = _createRecurringEventInstance(
-        baseEvent: baseEvent,
-        startDate: currentDate,
-        endDate: baseEvent.startDate == baseEvent.endDate ?
-        currentDate : currentDate.add(Duration(days: baseEvent.endDate.difference(baseEvent.startDate).inDays)),
-      );
-
-      events.add(newEvent);
-      currentDate = currentDate.add(Duration(days: 7));
-    }
-
-    return events;
-  }
-
-  // 8. 매달 반복 이벤트 생성 메서드
-  List<Event> _createMonthlyEvents(Event baseEvent, DateTime untilDate) {
-    List<Event> events = [];
-
-    // 시작일 한 달 후부터 종료일까지
-    DateTime currentDate = DateTime(
-      baseEvent.startDate.year,
-      baseEvent.startDate.month + 1,
-      baseEvent.startDate.day, // 해당 월에 없는 날짜는 자동으로 조정됨
-    );
-
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      // 새 이벤트 생성
-      final eventDuration = baseEvent.endDate.difference(baseEvent.startDate).inDays;
-      final endDate = currentDate.add(Duration(days: eventDuration));
-
-      final newEvent = _createRecurringEventInstance(
-        baseEvent: baseEvent,
-        startDate: currentDate,
-        endDate: endDate,
-      );
-
-      events.add(newEvent);
-
-      // 다음 달로 이동
-      currentDate = DateTime(
-        currentDate.year,
-        currentDate.month + 1,
-        baseEvent.startDate.day, // 해당 월에 없는 날짜는 자동으로 조정됨
-      );
-    }
-
-    return events;
-  }
-
-  // 9. 매년 반복 이벤트 생성 메서드
-  List<Event> _createYearlyEvents(Event baseEvent, DateTime untilDate) {
-    List<Event> events = [];
-
-    // 시작일 일 년 후부터 종료일까지
-    DateTime currentDate = DateTime(
-      baseEvent.startDate.year + 1,
-      baseEvent.startDate.month,
-      baseEvent.startDate.day, // 윤년 등에서 자동 조정됨
-    );
-
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      // 새 이벤트 생성
-      final eventDuration = baseEvent.endDate.difference(baseEvent.startDate).inDays;
-      final endDate = currentDate.add(Duration(days: eventDuration));
-
-      final newEvent = _createRecurringEventInstance(
-        baseEvent: baseEvent,
-        startDate: currentDate,
-        endDate: endDate,
-      );
-
-      events.add(newEvent);
-
-      // 다음 해로 이동
-      currentDate = DateTime(
-        currentDate.year + 1,
-        baseEvent.startDate.month,
-        baseEvent.startDate.day, // 윤년 등에서 자동 조정됨
-      );
-    }
-
-    return events;
-  }
-
-  // 10. 매요일 반복 이벤트 생성 메서드
-  List<Event> _createWeekdayEvents(Event baseEvent, DateTime untilDate) {
-    List<Event> events = [];
-
-    // 정렬된 요일 목록
-    final orderedDays = List<int>.from(baseEvent.repeatDays!)..sort();
-
-    // 이벤트 기간
-    final eventDuration = baseEvent.endDate.difference(baseEvent.startDate).inDays;
-
-    // 내일부터 시작
-    DateTime currentDate = baseEvent.startDate.add(Duration(days: 1));
-
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      // 현재 요일 확인 (0: 월요일 ~ 6: 일요일)
-      final weekday = (currentDate.weekday - 1) % 7;
-
-      // 해당 요일이 반복 요일에 포함되어 있으면 이벤트 생성
-      if (orderedDays.contains(weekday)) {
+      while ((currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) && count < 365) {
         final newEvent = _createRecurringEventInstance(
           baseEvent: baseEvent,
           startDate: currentDate,
-          endDate: currentDate.add(Duration(days: eventDuration)),
+          endDate: currentDate.add(Duration(days: daysDiff)),
+          instanceNumber: count + 1,
         );
 
         events.add(newEvent);
+        currentDate = currentDate.add(Duration(days: 1));
+        count++;
       }
-
-      // 다음 날로 이동
-      currentDate = currentDate.add(Duration(days: 1));
+    } catch (e) {
+      print('매일 반복 이벤트 생성 오류: $e');
     }
 
     return events;
   }
 
-  // 11. 사용자 지정 반복 이벤트 생성 메서드
+// 매주 반복 이벤트 생성 수정
+  List<Event> _createWeeklyEvents(Event baseEvent, DateTime untilDate) {
+    List<Event> events = [];
+
+    try {
+      DateTime currentDate = baseEvent.startDate.add(Duration(days: 7));
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      int count = 0;
+
+      while ((currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) && count < 52) {
+        final newEvent = _createRecurringEventInstance(
+          baseEvent: baseEvent,
+          startDate: currentDate,
+          endDate: currentDate.add(Duration(days: daysDiff)),
+          instanceNumber: count + 1,
+        );
+
+        events.add(newEvent);
+        currentDate = currentDate.add(Duration(days: 7));
+        count++;
+      }
+    } catch (e) {
+      print('매주 반복 이벤트 생성 오류: $e');
+    }
+
+    return events;
+  }
+
+// 매달 반복 이벤트 생성 수정
+  List<Event> _createMonthlyEvents(Event baseEvent, DateTime untilDate) {
+    List<Event> events = [];
+
+    try {
+      int year = baseEvent.startDate.year;
+      int month = baseEvent.startDate.month + 1;
+      int day = baseEvent.startDate.day;
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      int count = 0;
+
+      while (count < 12) {
+        if (month > 12) {
+          year++;
+          month = 1;
+        }
+
+        // 해당 월의 마지막 날 확인
+        int lastDayOfMonth = DateTime(year, month + 1, 0).day;
+        int actualDay = day > lastDayOfMonth ? lastDayOfMonth : day;
+
+        DateTime currentDate = DateTime(year, month, actualDay);
+
+        if (currentDate.isAfter(untilDate)) break;
+
+        final newEvent = _createRecurringEventInstance(
+          baseEvent: baseEvent,
+          startDate: currentDate,
+          endDate: currentDate.add(Duration(days: daysDiff)),
+          instanceNumber: count + 1,
+        );
+
+        events.add(newEvent);
+        month++;
+        count++;
+      }
+    } catch (e) {
+      print('매달 반복 이벤트 생성 오류: $e');
+    }
+
+    return events;
+  }
+
+// 매년 반복 이벤트 생성 수정
+  List<Event> _createYearlyEvents(Event baseEvent, DateTime untilDate) {
+    List<Event> events = [];
+
+    try {
+      DateTime currentDate = DateTime(
+        baseEvent.startDate.year + 1,
+        baseEvent.startDate.month,
+        baseEvent.startDate.day,
+      );
+
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      int count = 0;
+
+      while ((currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) && count < 10) {
+        final newEvent = _createRecurringEventInstance(
+          baseEvent: baseEvent,
+          startDate: currentDate,
+          endDate: currentDate.add(Duration(days: daysDiff)),
+          instanceNumber: count + 1,
+        );
+
+        events.add(newEvent);
+        currentDate = DateTime(
+          currentDate.year + 1,
+          baseEvent.startDate.month,
+          baseEvent.startDate.day,
+        );
+        count++;
+      }
+    } catch (e) {
+      print('매년 반복 이벤트 생성 오류: $e');
+    }
+
+    return events;
+  }
+
+// 매요일 반복 이벤트 생성 수정
+  List<Event> _createWeekdayEvents(Event baseEvent, DateTime untilDate) {
+    List<Event> events = [];
+
+    try {
+      final List<int> selectedDays = List<int>.from(baseEvent.repeatDays!)..sort();
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+
+      DateTime currentDate = baseEvent.startDate.add(Duration(days: 1));
+      int count = 0;
+
+      while ((currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) && count < 365) {
+        // 요일 계산 (월요일=1, 일요일=7 -> 월요일=0, 일요일=6으로 변환)
+        int weekday = (currentDate.weekday - 1) % 7;
+
+        if (selectedDays.contains(weekday)) {
+          final newEvent = _createRecurringEventInstance(
+            baseEvent: baseEvent,
+            startDate: currentDate,
+            endDate: currentDate.add(Duration(days: daysDiff)),
+            instanceNumber: events.length + 1,
+          );
+
+          events.add(newEvent);
+        }
+
+        currentDate = currentDate.add(Duration(days: 1));
+        count++;
+      }
+    } catch (e) {
+      print('매요일 반복 이벤트 생성 오류: $e');
+    }
+
+    return events;
+  }
+
+// 사용자 지정 반복 이벤트 생성 수정
   List<Event> _createCustomEvents(Event baseEvent, DateTime untilDate) {
     List<Event> events = [];
 
-    // 반복 간격
-    final repeatInterval = baseEvent.repeatCustomDays!;
-    if (repeatInterval <= 0) return events;
+    try {
+      final int repeatInterval = baseEvent.repeatCustomDays!;
+      if (repeatInterval <= 0) return events;
 
-    // 이벤트 기간
-    final eventDuration = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      int daysDiff = baseEvent.endDate.difference(baseEvent.startDate).inDays;
+      DateTime currentDate = baseEvent.startDate.add(Duration(days: repeatInterval));
+      int count = 0;
 
-    // 첫 반복일 계산
-    DateTime currentDate = baseEvent.startDate.add(Duration(days: repeatInterval));
+      while ((currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) && count < 100) {
+        final newEvent = _createRecurringEventInstance(
+          baseEvent: baseEvent,
+          startDate: currentDate,
+          endDate: currentDate.add(Duration(days: daysDiff)),
+          instanceNumber: count + 1,
+        );
 
-    while (currentDate.isBefore(untilDate) || currentDate.isAtSameMomentAs(untilDate)) {
-      final newEvent = _createRecurringEventInstance(
-        baseEvent: baseEvent,
-        startDate: currentDate,
-        endDate: currentDate.add(Duration(days: eventDuration)),
-      );
-
-      events.add(newEvent);
-
-      // 다음 반복일로 이동
-      currentDate = currentDate.add(Duration(days: repeatInterval));
+        events.add(newEvent);
+        currentDate = currentDate.add(Duration(days: repeatInterval));
+        count++;
+      }
+    } catch (e) {
+      print('사용자 지정 반복 이벤트 생성 오류: $e');
     }
 
     return events;
   }
 
-  // 12. 반복 이벤트 인스턴스 생성 헬퍼 메서드
+// 반복 이벤트 인스턴스 생성 헬퍼 메서드 수정
   Event _createRecurringEventInstance({
     required Event baseEvent,
     required DateTime startDate,
     required DateTime endDate,
+    required int instanceNumber,
   }) {
-    // 각 이벤트 인스턴스마다 고유 ID 생성
-    final String newId = '${baseEvent.id}_${DateTime.now().millisecondsSinceEpoch}_${startDate.day}${startDate.month}${startDate.year}';
+    // 더 안전한 ID 생성
+    final String newId = '${baseEvent.id}_${instanceNumber}_${startDate.millisecondsSinceEpoch}';
 
     return Event(
+      createdAt: DateTime.now(),
       userId: baseEvent.userId,
       id: newId,
       title: baseEvent.title,
@@ -578,160 +710,95 @@ class _EventDialogState extends State<EventDialog> {
       isAllDay: baseEvent.isAllDay,
       reminder: baseEvent.reminder,
       repeatUntil: baseEvent.repeatUntil,
-      parentEventId: baseEvent.id, // 원본 이벤트 ID 저장
+      parentEventId: baseEvent.id,
+      isLongTerm: baseEvent.isLongTerm,
+      term: baseEvent.term,
     );
   }
 
-  // 13. 반복 이벤트 수정 메서드
+
+
+ // 반복 이벤트 수정 메서드 수정
   Future<void> _handleRecurringEventUpdate(Event updatedEvent) async {
-    // 수정 옵션을 사용자에게 제시하는 다이얼로그 표시
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Color(0xFFF5F5F5),
-          title: Text('반복 일정 수정'),
-          content: Text('반복 일정 수정하시겠습니까?'),
-          actions: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop('this'),
-                  child: Text('이 일정만'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop('thisAndFuture'),
-                  child: Text('해당 일정 및 향후 반복 일정 수정'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop('all'),
-                  child: Text('모든 반복 일정'),
-                ),
-              ],
-            )
-          ],
-        );
-      },
-    );
-
-    if (choice == null) {
-      // 사용자가 취소함
-      return;
-    }
-
-    if (choice == 'this') {
-      // 이 일정만 수정
-      final Event singleEvent = Event(
-        userId: updatedEvent.userId,
-        id: updatedEvent.id,
-        title: updatedEvent.title,
-        description: updatedEvent.description,
-        startDate: updatedEvent.startDate,
-        endDate: updatedEvent.endDate,
-        startTime: updatedEvent.startTime,
-        endTime: updatedEvent.endTime,
-        memo: updatedEvent.memo,
-        location: updatedEvent.location,
-        isRepeating: updatedEvent.isRepeating,
-        repeatOption: updatedEvent.repeatOption,
-        repeatDays: updatedEvent.repeatDays,
-        repeatCustomDays: updatedEvent.repeatCustomDays,
-        isAllDay: updatedEvent.isAllDay,
-        reminder: updatedEvent.reminder,
-        repeatUntil: updatedEvent.repeatUntil,
-        parentEventId: updatedEvent.parentEventId,
+    try {
+      final choice = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            backgroundColor: Color(0xFFF5F5F5),
+            title: Text('반복 일정 수정'),
+            content: Text('어떤 일정을 수정하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('this'),
+                child: Text('이 일정만'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('thisAndFuture'),
+                child: Text('이 일정 및 향후 일정'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('all'),
+                child: Text('모든 반복 일정'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('취소'),
+              ),
+            ],
+          );
+        },
       );
 
-      widget.onSave(singleEvent); // 저장
+      if (choice == null) return;
 
-    } else if (choice == 'thisAndFuture') {
-      // 이 일정 및 향후 일정 모두 수정
-      if (widget.event?.parentEventId != null) {
-        final String? parentId = widget.event?.parentEventId ?? widget.event?.id;
-
-        if (parentId != null) { // 해당 일정 수정
-          final afterDate = updatedEvent.startDate;
-
-          final Event singleEvent = Event(
-            userId: updatedEvent.userId,
-            id: updatedEvent.id,
-            title: updatedEvent.title,
-            description: updatedEvent.description,
-            startDate: updatedEvent.startDate,
-            endDate: updatedEvent.endDate,
-            startTime: updatedEvent.startTime,
-            endTime: updatedEvent.endTime,
-            memo: updatedEvent.memo,
-            location: updatedEvent.location,
-            isRepeating: updatedEvent.isRepeating,
-            repeatOption: updatedEvent.repeatOption,
-            repeatDays: updatedEvent.repeatDays,
-            repeatCustomDays: updatedEvent.repeatCustomDays,
-            isAllDay: updatedEvent.isAllDay,
-            reminder: updatedEvent.reminder,
-            repeatUntil: updatedEvent.repeatUntil,
-            parentEventId: updatedEvent.parentEventId,
-          );
-
-          widget.onSave(singleEvent); // 해당 일정 저장
-
-          final querySnapshot = await FirebaseFirestore.instance // 해당 일정 이후 반복 일정 찾기
-              .collection('events')
-              .where('parentEventId', isEqualTo: parentId)
-              .get();
-
-          for (var doc in querySnapshot.docs) { // 각각 모두 수정
-            final data = doc.data();
-            final Timestamp startTimestamp = data['startDate'] as Timestamp;
-            final DateTime startDate = startTimestamp.toDate();
-            final Timestamp endTimestamp = data['endDate'] as Timestamp;
-            final DateTime endDate = endTimestamp.toDate();
-
-            if (!startDate.isBefore(afterDate)) { // 해당 일정 후의 일정일 경우
-              final Event Events = Event(
-                userId: updatedEvent.userId,
-                id: doc.id,
-                title: updatedEvent.title,
-                description: updatedEvent.description,
-                startDate: startDate,
-                endDate: endDate,
-                startTime: updatedEvent.startTime,
-                endTime: updatedEvent.endTime,
-                memo: updatedEvent.memo,
-                location: updatedEvent.location,
-                isRepeating: updatedEvent.isRepeating,
-                repeatOption: updatedEvent.repeatOption,
-                repeatDays: updatedEvent.repeatDays,
-                repeatCustomDays: updatedEvent.repeatCustomDays,
-                isAllDay: updatedEvent.isAllDay,
-                reminder: updatedEvent.reminder,
-                repeatUntil: updatedEvent.repeatUntil,
-                parentEventId: updatedEvent.parentEventId,
-              );
-              widget.onSave(Events); // 저장
-            }
-          }
-        }
+      switch (choice) {
+        case 'this':
+          await _updateSingleEvent(updatedEvent);
+          break;
+        case 'thisAndFuture':
+          await _updateThisAndFutureEvents(updatedEvent);
+          break;
+        case 'all':
+          await _updateAllRecurringEvents(updatedEvent);
+          break;
       }
-    } else if (choice == 'all') {
-      if (widget.event?.parentEventId != null) {
-        final String? parentId = widget.event?.parentEventId ?? widget.event?.id;
+    } catch (e) {
+      print('반복 이벤트 수정 중 오류: $e');
+      rethrow;
+    }
+  }
 
+// 단일 이벤트 수정
+  Future<void> _updateSingleEvent(Event updatedEvent) async {
+    widget.onSave(updatedEvent);
+  }
 
-        final querySnapshot = await FirebaseFirestore.instance // 해당 일정 이후 반복 일정 찾기
-            .collection('events')
-            .where('parentEventId', isEqualTo: parentId)
-            .get();
+// 이 일정 및 향후 일정 수정
+  Future<void> _updateThisAndFutureEvents(Event updatedEvent) async {
+    try {
+      // 현재 이벤트 수정
+      widget.onSave(updatedEvent);
 
-        for (var doc in querySnapshot.docs) { // 각각 모두 수정
-          final data = doc.data();
-          final Timestamp startTimestamp = data['startDate'] as Timestamp;
-          final DateTime startDate = startTimestamp.toDate();
-          final Timestamp endTimestamp = data['endDate'] as Timestamp;
-          final DateTime endDate = endTimestamp.toDate();
+      final String? parentId = updatedEvent.parentEventId ?? updatedEvent.id;
+      if (parentId == null) return;
 
-          final Event Events = Event(
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .where('parentEventId', isEqualTo: parentId)
+          .get();
+
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        final Timestamp startTimestamp = data['startDate'] as Timestamp;
+        final DateTime startDate = startTimestamp.toDate();
+        final Timestamp endTimestamp = data['endDate'] as Timestamp;
+        final DateTime endDate = endTimestamp.toDate();
+
+        if (!startDate.isBefore(updatedEvent.startDate)) {
+          final Event eventToUpdate = Event(
+            createdAt: updatedEvent.createdAt,
             userId: updatedEvent.userId,
             id: doc.id,
             title: updatedEvent.title,
@@ -750,12 +817,64 @@ class _EventDialogState extends State<EventDialog> {
             reminder: updatedEvent.reminder,
             repeatUntil: updatedEvent.repeatUntil,
             parentEventId: updatedEvent.parentEventId,
+            isLongTerm: updatedEvent.isLongTerm,
+            term: updatedEvent.term,
           );
-
-          widget.onSave(Events); // 저장
-          }
+          widget.onSave(eventToUpdate);
         }
+      }
+    } catch (e) {
+      print('향후 일정 수정 중 오류: $e');
+      rethrow;
+    }
+  }
 
+  // 모든 반복 일정 수정
+  Future<void> _updateAllRecurringEvents(Event updatedEvent) async {
+    try {
+      final String? parentId = updatedEvent.parentEventId ?? updatedEvent.id;
+      if (parentId == null) return;
+
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .where('parentEventId', isEqualTo: parentId)
+          .get();
+
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        final Timestamp startTimestamp = data['startDate'] as Timestamp;
+        final DateTime startDate = startTimestamp.toDate();
+        final Timestamp endTimestamp = data['endDate'] as Timestamp;
+        final DateTime endDate = endTimestamp.toDate();
+
+        final Event eventToUpdate = Event(
+          createdAt: updatedEvent.createdAt,
+          userId: updatedEvent.userId,
+          id: doc.id,
+          title: updatedEvent.title,
+          description: updatedEvent.description,
+          startDate: startDate,
+          endDate: endDate,
+          startTime: updatedEvent.startTime,
+          endTime: updatedEvent.endTime,
+          memo: updatedEvent.memo,
+          location: updatedEvent.location,
+          isRepeating: updatedEvent.isRepeating,
+          repeatOption: updatedEvent.repeatOption,
+          repeatDays: updatedEvent.repeatDays,
+          repeatCustomDays: updatedEvent.repeatCustomDays,
+          isAllDay: updatedEvent.isAllDay,
+          reminder: updatedEvent.reminder,
+          repeatUntil: updatedEvent.repeatUntil,
+          parentEventId: updatedEvent.parentEventId,
+          isLongTerm: updatedEvent.isLongTerm,
+          term: updatedEvent.term,
+        );
+        widget.onSave(eventToUpdate);
+      }
+    } catch (e) {
+      print('모든 반복 일정 수정 중 오류: $e');
+      rethrow;
     }
   }
 
@@ -1586,11 +1705,11 @@ class _EventDialogState extends State<EventDialog> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ElevatedButton(
-
-                              onPressed: _validateAndSave,
+                            if (widget.isEditing && widget.onDelete != null) ...[
+                              Expanded(child: ElevatedButton(
+                              onPressed: _deleteEvent,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple[300],
+                                backgroundColor: Colors.red[400],
                                 foregroundColor: Colors.white,
                                 padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                                 shape: RoundedRectangleBorder(
@@ -1599,19 +1718,21 @@ class _EventDialogState extends State<EventDialog> {
                                 elevation: 2,
                               ),
                               child: Text(
-                                '저장',
+                                '삭제',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ),
-                            if (widget.isEditing && widget.onDelete != null) ...[
-                              SizedBox(width: 15),
-                              ElevatedButton(
-                                onPressed: _deleteEvent,
+                              )
+                              )
+                             ],
+                            SizedBox(width: 16,),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _validateAndSave,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red[400],
+                                  backgroundColor: Colors.deepPurple[300],
                                   foregroundColor: Colors.white,
                                   padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                                   shape: RoundedRectangleBorder(
@@ -1620,19 +1741,16 @@ class _EventDialogState extends State<EventDialog> {
                                   elevation: 2,
                                 ),
                                 child: Text(
-                                  '삭제',
+                                  '저장',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-
                               ),
-                            ],
+                            ),
                           ],
                         ),
-
-
                       ),
                     ],
                   ),
@@ -1642,6 +1760,17 @@ class _EventDialogState extends State<EventDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Color getRandomColor(String seed) {
+    final hash = seed.hashCode;
+    final random = Random(hash);
+    return Color.fromARGB(
+      255,
+      100 + random.nextInt(156), // R: 100~255
+      100 + random.nextInt(156), // G: 100~255
+      100 + random.nextInt(156), // B: 100~255
     );
   }
 }

@@ -3,7 +3,7 @@ import '../models/diary_entry.dart';
 import '../utils/date_formatter.dart';
 import '../dialogs/diary_dialog.dart';
 
-class DiaryList extends StatelessWidget {
+class DiaryList extends StatefulWidget {
   final List<DiaryEntry> entries;
   final Function(DiaryEntry) onEditDiary;
   final Function(DiaryEntry) onDeleteDiary;
@@ -16,6 +16,13 @@ class DiaryList extends StatelessWidget {
     required this.onSaveDiary,
   });
 
+  @override
+  _DiaryListState createState() => _DiaryListState();
+}
+
+class _DiaryListState extends State<DiaryList> {
+  Set<int> _expandedCards = <int>{};
+
   void _showDiaryDialog(BuildContext context, DiaryEntry entry) {
     showDialog(
       context: context,
@@ -25,11 +32,20 @@ class DiaryList extends StatelessWidget {
         initialDate: entry.date,
         initialMood: entry.mood,
         initialContent: entry.content,
+        isEditing: true,
         onSave: ({required DateTime date, required MoodState mood, required String content, required String userId}) {
-          onSaveDiary(userId: entry.userId, date: date, mood: mood, content: content);
+          // 수정된 일기 객체 생성
+          final updatedEntry = DiaryEntry(
+            id: entry.id,
+            userId: entry.userId,
+            date: date,
+            content: content,
+            mood: mood,
+          );
+          widget.onEditDiary(updatedEntry);
         },
         onDelete: (diary) {
-          onDeleteDiary(diary);
+          widget.onDeleteDiary(diary);
         },
       ),
     );
@@ -37,118 +53,217 @@ class DiaryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) {
+    if (widget.entries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.book_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
             Text(
-              '작성된 일기가 없습니다.',
-              style: TextStyle(color: Colors.grey, fontSize: 16),
+              '아직 작성된 일기가 없어요',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '오늘의 기분과 생각을 기록해보세요',
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 14,
+              ),
             ),
           ],
         ),
       );
     }
 
-    return ListView.separated(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: entries.length,
-      separatorBuilder: (context, index) => SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return _buildDiaryCard(context, entry);
-      },
+    return Container(
+      color: Colors.grey[50], // 배경을 약간 회색으로
+      child: ListView.builder(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: widget.entries.length,
+        itemBuilder: (context, index) {
+          final entry = widget.entries[index];
+          final isLast = index == widget.entries.length - 1;
+          return _buildDiaryCard(context, entry, index, isLast);
+        },
+      ),
     );
   }
 
-  Widget _buildDiaryCard(BuildContext context, DiaryEntry entry) {
-    return InkWell(
-      onTap: () => _showDiaryDialog(context, entry),
-      borderRadius: BorderRadius.circular(16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 상단: 기분 원형 그라데이션 + 날짜
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      entry.mood.getGradientCircle(size: 24), // 새로운 기분 표시 방식
-                      SizedBox(width: 10),
-                      Text(
-                        DateFormatter.formatShortDate(entry.date),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    entry.mood.koreanName,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+  Widget _buildDiaryCard(BuildContext context, DiaryEntry entry, int index, bool isLast) {
+    final isExpanded = _expandedCards.contains(index);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+      child: GestureDetector(
+        onTap: () => _showDiaryDialog(context, entry),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white, // 카드 배경은 흰색으로
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 8,
+                offset: Offset(0, 2),
               ),
-              SizedBox(height: 10),
-              Divider(),
-              SizedBox(height: 10),
-              // 본문 내용: 그라데이션으로 흐리게 처리
-              Container(
-                width: double.infinity,
-                constraints: BoxConstraints(maxHeight: 100),
-                child: Stack(
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 헤더 (날짜, 요일, 기분)
+                Row(
                   children: [
+                    // 날짜와 요일 - 단순하게 변경
                     Text(
-                      entry.content,
+                      '${entry.date.month}월 ${entry.date.day}일',
                       style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.black87,
-                          height: 1.4
+                        fontSize: 20, // 크기 키움
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black, // 검은색으로
                       ),
-                      maxLines: 5,
-                      overflow: TextOverflow.fade,
                     ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withOpacity(0.0),
-                              Colors.white.withOpacity(0.9),
-                            ],
+                    SizedBox(width: 3),
+                    Text(
+                      _getWeekday(entry.date),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Spacer(),
+                    // 기분 상태
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: entry.mood.color,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: entry.mood.color.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
                           ),
+                        ],
+                      ),
+                      child: Text(
+                        entry.mood.koreanName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                SizedBox(height: 16),
+
+                // 일기 내용
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textPainter = TextPainter(
+                      text: TextSpan(
+                        text: entry.content,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.black87,
+                          height: 1.6,
+                        ),
+                      ),
+                      maxLines: 3,
+                      textDirection: TextDirection.ltr,
+                    );
+                    textPainter.layout(maxWidth: constraints.maxWidth);
+                    final shouldShowExpansion = textPainter.didExceedMaxLines;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedSize(
+                          duration: Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          child: Text(
+                            entry.content,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.black87,
+                              height: 1.6,
+                              letterSpacing: 0.3,
+                            ),
+                            maxLines: isExpanded ? null : 3,
+                            overflow: isExpanded ? null : TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        // 더보기/접기 버튼
+                        if (shouldShowExpansion) ...[
+                          SizedBox(height: 12),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (isExpanded) {
+                                  _expandedCards.remove(index);
+                                } else {
+                                  _expandedCards.add(index);
+                                }
+                              });
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.grey[300]!,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExpanded ? '접기' : '더보기',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[700],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    size: 18,
+                                    color: Colors.grey[700],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  String _getWeekday(DateTime date) {
+    final weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    return weekdays[date.weekday - 1];
   }
 }

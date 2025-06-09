@@ -17,11 +17,12 @@ class MoodChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4.0), // ✅ 좌우 간격 거의 없음
+      padding: const EdgeInsets.symmetric(horizontal: 0), // ✅ 좌우 간격 거의 없음
       child: Container(
+        width: double.infinity,
         decoration: BoxDecoration(
-          color: Color(0xFFFCFCFC), // ✅ 거의 흰색에 가까운 연한 배경
-          borderRadius: BorderRadius.circular(16), // ✅ 둥근 박스
+          color: Colors.white, // ✅ 거의 흰색에 가까운 연한 배경
+          borderRadius: BorderRadius.zero, // ✅ 둥근 박스
         ),
         padding: EdgeInsets.all(16),
         child: Column(

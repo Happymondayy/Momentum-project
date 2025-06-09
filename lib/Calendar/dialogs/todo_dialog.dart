@@ -1193,6 +1193,7 @@ class _TodoDialogState extends State<TodoDialog> {
       insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
       backgroundColor: Colors.white,
       elevation: 0,
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24.0),
       ),
@@ -1331,8 +1332,7 @@ class _TodoDialogState extends State<TodoDialog> {
                             // 기존 Todo가 있을 때만 삭제 버튼 표시
                             if (widget.isEditing &&
                                 widget.onDelete != null) ...[
-                              SizedBox(
-                                width: 120,
+                              Expanded(
                                 child: ElevatedButton(
                                   onPressed: _deleteTodo,
                                   style: ElevatedButton.styleFrom(
@@ -1348,10 +1348,9 @@ class _TodoDialogState extends State<TodoDialog> {
                                   child: const Text('삭제'),
                                 ),
                               ),
-                              const SizedBox(width: 16),
                             ],
-                            SizedBox(
-                              width: widget.isEditing ? 120 : 150,
+                            SizedBox(width: 16),
+                            Expanded(
                               child: ElevatedButton(
                                 onPressed: _validateAndSave,
                                 style: ElevatedButton.styleFrom(

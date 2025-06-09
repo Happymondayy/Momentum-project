@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/event.dart';
-import '../dialogs/event_dialog.dart';
+import 'dart:math';
 
 class EventCard extends StatelessWidget {
   final Event event;
@@ -26,27 +26,56 @@ class EventCard extends StatelessWidget {
     }
 
     return Card(
-      color: Color(0xFFF1F1FA),
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      elevation: 1,
+      color: Color(0xFFFFFFFF),
+      margin: EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero, // 네모
+      ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.grey.shade200,
-          child: Icon(Icons.event_note, color: Colors.grey),
+          radius: 6, // 작은 동그라미 (기본은 20)
+          backgroundColor: getRandomColor(
+              event.isLongTerm != '' ? event.isLongTerm : event.id
+          ),
         ),
-        title: Text(event.title),
-        subtitle: Text(timeText),
+        title: Text(
+            event.title,
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+            ),
+        ),
+        subtitle: Text(
+            timeText,
+            style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey
+            ),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (event.reminder != null)
-              Icon(Icons.notifications, color: Colors.amber, size: 14),
+              Icon(Icons.notifications, color: Colors.grey[400], size: 16),
             if (event.isRepeating)
-              Icon(Icons.repeat, color: Colors.blue, size: 14),
+              Icon(Icons.repeat, color: Colors.grey[400], size: 16),
           ],
         ),
         onTap: () => onMorePressed(), // ListTile 자체에 onTap 부여
       ),
+    );
+  }
+
+  Color getRandomColor(String seed) {
+    final hash = seed.hashCode;
+    final random = Random(hash);
+    return Color.fromARGB(
+      255,
+      100 + random.nextInt(156), // R: 100~255
+      100 + random.nextInt(156), // G: 100~255
+      100 + random.nextInt(156), // B: 100~255
     );
   }
 }
