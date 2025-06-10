@@ -126,37 +126,74 @@ class _CalendarScreenState extends State<CalendarScreen> {
         .where('userId', isEqualTo: _currentUserId)
         .snapshots()
         .listen((snapshot) {
+      print('=== Firebase 스냅샷 수신 ===');
+      print('문서 개수: ${snapshot.docs.length}');
+
       Map<DateTime, List<TodoItem>> todos = {};
 
-      for (var doc in snapshot.docs) {
+      for (int i = 0; i < snapshot.docs.length; i++) {
+        var doc = snapshot.docs[i];
+        print('\n--- 문서 ${i + 1}/${snapshot.docs.length} 처리 중 ---');
+        print('문서 ID: ${doc.id}');
+
         try {
           final data = doc.data();
+          print('전체 데이터: $data');
+
+          // 각 필드별 타입 체크
+          data.forEach((key, value) {
+            print('$key: $value (타입: ${value.runtimeType})');
+          });
 
           // null 체크 추가
-          if (data['date'] == null) continue;
+          if (data['date'] == null) {
+            print('날짜가 null이므로 건너뜀');
+            continue;
+          }
 
           final date = DateTime.parse(data['date']);
           final isRepeating = data['isRepeating'] ?? false;
 
+          print('파싱된 날짜: $date');
+          print('반복 여부: $isRepeating');
+
+          print('TodoItem 생성 시작...');
           final baseTodo = _createTodoFromData(data, doc.id, date);
+          print('TodoItem 생성 완료: ${baseTodo.title}');
+
           _addTodoToMap(todos, baseTodo);
 
           if (isRepeating) {
+            print('반복 투두 생성 시작...');
             final repeatTodos = _generateRepeatTodos(baseTodo, data);
+            print('반복 투두 개수: ${repeatTodos.length}');
             for (final repeatTodo in repeatTodos) {
               _addTodoToMap(todos, repeatTodo);
             }
           }
-        } catch (e) {
-          print('투두 로딩 오류: $e');
+
+          print('문서 처리 완료');
+
+        } catch (e, stackTrace) {
+          print('❌ 투두 로딩 오류: $e');
+          print('스택 트레이스: $stackTrace');
+          print('문제가 된 문서 ID: ${doc.id}');
+          print('문제가 된 데이터: ${doc.data()}');
           continue;
         }
       }
+
+      print('\n=== 최종 결과 ===');
+      print('총 날짜 개수: ${todos.length}');
+      todos.forEach((date, todoList) {
+        print('${date.toString()}: ${todoList.length}개 투두');
+      });
 
       if (mounted) {
         setState(() {
           _todoItems = todos;
         });
+        print('상태 업데이트 완료');
       }
     });
   }
@@ -205,7 +242,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   TodoItem _createTodoFromData(Map<String, dynamic> data, String docId, DateTime date) {
+    print('\n_createTodoFromData 시작');
+    print('문서 ID: $docId');
+    print('날짜: $date');
+
     try {
+      // 시간 파싱
+      print('시간 파싱 중...');
       final startTime = data['startTime'] != null
           ? TimeOfDay(
           hour: data['startTime']['hour'] ?? 0,
@@ -218,16 +261,60 @@ class _CalendarScreenState extends State<CalendarScreen> {
           minute: data['endTime']['minute'] ?? 0
       )
           : null;
+      print('시간 파싱 완료');
 
-      // 마감일 파싱 추가
+      // 마감일 파싱
+      print('마감일 파싱 중...');
       final dueDate = data['dueDate'] != null ? DateTime.parse(data['dueDate']) : null;
+      print('마감일 파싱 완료: $dueDate');
 
-      return TodoItem(
+      // repeatDays 안전하게 변환
+      print('repeatDays 처리 중...');
+      List<int>? repeatDaysList;
+      if (data['repeatDays'] != null) {
+        print('repeatDays 존재함');
+        print('repeatDays 타입: ${data['repeatDays'].runtimeType}');
+        print('repeatDays 값: ${data['repeatDays']}');
+
+        if (data['repeatDays'] is List) {
+          print('List로 인식됨');
+          final originalList = data['repeatDays'] as List;
+          print('원본 리스트 길이: ${originalList.length}');
+
+          repeatDaysList = [];
+          for (int i = 0; i < originalList.length; i++) {
+            final item = originalList[i];
+            print('인덱스 $i: $item (타입: ${item.runtimeType})');
+
+            if (item is int) {
+              repeatDaysList.add(item);
+              print('정수로 추가: $item');
+            } else {
+              final parsed = int.tryParse(item.toString());
+              if (parsed != null) {
+                repeatDaysList.add(parsed);
+                print('파싱하여 추가: $parsed');
+              } else {
+                print('파싱 실패, 0으로 추가');
+                repeatDaysList.add(0);
+              }
+            }
+          }
+          print('최종 repeatDaysList: $repeatDaysList');
+        } else {
+          print('List가 아닌 타입입니다');
+        }
+      } else {
+        print('repeatDays가 null입니다');
+      }
+
+      print('TodoItem 객체 생성 중...');
+      final todoItem = TodoItem(
         userId: data['userId'] ?? _currentUserId ?? '',
         id: docId,
         title: data['title'] ?? '제목 없음',
         date: date,
-        dueDate: dueDate, // 마감일 추가
+        dueDate: dueDate,
         startTime: startTime,
         endTime: endTime,
         importance: data['importance'] ?? 3,
@@ -236,21 +323,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
         location: data['location'] ?? '',
         isRepeating: data['isRepeating'] ?? false,
         repeatOption: data['repeatOption'],
-        repeatDays: data['repeatDays'] != null ? List<int>.from(data['repeatDays']) : null,
+        repeatDays: repeatDaysList,
         repeatCustomDays: data['repeatCustomDays'],
         isAllDay: data['isAllDay'] ?? false,
         reminder: data['reminder'],
         isCompleted: data['isCompleted'] ?? false,
       );
-    } catch (e) {
-      print('TodoItem 생성 오류: $e');
+
+      print('TodoItem 생성 성공: ${todoItem.title}');
+      return todoItem;
+
+    } catch (e, stackTrace) {
+      print('❌ _createTodoFromData 오류: $e');
+      print('스택 트레이스: $stackTrace');
+      print('오류 발생 데이터: $data');
+
       // 기본값으로 TodoItem 반환
       return TodoItem(
         userId: _currentUserId ?? '',
         id: docId,
-        title: '제목 없음',
+        title: '오류 발생 - 제목 없음',
         date: date,
-        dueDate: null, // 마감일 기본값
+        dueDate: null,
         startTime: null,
         endTime: null,
         importance: 3,

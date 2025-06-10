@@ -176,7 +176,7 @@ class _DiaryListState extends State<DiaryList> {
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.04),
-                          blurRadius: 8,
+                          blurRadius: 1,
                           offset: Offset(0, 2),
                         ),
                       ],

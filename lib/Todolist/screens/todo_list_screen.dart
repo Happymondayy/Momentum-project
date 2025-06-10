@@ -5,6 +5,8 @@ import '../../Planner/DailyPlannerPage.dart';
 import 'package:intl/intl.dart';
 import 'notification_service.dart';
 import 'package:collection/collection.dart';
+import 'package:momentum_planner/custom_calendar_picker.dart';
+import 'package:momentum_planner/time_picker_helper.dart';
 
 class Todo_Task {
   String id;
@@ -2362,7 +2364,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-// 선택적 시간 설정 UI 빌더
+  // 선택적 시간 설정 UI 빌더 (CustomTimePicker 사용)
   Widget _buildOptionalTimeSelector(
       BuildContext context,
       TimeOfDay? startTime,
@@ -2411,7 +2413,7 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-// 선택적 시간 선택기
+// 선택적 시간 선택기 (CustomTimePicker 사용)
   Widget _buildOptionalTimePicker(
       BuildContext context,
       TimeOfDay selectedTime,
@@ -2430,7 +2432,7 @@ class TodoListScreenState extends State<TodoListScreen> {
           ),
           child: InkWell(
             onTap: () async {
-              final TimeOfDay? picked = await showTimePicker(
+              final TimeOfDay? picked = await showCustomTimePicker(
                 context: context,
                 initialTime: selectedTime,
               );
@@ -2457,7 +2459,6 @@ class TodoListScreenState extends State<TodoListScreen> {
       ],
     );
   }
-
 // 1. showAddTaskDialog 함수의 폼 부분
   void showAddTaskDialog(BuildContext context) {
     DateTime taskDate = selectedDate;
@@ -2814,39 +2815,29 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  // 날짜 선택기 메서드
   Widget _buildDatePicker(BuildContext context, DateTime taskDate, Function(DateTime) onDatePicked) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('날짜', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-          child: InkWell(
-            onTap: () async {
-              final DateTime? picked = await showDatePicker(
-                context: context,
-                initialDate: taskDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
-              );
-              if (picked != null) {
-                onDatePicked(picked);
-              }
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('${taskDate.year}-${taskDate.month.toString().padLeft(2, '0')}-${taskDate.day.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 16)),
-                  const Icon(Icons.calendar_today, size: 20),
-                ],
-              ),
-            ),
-          ),
+        DateSelectorBox(
+          label: '',  // 이미 위에 '날짜' 라벨이 있으므로 빈 문자열
+          date: taskDate,
+          primaryColor: const Color(0xFF5E4DAE), // 원하는 색상으로 변경 가능
+          onTap: () async {
+            final DateTime? picked = await CalendarPickerUtils.showCalendarPicker(
+              context: context,
+              initialDate: taskDate,
+              minDate: DateTime(2020),
+              maxDate: DateTime(2030),
+              title: '날짜 선택',
+              primaryColor: const Color(0xFF5E4DAE), // 원하는 색상으로 변경 가능
+            );
+            if (picked != null) {
+              onDatePicked(picked);
+            }
+          },
         ),
       ],
     );
@@ -3093,14 +3084,19 @@ class TodoListScreenState extends State<TodoListScreen> {
         const Text('마감일', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8)
+          ),
           child: InkWell(
             onTap: () async {
-              final DateTime? picked = await showDatePicker(
+              final DateTime? picked = await CalendarPickerUtils.showCalendarPicker(
                 context: context,
                 initialDate: dueDate ?? DateTime.now(),
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
+                minDate: DateTime(2020),
+                maxDate: DateTime(2030),
+                title: '마감일 선택',
+                primaryColor: const Color(0xFF5E4DAE), // 원하는 색상으로 변경 가능
               );
               if (picked != null) {
                 onPicked(picked);
@@ -3114,7 +3110,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                 children: [
                   Text(
                     dueDate != null
-                        ? '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}'
+                        ? '${dueDate.year}년 ${dueDate.month}월 ${dueDate.day}일'
                         : '날짜를 선택하세요',
                     style: const TextStyle(fontSize: 16),
                   ),

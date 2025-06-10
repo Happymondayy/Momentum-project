@@ -120,7 +120,7 @@ class TodoItem {
 
   factory TodoItem.fromMap(Map<String, dynamic> map, String docId) {
     final date = DateTime.parse(map['date']);
-    final dueDate = map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null; // 마감일 파싱
+    final dueDate = map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null;
 
     final startTime = map['startTime'] != null
         ? TimeOfDay(hour: map['startTime']['hour'], minute: map['startTime']['minute'])
@@ -128,6 +128,16 @@ class TodoItem {
     final endTime = map['endTime'] != null
         ? TimeOfDay(hour: map['endTime']['hour'], minute: map['endTime']['minute'])
         : null;
+
+    // repeatDays 안전하게 변환
+    List<int>? repeatDaysList;
+    if (map['repeatDays'] != null) {
+      if (map['repeatDays'] is List) {
+        repeatDaysList = (map['repeatDays'] as List)
+            .map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
+            .toList();
+      }
+    }
 
     return TodoItem(
       userId: map['userId'],
@@ -142,12 +152,12 @@ class TodoItem {
       location: map['location'] ?? '',
       isRepeating: map['isRepeating'] ?? false,
       repeatOption: map['repeatOption'],
-      repeatDays: map['repeatDays'] != null ? List<int>.from(map['repeatDays']) : null,
+      repeatDays: repeatDaysList,
       repeatCustomDays: map['repeatCustomDays'],
       isAllDay: map['isAllDay'] ?? false,
       reminder: map['reminder'],
       isCompleted: map['isCompleted'] ?? false,
-      dueDate: dueDate, // 마감일 추가
+      dueDate: dueDate,
     );
   }
 
