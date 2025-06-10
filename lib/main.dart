@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:momentum_planner/AI/chat_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:momentum_planner/Calendar/screens/calendar_screen.dart';
@@ -129,54 +128,6 @@ class _MyAppState extends State<MyApp> {
               builder: (_) => CalendarScreen(
                 userId: userId,
               ),
-            );
-          case 'AI/ChatScreen':
-            return MaterialPageRoute(
-              settings: settings,
-              builder: (context) {
-                // ChatScreen에 필요한 데이터 및 콜백 준비
-                return FutureBuilder<Map<String, dynamic>>(
-                  future: _fetchUserData(userId),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Scaffold(
-                        body: Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
-
-                    if (snapshot.hasError) {
-                      return Scaffold(
-                        body: Center(
-                          child: Text('데이터 로드 오류: ${snapshot.error}'),
-                        ),
-                      );
-                    }
-
-                    final data = snapshot.data!;
-                    return ChatScreen(
-                      userId: userId,
-                      calendarData: data['calendarData'],
-                      todoData: data['todoData'],
-                      onEventAdded: (Map<String, dynamic> eventData) async {
-                        print('일정 추가됨: ${eventData['title']}');
-                        // 안전하게 pop 처리
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop({'refresh': true, 'returnToIndex': 1});
-                        }
-                      },
-                      onEventDeleted: (String eventId) async {
-                        print('일정 삭제됨: $eventId');
-                        // 안전하게 pop 처리
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop({'refresh': true, 'returnToIndex': 1});
-                        }
-                      },
-                    );
-                  },
-                );
-              },
             );
           case 'Diary/screens/diary_screen':
             return MaterialPageRoute(

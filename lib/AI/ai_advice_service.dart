@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../Todolist/screens/todo_list_screen.dart';
+import 'ai_scheduling_service.dart';
 
 class AIAdviceService {
 // 대신 가능한 URL 목록 정의:
@@ -15,10 +19,6 @@ class AIAdviceService {
 // API 엔드포인트 접미사 정의
   static const String geminiEndpointPath = "/gemini";
 
-  static String _apiKey = 'AIzaSyB3Gx-qcHLpyBNsuH4UQ-JKRSDeisoo5-c';
-
-  static String get _apiUrl =>
-      'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
 // getGeminiUrl() 헬퍼 메서드 추가
   static String getGeminiEndpoint(String baseUrl) {
@@ -40,6 +40,689 @@ class AIAdviceService {
       print('닉네임 로드 오류: $e');
       return '사용자';
     }
+  }
+
+  // lib/AI/ai_advice_service.dart - AI 모델 연동 개선
+
+// 1. AI 서버 연동 확인 및 개선
+  static Future<List<TaskRecommendation>?> _requestAIRecommendation(
+      List<Todo_Task> todoTasks,
+      List<Todo_Task> plannerTasks,
+      Map<String, dynamic> userContext) async {
+    try {
+      // 1. 서버 URL 및 엔드포인트 정확성 확인
+      final String aiServerUrl = 'https://railwavve-production-68d4.up.railway.app/ai_recommendation';
+
+      // 2. 사용자별 학습 데이터 포함
+      final userBehaviorData = await _getUserBehaviorHistory(
+          userContext['userId']);
+
+      // 3. 요청 데이터 구조 개선
+      final requestData = {
+        'userId': userContext['userId'],
+        'userContext': userContext,
+        'existingTasks': todoTasks
+            .map((task) => _convertTaskToApiFormat(task))
+            .toList(),
+        'plannerTasks': plannerTasks.map((task) =>
+            _convertTaskToApiFormat(task)).toList(),
+        'userBehaviorHistory': userBehaviorData,
+        'date': DateTime.now().toIso8601String().split('T')[0],
+        'requestType': 'contextual_recommendation',
+        'maxRecommendations': 5,
+        'preferences': {
+          'timeOfDay': userContext['preferredTimeOfDay'],
+          'workStyle': userContext['workStyle'] ?? 'balanced',
+          'focusLevel': userContext['focusLevel'] ?? 'medium',
+        }
+      };
+
+      print('=== AI 추천 요청 ===');
+      print('URL: $aiServerUrl');
+      print('요청 데이터: ${jsonEncode(requestData)}');
+
+      final response = await http.post(
+        Uri.parse(aiServerUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'MomentumPlanner/1.0',
+        },
+        body: jsonEncode(requestData),
+      ).timeout(Duration(seconds: 30));
+
+      print('응답 상태: ${response.statusCode}');
+      print('응답 내용: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        if (responseData['success'] == true &&
+            responseData['recommendations'] != null) {
+          final recommendations = responseData['recommendations'] as List;
+
+          return recommendations.map((rec) =>
+              TaskRecommendation(
+                taskId: rec['taskId']?.toString() ?? '',
+                taskTitle: rec['taskTitle']?.toString() ?? '',
+                recommendedTime: rec['recommendedTime']?.toString() ?? '09:00',
+                confidence: (rec['confidence'] as num?)?.toDouble() ?? 0.7,
+                reason: rec['reason']?.toString() ?? 'AI 분석 기반 맞춤 추천',
+              )).toList();
+        } else {
+          print('AI 서버 응답 오류: ${responseData['error'] ?? "알 수 없는 오류"}');
+          return null;
+        }
+      } else {
+        print('HTTP 오류: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('AI 추천 요청 실패: $e');
+      return null;
+    }
+  }
+
+// 2. 사용자 행동 히스토리 수집
+  static Future<Map<String, dynamic>> _getUserBehaviorHistory(String userId) async {
+    try {
+      // Firestore에서 사용자의 최근 행동 패턴 수집
+      final behaviorSnapshot = await FirebaseFirestore.instance
+          .collection('user_behavior_patterns')
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .get();
+
+      final behaviorData = {
+        'recentCompletions': <Map<String, dynamic>>[],
+        'timePreferences': <String, int>{},
+        'taskCategories': <String, int>{},
+        'completionRates': <String, double>{},
+      };
+
+      for (var doc in behaviorSnapshot.docs) {
+        final data = doc.data();
+
+        // 완료된 작업 추가
+        if (data['completionStatus'] == 'completed') {
+          (behaviorData['recentCompletions'] as List<Map<String, dynamic>>).add({
+            'taskType': data['taskType'],
+            'timeSlot': data['timeSlot'],
+            'importance': data['importance'],
+            'completionTime': data['actualEndTime']?.toDate()?.toIso8601String(),
+          });
+        }
+
+        // 시간 선호도 집계
+        final timeSlot = data['timeSlot']?.toString() ?? '9';
+        final timePreferences = behaviorData['timePreferences'] as Map<String, int>;
+        timePreferences[timeSlot] = (timePreferences[timeSlot] ?? 0) + 1;
+
+        // 작업 카테고리 집계
+        final taskType = data['taskType']?.toString() ?? 'general';
+        final taskCategories = behaviorData['taskCategories'] as Map<String, int>;
+        taskCategories[taskType] = (taskCategories[taskType] ?? 0) + 1;
+      }
+
+      return behaviorData;
+    } catch (e) {
+      print('사용자 행동 히스토리 수집 오류: $e');
+      return {
+        'recentCompletions': <Map<String, dynamic>>[],
+        'timePreferences': <String, int>{},
+        'taskCategories': <String, int>{},
+        'completionRates': <String, double>{},
+      };
+    }
+  }
+
+  // 3. Task를 API 형식으로 변환 (수정됨)
+  static Map<String, dynamic> _convertTaskToApiFormat(Todo_Task task) {
+    return {
+      'id': task.id,
+      'title': task.title,
+      'description': task.description ?? '',
+      'importance': task.importance,
+      'urgency': task.urgency,
+      'time': task.time,
+      'endTime': task.endTime,
+      'date': task.date.toIso8601String(),
+      'category': _inferTaskCategory(task.title),
+      'isCompleted': task.isCompleted,
+      'estimatedDuration': _estimateTaskDuration(task),
+      'dueDate': task.dueDate?.toIso8601String(),
+      'location': task.location,
+      'memo': task.memo,
+    };
+  }
+
+
+// 4. AI 모델 서버 상태 확인
+  static Future<bool> _checkAIServerStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://railwavve-production-68d4.up.railway.app/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(Duration(seconds: 10));
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('AI 서버 상태 확인 실패: $e');
+      return false;
+    }
+  }
+
+  static String _inferTaskCategory(String title) {
+    final lowerTitle = title.toLowerCase();
+
+    if (lowerTitle.contains('회의') || lowerTitle.contains('미팅') || lowerTitle.contains('meeting')) {
+      return 'meeting';
+    } else if (lowerTitle.contains('운동') || lowerTitle.contains('헬스') || lowerTitle.contains('조깅')) {
+      return 'exercise';
+    } else if (lowerTitle.contains('공부') || lowerTitle.contains('학습') || lowerTitle.contains('강의')) {
+      return 'study';
+    } else if (lowerTitle.contains('식사') || lowerTitle.contains('점심') || lowerTitle.contains('저녁')) {
+      return 'meal';
+    } else if (lowerTitle.contains('업무') || lowerTitle.contains('작업') || lowerTitle.contains('프로젝트')) {
+      return 'work';
+    } else if (lowerTitle.contains('병원') || lowerTitle.contains('의료') || lowerTitle.contains('검진')) {
+      return 'medical';
+    } else if (lowerTitle.contains('쇼핑') || lowerTitle.contains('구매') || lowerTitle.contains('마트')) {
+      return 'shopping';
+    } else if (lowerTitle.contains('개발') || lowerTitle.contains('코딩') || lowerTitle.contains('프로그래밍')) {
+      return 'development';
+    } else if (lowerTitle.contains('독서') || lowerTitle.contains('책') || lowerTitle.contains('reading')) {
+      return 'reading';
+    } else if (lowerTitle.contains('청소') || lowerTitle.contains('정리') || lowerTitle.contains('cleaning')) {
+      return 'household';
+    } else {
+      return 'general';
+    }
+  }
+
+// 태스크 소요시간 추정 함수
+  static int _estimateTaskDuration(Todo_Task task) {
+    // 기존 시간이 있으면 계산
+    if (task.time != null && task.endTime != null) {
+      try {
+        final start = _parseTimeToHour(task.time!);
+        final end = _parseTimeToHour(task.endTime!);
+        final duration = (end - start) * 60;
+        if (duration > 0) return duration;
+      } catch (e) {
+        print('시간 계산 오류: $e');
+      }
+    }
+
+    // 태스크 타입별 기본 소요시간 (분 단위)
+    final type = _inferTaskCategory(task.title);
+    final baseDurations = {
+      'meeting': 60,      // 회의 1시간
+      'exercise': 90,     // 운동 1.5시간
+      'study': 120,       // 공부 2시간
+      'development': 180, // 개발 3시간
+      'meal': 45,         // 식사 45분
+      'shopping': 90,     // 쇼핑 1.5시간
+      'household': 60,    // 집안일 1시간
+      'medical': 120,     // 병원 2시간
+      'work': 120,        // 업무 2시간
+      'reading': 60,      // 독서 1시간
+      'general': 60,      // 기본 1시간
+    };
+
+    int baseDuration = baseDurations[type] ?? 60;
+
+    // 중요도/긴급도에 따른 조정
+    final priorityMultiplier = (task.importance + task.urgency) / 8.0;
+    baseDuration = (baseDuration * priorityMultiplier).round();
+
+    // 메모 길이에 따른 조정 (복잡도 추정)
+    if (task.memo != null && task.memo!.length > 50) {
+      baseDuration = (baseDuration * 1.2).round();
+    }
+
+    return baseDuration.clamp(15, 480); // 최소 15분, 최대 8시간
+  }
+
+  static List<TaskRecommendation> _generateProductivityRecommendations(
+      Map<String, dynamic> analysis, double productivityScore) {
+    final recommendations = <TaskRecommendation>[];
+
+    if (productivityScore < 0.7) {
+      recommendations.add(TaskRecommendation(
+        taskId: 'productivity_boost',
+        taskTitle: '생산성 향상을 위한 환경 정리',
+        recommendedTime: '09:00',
+        confidence: 0.75,
+        reason: '낮은 생산성 개선을 위한 환경 최적화',
+      ));
+    }
+
+    final workload = analysis['workload'] as String? ?? 'medium';
+    if (workload == 'high') {
+      recommendations.add(TaskRecommendation(
+        taskId: 'priority_review',
+        taskTitle: '우선순위 재검토 및 조정',
+        recommendedTime: '10:00',
+        confidence: 0.8,
+        reason: '높은 작업량으로 인한 우선순위 조정 필요',
+      ));
+    }
+
+    return recommendations;
+  }
+
+  // 스트레스 관리 추천 함수
+  static List<TaskRecommendation> _generateStressManagementRecommendations(
+      int stressLevel, Map<String, dynamic> analysis) {
+    final recommendations = <TaskRecommendation>[];
+
+    if (stressLevel >= 4) {
+      recommendations.add(TaskRecommendation(
+        taskId: 'stress_relief',
+        taskTitle: '스트레스 해소 활동',
+        recommendedTime: '15:00',
+        confidence: 0.9,
+        reason: '높은 스트레스 레벨로 인한 휴식 필요',
+      ));
+    }
+
+    final taskComplexity = (analysis['taskComplexity'] as num?)?.toDouble() ?? 0.0;
+    if (taskComplexity > 0.7) {
+      recommendations.add(TaskRecommendation(
+        taskId: 'break_planning',
+        taskTitle: '충분한 휴식 시간 확보',
+        recommendedTime: '12:00',
+        confidence: 0.8,
+        reason: '복잡한 작업들로 인한 휴식 필요',
+      ));
+    }
+
+    return recommendations;
+  }
+
+// 시간 파싱 함수
+  static int _parseTimeToHour(String timeString) {
+    try {
+      // "AM 09:00" 형식 처리
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        final isAM = timeString.contains('AM');
+        final timePart = timeString.replaceAll('AM', '').replaceAll('PM', '').trim();
+
+        int hour;
+        if (timePart.contains(':')) {
+          hour = int.parse(timePart.split(':')[0].trim());
+        } else {
+          hour = int.parse(timePart);
+        }
+
+        // 12시간제를 24시간제로 변환
+        if (!isAM && hour != 12) {
+          hour += 12;
+        } else if (isAM && hour == 12) {
+          hour = 0;
+        }
+
+        return hour;
+      }
+
+      // "HH:mm" 형식 처리
+      if (timeString.contains(':')) {
+        return int.parse(timeString.split(':')[0]);
+      }
+
+      // 숫자만 있는 경우
+      return int.parse(timeString);
+    } catch (e) {
+      print('시간 파싱 오류: $e');
+      return 9; // 기본값
+    }
+  }
+
+// 5. 개선된 generateContextualRecommendations 함수
+  static Future<List<TaskRecommendation>> generateContextualRecommendations({
+    required List<Todo_Task> existingTasks,
+    required Map<String, dynamic> userContext,
+    int maxRecommendations = 5,
+  }) async {
+    print('=== AI 맞춤 추천 생성 시작 ===');
+
+    // 1. AI 서버 상태 확인
+    final isAIAvailable = await _checkAIServerStatus();
+    print('AI 서버 상태: ${isAIAvailable ? "사용 가능" : "사용 불가"}');
+
+    List<TaskRecommendation> recommendations = [];
+
+    if (isAIAvailable) {
+      // 2. AI 모델 사용
+      try {
+        final aiRecommendations = await _requestAIRecommendation(
+            existingTasks,
+            [], // planner tasks
+            userContext
+        );
+
+        if (aiRecommendations != null && aiRecommendations.isNotEmpty) {
+          recommendations = aiRecommendations;
+          print('✅ AI 모델 추천 성공: ${recommendations.length}개');
+        } else {
+          print('⚠️ AI 모델 추천 실패 - 폴백 모드 사용');
+          recommendations = _generateIntelligentFallbackRecommendations(
+              existingTasks, userContext, maxRecommendations
+          );
+        }
+      } catch (e) {
+        print('❌ AI 모델 사용 중 오류: $e');
+        recommendations = _generateIntelligentFallbackRecommendations(
+            existingTasks, userContext, maxRecommendations
+        );
+      }
+    } else {
+      // 3. AI 서버 불가능 시 향상된 규칙 기반 추천
+      print('🔧 향상된 규칙 기반 추천 사용');
+      recommendations = _generateIntelligentFallbackRecommendations(
+          existingTasks, userContext, maxRecommendations
+      );
+    }
+
+    print('=== 최종 추천 결과: ${recommendations.length}개 ===');
+    return recommendations;
+  }
+// 6. 향상된 규칙 기반 추천 (AI 모델 스타일) - 수정됨
+  static List<TaskRecommendation> _generateIntelligentFallbackRecommendations(
+      List<Todo_Task> existingTasks,
+      Map<String, dynamic> userContext,
+      int maxRecommendations) {
+    final recommendations = <TaskRecommendation>[];
+    final occupiedHours = <int>{};
+
+    // 기존 일정 시간 수집
+    for (var task in existingTasks) {
+      if (task.time != null) {
+        try {
+          final hour = _parseTimeToHour(task.time!);
+          occupiedHours.add(hour);
+        } catch (e) {
+          // 파싱 실패 시 무시
+        }
+      }
+    }
+
+    // 사용자 컨텍스트 분석 - 안전한 타입 변환
+    final preferredTimesList = userContext['preferredTimeOfDay'];
+    List<String> preferredTimes = [];
+    if (preferredTimesList is List) {
+      preferredTimes = preferredTimesList.map((e) => e.toString()).toList();
+    } else if (preferredTimesList is String) {
+      preferredTimes = [preferredTimesList];
+    } else {
+      preferredTimes = ['아침']; // 기본값
+    }
+
+    final productivityScore = (userContext['productivityScore'] as num?)?.toDouble() ?? 0.75;
+    final stressLevel = (userContext['stressLevel'] as num?)?.toInt() ?? 3;
+
+    // 작업 분석
+    final taskAnalysis = _analyzeExistingTasksAdvanced(existingTasks);
+
+    // 스마트 추천 생성
+    final smartRecommendations = [
+      // 1. 시간 기반 추천
+      ..._generateTimeBasedRecommendations(occupiedHours, preferredTimes),
+
+      // 2. 생산성 기반 추천
+      ..._generateProductivityRecommendations(taskAnalysis, productivityScore),
+
+      // 3. 스트레스 관리 추천
+      ..._generateStressManagementRecommendations(stressLevel, taskAnalysis),
+
+      // 4. 작업 연관성 기반 추천
+      ..._generateTaskRelatedRecommendations(existingTasks),
+
+      // 5. 개인화 추천
+      ..._generatePersonalizedRecommendations(userContext),
+    ];
+
+    // 신뢰도 기반 정렬 및 시간 할당
+    smartRecommendations.sort((a, b) => b.confidence.compareTo(a.confidence));
+
+    for (int i = 0; i < min(maxRecommendations, smartRecommendations.length); i++) {
+      final rec = smartRecommendations[i];
+      final optimalTime = _findOptimalTimeSlot(occupiedHours, rec, preferredTimes);
+
+      recommendations.add(TaskRecommendation(
+        taskId: 'smart_${i}',
+        taskTitle: rec.taskTitle,
+        recommendedTime: optimalTime,
+        confidence: rec.confidence,
+        reason: rec.reason,
+      ));
+
+      // 시간 점유 표시
+      try {
+        occupiedHours.add(int.parse(optimalTime.split(':')[0]));
+      } catch (e) {
+        // 파싱 실패 시 무시
+      }
+    }
+
+    return recommendations;
+  }
+
+
+// 7. 고급 작업 분석
+  static Map<String, dynamic> _analyzeExistingTasksAdvanced(
+      List<Todo_Task> tasks) {
+    final analysis = <String, dynamic>{
+      'categories': <String, int>{},
+      'importanceDistribution': <int>[0, 0, 0, 0, 0], // 1-5
+      'urgencyDistribution': <int>[0, 0, 0, 0, 0], // 1-5
+      'timePatterns': <int, int>{},
+      'taskComplexity': 0.0,
+      'workload': 'medium',
+    };
+
+    int totalImportance = 0;
+    int totalUrgency = 0;
+
+    for (var task in tasks) {
+      // 카테고리 분석
+      final category = _inferTaskCategory(task.title);
+      analysis['categories'][category] =
+          (analysis['categories'][category] ?? 0) + 1;
+
+      // 중요도/긴급도 분석
+      final importance = task.importance.clamp(1, 5);
+      final urgency = task.urgency.clamp(1, 5);
+
+      analysis['importanceDistribution'][importance - 1]++;
+      analysis['urgencyDistribution'][urgency - 1]++;
+
+      totalImportance += importance;
+      totalUrgency += urgency;
+
+      // 시간 패턴 분석
+      if (task.time != null) {
+        try {
+          final hour = _parseTimeToHour(task.time!);
+          analysis['timePatterns'][hour] =
+              (analysis['timePatterns'][hour] ?? 0) + 1;
+        } catch (e) {
+          // 파싱 실패 시 무시
+        }
+      }
+    }
+
+    // 복잡도 계산
+    if (tasks.isNotEmpty) {
+      final avgImportance = totalImportance / tasks.length;
+      final avgUrgency = totalUrgency / tasks.length;
+      analysis['taskComplexity'] = (avgImportance + avgUrgency) / 10.0;
+
+      // 작업량 평가
+      if (tasks.length >= 8 || (avgImportance + avgUrgency) >= 8) {
+        analysis['workload'] = 'high';
+      } else if (tasks.length <= 3 || (avgImportance + avgUrgency) <= 4) {
+        analysis['workload'] = 'low';
+      }
+    }
+
+    return analysis;
+  }
+
+  // 8. 추천 생성 함수들 - 수정됨
+  static List<TaskRecommendation> _generateTimeBasedRecommendations(
+      Set<int> occupiedHours, List<String> preferredTimes) {
+    final recommendations = <TaskRecommendation>[];
+
+    // 긴 공백 시간 감지
+    final gaps = _findTimeGaps(occupiedHours);
+    for (var gap in gaps) {
+      final duration = gap['duration'];
+      final start = gap['start'];
+      if (duration != null && start != null && duration >= 2) {
+        recommendations.add(TaskRecommendation(
+          taskId: 'time_gap_${start}',
+          taskTitle: '휴식 및 에너지 충전',
+          recommendedTime: '${start.toString().padLeft(2, '0')}:00',
+          confidence: 0.8,
+          reason: '긴 공백 시간을 활용한 휴식 추천',
+        ));
+      }
+    }
+
+    // 선호 시간대 활용
+    final morningPreferred = preferredTimes.contains('아침');
+    if (morningPreferred && !occupiedHours.contains(8)) {
+      recommendations.add(TaskRecommendation(
+        taskId: 'morning_routine',
+        taskTitle: '아침 루틴 및 하루 계획',
+        recommendedTime: '08:00',
+        confidence: 0.85,
+        reason: '아침 선호도 기반 루틴 추천',
+      ));
+    }
+
+    return recommendations;
+  }
+
+  static List<TaskRecommendation> _generateTaskRelatedRecommendations(
+      List<Todo_Task> tasks) {
+    final recommendations = <TaskRecommendation>[];
+
+    for (var task in tasks) {
+      final title = task.title.toLowerCase();
+
+      // 회의 관련
+      if (title.contains('회의') || title.contains('미팅')) {
+        recommendations.add(TaskRecommendation(
+          taskId: 'meeting_prep_${task.id}',
+          taskTitle: '${task.title} 사전 준비',
+          recommendedTime: '09:00',
+          confidence: 0.85,
+          reason: '회의 효율성 향상을 위한 사전 준비',
+        ));
+      }
+
+      // 발표 관련
+      if (title.contains('발표') || title.contains('프레젠테이션')) {
+        recommendations.add(TaskRecommendation(
+          taskId: 'presentation_prep_${task.id}',
+          taskTitle: '발표 자료 최종 점검',
+          recommendedTime: '10:00',
+          confidence: 0.9,
+          reason: '성공적인 발표를 위한 사전 점검',
+        ));
+      }
+    }
+
+    return recommendations;
+  }
+
+  static List<TaskRecommendation> _generatePersonalizedRecommendations(
+      Map<String, dynamic> userContext) {
+    final recommendations = <TaskRecommendation>[];
+
+    final recentCompletionRate = userContext['recentCompletionRate'] as double? ??
+        0.8;
+
+    if (recentCompletionRate < 0.6) {
+      recommendations.add(TaskRecommendation(
+        taskId: 'goal_adjustment',
+        taskTitle: '목표 재설정 및 동기 부여',
+        recommendedTime: '18:00',
+        confidence: 0.8,
+        reason: '낮은 완료율 개선을 위한 목표 조정',
+      ));
+    }
+
+    return recommendations;
+  }
+
+  // 9. 헬퍼 함수들
+  static List<Map<String, int>> _findTimeGaps(Set<int> occupiedHours) {
+    final gaps = <Map<String, int>>[];
+    final sortedHours = occupiedHours.toList()..sort();
+
+    for (int i = 0; i < sortedHours.length - 1; i++) {
+      final gap = sortedHours[i + 1] - sortedHours[i] - 1;
+      if (gap > 0) {
+        gaps.add({
+          'start': sortedHours[i] + 1,
+          'duration': gap,
+        });
+      }
+    }
+
+    return gaps;
+  }
+
+
+  static String _findOptimalTimeSlot(Set<int> occupiedHours,
+      TaskRecommendation rec, List<String> preferredTimes) {
+    // 선호 시간대 정의
+    final morningHours = [8, 9, 10, 11];
+    final afternoonHours = [13, 14, 15, 16];
+    final eveningHours = [17, 18, 19, 20];
+
+    List<int> candidateHours = [];
+
+    // 선호 시간대부터 확인
+    for (var timePreference in preferredTimes) {
+      switch (timePreference) {
+        case '아침':
+          candidateHours.addAll(morningHours);
+          break;
+        case '오후':
+          candidateHours.addAll(afternoonHours);
+          break;
+        case '저녁':
+          candidateHours.addAll(eveningHours);
+          break;
+      }
+    }
+
+    // 중복 제거 및 정렬
+    candidateHours = candidateHours.toSet().toList()
+      ..sort();
+
+    // 비어있는 시간 찾기
+    for (var hour in candidateHours) {
+      if (!occupiedHours.contains(hour)) {
+        return '${hour.toString().padLeft(2, '0')}:00';
+      }
+    }
+
+    // 선호 시간대에 없으면 전체 시간에서 찾기
+    for (int hour = 8; hour <= 20; hour++) {
+      if (!occupiedHours.contains(hour)) {
+        return '${hour.toString().padLeft(2, '0')}:00';
+      }
+    }
+
+    // 모든 시간이 차있으면 기본값
+    return '18:00';
   }
 
   // 추천 옵션 카테고리 생성
@@ -2461,3 +3144,4 @@ class AIAdviceService {
     };
   }
 }
+

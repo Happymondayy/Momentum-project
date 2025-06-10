@@ -293,62 +293,131 @@ class ProgressScreen extends StatelessWidget {
         children: [
           const Text('Your Progress Now',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 10),
-          _buildProgressBar(
-              context, progressPercentage, completedTasks, totalTasks),
+          const SizedBox(height: 15),
+          // 진행률 바와 완료 표시
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Container(
+                              height: 10,
+                              width: constraints.maxWidth * (progressPercentage / 100),
+                              decoration: BoxDecoration(
+                                color: progressPercentage == 100
+                                    ? const Color(0xFFD1B3F3) // 100% 완료시: 진한 파스텔 보라색
+                                    : const Color(0xFFECDBF9), // 진행중: 연한 파스텔 보라색
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${progressPercentage.toStringAsFixed(1)}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$completedTasks/$totalTasks Tasks Complete',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  if (progressPercentage == 100)
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '🎉 완료!',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
-
-  Widget _buildProgressBar(BuildContext context, double progressPercentage,
-      int completedTasks, int totalTasks) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: Stack(
-                children: [
-                  Container(
-                    height: 10,
-                    decoration: BoxDecoration(color: Colors.white,
-                        borderRadius: BorderRadius.circular(5)),
-                  ),
-                  Container(
-                    height: 10,
-                    width: MediaQuery
-                        .of(context)
-                        .size
-                        .width * (progressPercentage / 100) * 0.7,
-                    decoration: BoxDecoration(
-                      color: progressPercentage == 100
-                          ? const Color(0xFFD1B3F3) // ✅ 파스텔 연보라색
-                          : const Color(0xFFECDBF9), // 기본 진행색
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 15),
-            Text(
-              '${progressPercentage.toStringAsFixed(1)}%',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '$completedTasks/$totalTasks Task Complete',
-          style: const TextStyle(fontSize: 13, color: Colors.black),
-        ),
-      ],
-    );
-  }
 }
+Widget _buildProgressBar(BuildContext context, double progressPercentage,
+    int completedTasks, int totalTasks) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Stack(
+              children: [
+                Container(
+                  height: 10,
+                  decoration: BoxDecoration(color: Colors.white,
+                      borderRadius: BorderRadius.circular(5)),
+                ),
+                Container(
+                  height: 10,
+                  width: MediaQuery
+                      .of(context)
+                      .size
+                      .width * (progressPercentage / 100) * 0.7,
+                  decoration: BoxDecoration(
+                    color: progressPercentage == 100
+                        ? const Color(0xFFD1B3F3) // ✅ 파스텔 연보라색
+                        : const Color(0xFFECDBF9), // 기본 진행색
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 15),
+          Text(
+            '${progressPercentage.toStringAsFixed(1)}%',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      Text(
+        '$completedTasks/$totalTasks Task Complete',
+        style: const TextStyle(fontSize: 13, color: Colors.black),
+      ),
+    ],
+  );
+}
+
+
 
 // 월 선택기 위젯
 class MonthSelector extends StatelessWidget {
@@ -600,6 +669,7 @@ class TodoListScreen extends StatefulWidget {
   final Function(TodoListScreenState)? onStateCreated;
   final Function()? onTaskStatusChanged;
   final dynamic taskDataService;
+  final double? progressPercentage;
 
   const TodoListScreen({
     Key? key,
@@ -608,6 +678,7 @@ class TodoListScreen extends StatefulWidget {
     this.onStateCreated,
     this.onTaskStatusChanged,
     this.taskDataService,
+    this.progressPercentage,
   }) : super(key: key);
 
   @override
@@ -622,10 +693,10 @@ class TodoListScreenState extends State<TodoListScreen> {
   final NotificationService _notificationService = NotificationService();
   @override
   void dispose() {
-  titleController.dispose();
-  memoController.dispose();
-  locationController.dispose();
-  super.dispose();
+    titleController.dispose();
+    memoController.dispose();
+    locationController.dispose();
+    super.dispose();
   }
 
   late DateTime selectedDate;
@@ -664,12 +735,35 @@ class TodoListScreenState extends State<TodoListScreen> {
     });
   }
 
+  // 수정된 진행률 계산 함수
   void calculateProgress() {
-
     if (!mounted) return;
+
     setState(() {
-      progressPercentage = _taskDataService.calculateCombinedProgressForDate(selectedDate);
+      // 외부에서 진행률을 받는 경우 (플래너에서 임베딩된 경우)
+      if (widget.progressPercentage != null) {
+        progressPercentage = widget.progressPercentage!;
+      } else {
+        // 독립적인 투두리스트 화면인 경우 투두 진행률만 계산
+        final todoTasks = getTasksForSelectedDate();
+        if (todoTasks.isEmpty) {
+          progressPercentage = 0.0;
+        } else {
+          final completedTasks = todoTasks.where((task) => task.isCompleted).length;
+          progressPercentage = (completedTasks / todoTasks.length) * 100;
+        }
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant TodoListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // 외부 진행률이 변경된 경우 업데이트
+    if (widget.progressPercentage != oldWidget.progressPercentage) {
+      calculateProgress();
+    }
   }
 
   void _scheduleNotificationsForTask(Todo_Task task) {
@@ -745,6 +839,8 @@ class TodoListScreenState extends State<TodoListScreen> {
         child: tasksForSelectedDate.isEmpty
             ? _buildEmptyState('오늘 할 일이 없습니다')
             : ListView.builder(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
           itemCount: tasksForSelectedDate.length,
           itemBuilder: (context, index) {
             return _buildTaskItem(tasksForSelectedDate[index]);
@@ -756,24 +852,41 @@ class TodoListScreenState extends State<TodoListScreen> {
         appBar: AppBar(
           title: const Text('Todo List'),
         ),
-        body: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDateHeader(),
-                _buildProgressSection(tasksForSelectedDate),
-                const SizedBox(height: 10),
-                _buildTodoSectionHeader(
-                  isSameDay(selectedDate, DateTime.now())
-                      ? 'My Today Tasks'
-                      : 'Tasks for ${selectedDate.month}/${selectedDate.day}',
-                ),
-                _buildTodoList(context, tasks: tasksForSelectedDate),
-              ],
+        body: Column(
+          children: [
+            // 고정된 상단 부분
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDateHeader(),
+                  _buildProgressSection(tasksForSelectedDate),
+                  const SizedBox(height: 10),
+                  _buildTodoSectionHeader(
+                    isSameDay(selectedDate, DateTime.now())
+                        ? 'My Today Tasks'
+                        : 'Tasks for ${selectedDate.month}/${selectedDate.day}',
+                  ),
+                ],
+              ),
             ),
-          ),
+            // 스크롤 가능한 태스크 리스트 부분
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: tasksForSelectedDate.isEmpty
+                    ? _buildEmptyState('오늘 할 일이 없습니다')
+                    : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 80), // FloatingActionButton 공간 확보
+                  itemCount: tasksForSelectedDate.length,
+                  itemBuilder: (context, index) {
+                    return _buildTaskItem(tasksForSelectedDate[index]);
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
@@ -839,34 +952,73 @@ class TodoListScreenState extends State<TodoListScreen> {
       return taskDate;
     }
 
-    // Parse "AM 09:30" or "PM 03:45" format
-    final isAM = timeString.startsWith('AM');
-    final timeParts = timeString.substring(3).split(':');
-
-    if (timeParts.length != 2) return taskDate;
-
     try {
-      int hour = int.parse(timeParts[0].trim());
-      int minute = int.parse(timeParts[1].trim());
+      // "AM 09" 또는 "PM 03" 형식 처리 (분이 없는 경우)
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        final isAM = timeString.contains('AM');
+        final timePart = timeString.replaceAll('AM', '').replaceAll('PM', '').trim();
 
-      // Convert 12-hour format to 24-hour
-      if (!isAM && hour < 12) {
-        hour += 12;
-      }
-      // Convert 12 AM to 0 hours
-      if (isAM && hour == 12) {
-        hour = 0;
+        // ":"이 있는 경우와 없는 경우 모두 처리
+        int hour = 0;
+        int minute = 0;
+
+        if (timePart.contains(':')) {
+          final parts = timePart.split(':');
+          hour = int.parse(parts[0].trim());
+          minute = int.parse(parts[1].trim());
+        } else {
+          // "AM 09" 형식 (분이 없는 경우)
+          hour = int.parse(timePart);
+          minute = 0;
+        }
+
+        // 12시간제를 24시간제로 변환
+        if (!isAM && hour < 12) {
+          hour += 12;
+        } else if (isAM && hour == 12) {
+          hour = 0;
+        }
+
+        return DateTime(
+          taskDate.year,
+          taskDate.month,
+          taskDate.day,
+          hour,
+          minute,
+        );
       }
 
-      return DateTime(
-        taskDate.year,
-        taskDate.month,
-        taskDate.day,
-        hour,
-        minute,
-      );
+      // "HH:mm" 형식 처리 (24시간)
+      if (timeString.contains(':')) {
+        final parts = timeString.split(':');
+        if (parts.length == 2) {
+          final hour = int.parse(parts[0].trim());
+          final minute = int.parse(parts[1].trim());
+          return DateTime(
+            taskDate.year,
+            taskDate.month,
+            taskDate.day,
+            hour,
+            minute,
+          );
+        }
+      }
+
+      // 숫자만 있는 경우 (예: "14")
+      final hourOnly = int.tryParse(timeString.trim());
+      if (hourOnly != null) {
+        return DateTime(
+          taskDate.year,
+          taskDate.month,
+          taskDate.day,
+          hourOnly,
+          0,
+        );
+      }
+
+      return taskDate;
     } catch (e) {
-      print('Error parsing time: $e');
+      print('시간 파싱 오류: $e (입력: $timeString)');
       return taskDate;
     }
   }
@@ -898,6 +1050,7 @@ class TodoListScreenState extends State<TodoListScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start, // 상단 정렬로 변경
                 children: [
                   // 체크박스
                   Transform.scale(
@@ -916,6 +1069,21 @@ class TodoListScreenState extends State<TodoListScreen> {
                             widget.onTaskStatusChanged!();
                           }
                         });
+
+                        // ✅ Firestore에 변경사항 저장 추가
+                        try {
+                          await _taskDataService.updateTaskInFirestore(task);
+                          print('태스크 완료 상태가 Firestore에 저장됨: ${task.title} - ${task.isCompleted}');
+                        } catch (e) {
+                          print('Firestore 업데이트 오류: $e');
+                          // 오류 발생 시 상태 되돌리기
+                          setState(() {
+                            task.isCompleted = !task.isCompleted;
+                            calculateProgress();
+                          });
+                          _showSnackBar(context, '저장 중 오류가 발생했습니다');
+                        }
+
                         if (value == true) {
                           await _notificationService.showTaskCompletedNotification(task.title);
                         }
@@ -927,15 +1095,17 @@ class TodoListScreenState extends State<TodoListScreen> {
                   ),
                   const SizedBox(width: 8),
 
-                  // 제목과 날짜 열
+                  // 제목과 날짜 열 - Expanded로 감싸서 남은 공간 모두 사용
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 제목과 반복 아이콘
+                        // 제목과 반복 아이콘 - 더 유연한 레이아웃
                         Row(
                           children: [
-                            Expanded(
+                            // 제목 - Flexible로 감싸서 긴 제목 처리
+                            Flexible(
+                              flex: 3,
                               child: Text(
                                 task.title,
                                 style: TextStyle(
@@ -946,31 +1116,39 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       ? TextDecoration.lineThrough
                                       : TextDecoration.none,
                                 ),
+                                overflow: TextOverflow.ellipsis, // 긴 제목 처리
+                                maxLines: 2, // 최대 2줄까지 표시
                               ),
                             ),
-                            // 반복 아이콘 표시
+                            // 반복 아이콘 표시 - 공간이 있을 때만 표시
                             if (task.isRepeating) ...[
                               const SizedBox(width: 8),
-                              Container(
-                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.repeat, size: 12, color: Colors.blue.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      _getRepeatText(task.repeatOption),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.blue.shade700,
-                                        fontWeight: FontWeight.w500,
+                              Flexible(
+                                flex: 1,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.repeat, size: 12, color: Colors.blue.shade700),
+                                      const SizedBox(width: 2),
+                                      Flexible(
+                                        child: Text(
+                                          _getRepeatText(task.repeatOption),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.blue.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -978,8 +1156,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                         ),
                         const SizedBox(height: 4),
 
-                        // 날짜와 시간
-                        Row(
+                        // 날짜와 시간 - 긴 텍스트 처리
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               DateFormat('MMM d').format(task.date),
@@ -1021,19 +1200,19 @@ class TodoListScreenState extends State<TodoListScreen> {
                     ),
                   ),
 
-                  // 상태 표시기
+                  // 상태 표시기 - 완료 상태일 때만 표시
                   if (task.isCompleted)
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.green.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        'Completed',
+                        'Done',
                         style: TextStyle(
                           color: Colors.green.shade700,
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -1041,81 +1220,89 @@ class TodoListScreenState extends State<TodoListScreen> {
                 ],
               ),
 
-              // 중요도와 긴급도 표시 (메모 전에 추가)
+              // 중요도와 긴급도 표시 - Wrap으로 변경하여 화면 넘침 방지
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  const SizedBox(width: 24),
-                  // 중요도 표시
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _getImportanceColor(task.importance),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.star, size: 12, color: Colors.white),
-                        const SizedBox(width: 2),
-                        Text(
-                          '중요도 ${task.importance}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+              Padding(
+                padding: const EdgeInsets.only(left: 48), // 체크박스 위치에 맞춰 들여쓰기
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    // 중요도 표시
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _getImportanceColor(task.importance),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.star, size: 12, color: Colors.white),
+                          const SizedBox(width: 2),
+                          Text(
+                            '중요도 ${task.importance}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  // 긴급도 표시
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _getUrgencyColor(task.urgency),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.schedule, size: 12, color: Colors.white),
-                        const SizedBox(width: 2),
-                        Text(
-                          '긴급도 ${task.urgency}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+                    // 긴급도 표시
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _getUrgencyColor(task.urgency),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.schedule, size: 12, color: Colors.white),
+                          const SizedBox(width: 2),
+                          Text(
+                            '긴급도 ${task.urgency}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               // 마감일이 있는 경우
               if (task.dueDate != null) ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    Icon(Icons.calendar_today, size: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.deepOrange),
-                    const SizedBox(width: 4),
-                    Text(
-                      '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.deepOrange,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+                Padding(
+                  padding: const EdgeInsets.only(left: 48),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 14,
+                          color: task.isCompleted ? Colors.grey : Colors.deepOrange),
+                      const SizedBox(width: 4),
+                      Expanded( // 긴 날짜 텍스트 처리
+                        child: Text(
+                          '마감일: ${DateFormat('yyyy-MM-dd').format(task.dueDate!)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: task.isCompleted ? Colors.grey : Colors.deepOrange,
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
 
@@ -1126,7 +1313,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      margin: EdgeInsets.only(top: 6, right: 8, left: 8),
+                      margin: EdgeInsets.only(top: 6, right: 8, left: 48), // 들여쓰기 조정
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
@@ -1144,6 +1331,8 @@ class TodoListScreenState extends State<TodoListScreen> {
                               ? TextDecoration.lineThrough
                               : TextDecoration.none,
                         ),
+                        maxLines: 3, // 메모 최대 3줄로 제한
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -1153,44 +1342,54 @@ class TodoListScreenState extends State<TodoListScreen> {
               // 위치가 있는 경우
               if (task.location != null && task.location!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
-                    const SizedBox(width: 4),
-                    Text(
-                      task.location!,
-                      style: TextStyle(
-                        color: task.isCompleted ? Colors.grey : Colors.grey.shade600,
-                        fontSize: 14,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+                Padding(
+                  padding: const EdgeInsets.only(left: 48),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Expanded( // 긴 위치명 처리
+                        child: Text(
+                          task.location!,
+                          style: TextStyle(
+                            color: task.isCompleted ? Colors.grey : Colors.grey.shade600,
+                            fontSize: 14,
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
 
               // 반복 정보 상세 표시
               if (task.isRepeating) ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const SizedBox(width: 24),
-                    Icon(Icons.repeat, size: 14, color: Colors.blue.shade600),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getDetailedRepeatText(task.repeatOption, task.repeatDays, task.repeatCustomDays),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.blue.shade600,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+                Padding(
+                  padding: const EdgeInsets.only(left: 48),
+                  child: Row(
+                    children: [
+                      Icon(Icons.repeat, size: 14, color: Colors.blue.shade600),
+                      const SizedBox(width: 4),
+                      Expanded( // 긴 반복 설명 처리
+                        child: Text(
+                          _getDetailedRepeatText(task.repeatOption, task.repeatDays, task.repeatCustomDays),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: task.isCompleted ? Colors.grey : Colors.blue.shade600,
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ],
@@ -1200,6 +1399,108 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
+
+  // 1. TodoListScreenState 클래스에 추가할 반복 일정 생성 함수
+  Future<void> _createRepeatingTasks(Todo_Task originalTask) async {
+    if (!originalTask.isRepeating || originalTask.repeatOption == null) {
+      return;
+    }
+
+    List<DateTime> futureDates = _generateRepeatDates(originalTask);
+
+    for (DateTime futureDate in futureDates) {
+      // 원본 태스크를 복사하여 새로운 날짜로 생성
+      final repeatedTask = originalTask.copyWith(
+        id: '', // 새로운 ID 생성을 위해 빈 문자열
+        date: futureDate,
+        isCompleted: false, // 반복 태스크는 항상 미완료 상태로 시작
+        notificationId: null, // 새로운 알림 ID 생성을 위해 null
+      );
+
+      // 알림이 설정되어 있다면 새로운 태스크에도 알림 설정
+      if (repeatedTask.isImportant) {
+        _scheduleNotificationsForTask(repeatedTask);
+      }
+
+      // Firestore와 로컬에 추가
+      await _taskDataService.addTodoTask(repeatedTask);
+    }
+  }
+
+// 2. 반복 날짜들을 생성하는 함수
+  List<DateTime> _generateRepeatDates(Todo_Task task) {
+    List<DateTime> dates = [];
+    DateTime startDate = task.date.add(Duration(days: 1)); // 다음날부터 시작
+    DateTime endDate = DateTime.now().add(Duration(days: 365)); // 1년 후까지
+
+    switch (task.repeatOption) {
+      case '매일':
+        DateTime current = startDate;
+        while (current.isBefore(endDate)) {
+          dates.add(current);
+          current = current.add(Duration(days: 1));
+        }
+        break;
+
+      case '매주':
+        DateTime current = startDate;
+        while (current.isBefore(endDate)) {
+          dates.add(current);
+          current = current.add(Duration(days: 7));
+        }
+        break;
+
+      case '매달':
+        DateTime current = startDate;
+        while (current.isBefore(endDate)) {
+          dates.add(current);
+          // 다음 달의 같은 날
+          int nextMonth = current.month + 1;
+          int nextYear = current.year;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+          }
+          current = DateTime(nextYear, nextMonth, current.day);
+        }
+        break;
+
+      case '매년':
+        DateTime current = startDate;
+        while (current.isBefore(endDate)) {
+          dates.add(current);
+          current = DateTime(current.year + 1, current.month, current.day);
+        }
+        break;
+
+      case '매요일':
+        if (task.repeatDays != null && task.repeatDays!.isNotEmpty) {
+          DateTime current = startDate;
+          while (current.isBefore(endDate)) {
+            // 월요일=0, 화요일=1, ..., 일요일=6
+            int currentWeekday = current.weekday - 1; // DateTime.weekday는 1-7이므로 0-6으로 변환
+
+            if (task.repeatDays!.contains(currentWeekday)) {
+              dates.add(current);
+            }
+            current = current.add(Duration(days: 1));
+          }
+        }
+        break;
+
+      case '기타':
+        if (task.repeatCustomDays != null && task.repeatCustomDays! > 0) {
+          DateTime current = startDate;
+          while (current.isBefore(endDate)) {
+            dates.add(current);
+            current = current.add(Duration(days: task.repeatCustomDays!));
+          }
+        }
+        break;
+    }
+
+    return dates;
+  }
 
 // 반복 텍스트 헬퍼 함수들
   String _getRepeatText(String? repeatOption) {
@@ -1809,6 +2110,15 @@ class TodoListScreenState extends State<TodoListScreen> {
                                           // Firestore 업데이트 (새로운 함수 사용)
                                           await _taskDataService.updateTaskInFirestore(task);
 
+                                          // 반복 설정이 새로 추가되었다면 반복 태스크들 생성
+                                          if (isRepeating && !task.isRepeating) {
+                                            await _createRepeatingTasks(task);
+                                            _showSnackBar(context, '반복 일정이 추가로 생성되었습니다');
+                                          } else {
+                                            _showSnackBar(context, '일정이 수정되었습니다');
+                                          }
+
+
                                           Navigator.of(context).pop();
                                           this.setState(() {
                                             calculateProgress();
@@ -1849,46 +2159,70 @@ class TodoListScreenState extends State<TodoListScreen> {
       },
     ).then((_) {
       repeatCustomDaysController.dispose();
-      this.setState(() {});
+      this.setState(() {
+        calculateProgress();
+      });
     });
   }
 
 
-
-// 3. 시간 문자열을 TimeOfDay로 변환하는 유틸리티 함수 추가
   TimeOfDay _parseTimeString(String timeString) {
-    // 기본값 설정
     if (timeString.isEmpty) {
       return TimeOfDay.now();
     }
 
-    // "AM 09:30" 또는 "PM 03:45" 형식 파싱
-    bool isAM = timeString.startsWith('AM');
-
-    final parts = timeString.substring(3).split(':');
-    if (parts.length != 2) {
-      return TimeOfDay.now();
-    }
-
     try {
-      int hour = int.parse(parts[0].trim());
-      int minute = int.parse(parts[1].trim());
+      // "AM 09" 또는 "PM 03" 형식 처리
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        final isAM = timeString.contains('AM');
+        final timePart = timeString.replaceAll('AM', '').replaceAll('PM', '').trim();
 
-      // PM인 경우 12시간제 -> 24시간제로 변환
-      if (!isAM && hour < 12) {
-        hour += 12;
-      }
-      // AM인 경우 12시는 0시로 변환
-      if (isAM && hour == 12) {
-        hour = 0;
+        int hour = 0;
+        int minute = 0;
+
+        if (timePart.contains(':')) {
+          final parts = timePart.split(':');
+          // Leading zero 안전 파싱
+          hour = int.tryParse(parts[0].trim()) ?? 0;
+          minute = int.tryParse(parts[1].trim()) ?? 0;
+        } else {
+          // "AM 09" 형식 - Leading zero 안전 파싱
+          hour = int.tryParse(timePart.trim()) ?? 0;
+          minute = 0;
+        }
+
+        // 12시간제를 24시간제로 변환
+        if (!isAM && hour < 12) {
+          hour += 12;
+        } else if (isAM && hour == 12) {
+          hour = 0;
+        }
+
+        return TimeOfDay(hour: hour, minute: minute);
       }
 
-      return TimeOfDay(hour: hour, minute: minute);
+      // "HH:mm" 형식 처리 (24시간)
+      if (timeString.contains(':')) {
+        final parts = timeString.split(':');
+        if (parts.length == 2) {
+          final hour = int.tryParse(parts[0].trim()) ?? 0;
+          final minute = int.tryParse(parts[1].trim()) ?? 0;
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+
+      // 숫자만 있는 경우
+      final hourOnly = int.tryParse(timeString.trim());
+      if (hourOnly != null) {
+        return TimeOfDay(hour: hourOnly, minute: 0);
+      }
+
+      return TimeOfDay.now();
     } catch (e) {
+      print('시간 파싱 오류 해결됨: $e (입력: $timeString)');
       return TimeOfDay.now();
     }
   }
-
 
 
   Widget _buildEmptyState(String message) {
@@ -2124,8 +2458,6 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
-  // showAddTaskDialog 함수와 showTaskDetailDialog 함수의 폼 부분 수정
-
 // 1. showAddTaskDialog 함수의 폼 부분
   void showAddTaskDialog(BuildContext context) {
     DateTime taskDate = selectedDate;
@@ -2339,7 +2671,7 @@ class TodoListScreenState extends State<TodoListScreen> {
                                 child: SizedBox(
                                   width: 150,
                                   child: ElevatedButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       if (titleController.text.isEmpty) {
                                         _showSnackBar(context, '제목을 입력해주세요');
                                         return;
@@ -2383,6 +2715,14 @@ class TodoListScreenState extends State<TodoListScreen> {
                                       }
 
                                       _taskDataService.addTodoTask(newTask);
+
+                                      if (isRepeating) {
+                                        await _createRepeatingTasks(newTask);
+                                        _showSnackBar(context, '반복 일정이 생성되었습니다');
+                                      } else {
+                                        _showSnackBar(context, '일정이 저장되었습니다');
+                                      }
+
                                       Navigator.of(context).pop();
                                       setState(() {
                                         selectedDate = taskDate;
