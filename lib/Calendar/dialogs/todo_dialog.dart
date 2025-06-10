@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:momentum_planner/Calendar/models/todo_item.dart';
 import 'package:momentum_planner/Calendar/services/notification_service_todolist.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:momentum_planner/time_picker_helper.dart';
+import 'package:momentum_planner/custom_calendar_picker.dart';
 
 class TodoDialog extends StatefulWidget {
   final DateTime selectedDay;
@@ -448,11 +450,13 @@ class _TodoDialogState extends State<TodoDialog> {
           ),
           child: InkWell(
             onTap: () async {
-              final DateTime? pickedDate = await showDatePicker(
+              final DateTime? pickedDate = await CalendarPickerUtils.showCalendarPicker(
                 context: context,
                 initialDate: _date,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2100),
+                minDate: DateTime(2000),
+                maxDate: DateTime(2100),
+                title: '날짜 선택',
+                primaryColor: Color(0xFF5E4DAE), // 원하는 색상으로 변경 가능
               );
               if (pickedDate != null) {
                 setState(() {
@@ -501,11 +505,13 @@ class _TodoDialogState extends State<TodoDialog> {
           ),
           child: InkWell(
             onTap: () async {
-              final DateTime? pickedDate = await showDatePicker(
+              final DateTime? pickedDate = await CalendarPickerUtils.showCalendarPicker(
                 context: context,
                 initialDate: _dueDate ?? _date.add(Duration(days: 1)),
-                firstDate: _date, // 작업 날짜보다 이전은 선택할 수 없음
-                lastDate: DateTime(2100),
+                minDate: _date, // 작업 날짜보다 이전은 선택할 수 없음
+                maxDate: DateTime(2100),
+                title: '마감일 선택',
+                primaryColor: Color(0xFF5E4DAE), // 원하는 색상으로 변경 가능
               );
               if (pickedDate != null) {
                 setState(() {
@@ -1101,7 +1107,7 @@ class _TodoDialogState extends State<TodoDialog> {
           ),
           child: InkWell(
             onTap: () async {
-              final TimeOfDay? picked = await showTimePicker(
+              final TimeOfDay? picked = await showCustomTimePicker(
                 context: context,
                 initialTime: selectedTime ?? TimeOfDay.now(),
               );

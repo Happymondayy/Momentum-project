@@ -5,6 +5,8 @@ import 'package:momentum_planner/Calendar/services/notification_service_calendar
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
+import 'package:momentum_planner/time_picker_helper.dart';
+import 'package:momentum_planner/custom_calendar_picker.dart';
 
 class EventDialog extends StatefulWidget {
   final DateTime selectedDay;
@@ -59,7 +61,6 @@ class _EventDialogState extends State<EventDialog> {
 
   bool _hasRepeatEnd = false;     // 반복 종료일 설정 여부
   DateTime _repeatUntil = DateTime.now().add(Duration(days: 7)); // 기본 일주일 뒤로 설정
-
 
   @override
   void initState() {
@@ -958,141 +959,130 @@ class _EventDialogState extends State<EventDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('날짜 선택', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        SizedBox(height: 12),
         Row(
           children: [
-            Text('날짜', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-            SizedBox(width: 5),
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
+            // 시작 날짜
+            Expanded(
+              child: DateSelectorBox(
+                label: '시작',
+                date: _startDate,
+                onTap: () async {
+                  final picked = await CalendarPickerUtils.showCalendarPicker(
+                    context: context,
+                    initialDate: _startDate,
+                    minDate: DateTime(2000),
+                    maxDate: DateTime(2100),
+                    title: '시작 날짜 선택',
+                    primaryColor: const Color(0xFF5E4DAE),
+                  );
+
+                  if (picked != null) {
+                    setState(() {
+                      _startDate = picked;
+                      if (_endDate.isBefore(_startDate)) {
+                        _endDate = _startDate;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('종료 날짜가 시작 날짜보다 이전입니다.')),
+                        );
+                      }
+                    });
+                  }
+                },
+              ),
+            ),
+            SizedBox(width: 12), // 간격만 유지
+            // 종료 날짜
+            Expanded(
+              child: DateSelectorBox(
+                label: '종료',
+                date: _endDate,
+                onTap: () async {
+                  final picked = await CalendarPickerUtils.showCalendarPicker(
+                    context: context,
+                    initialDate: _endDate,
+                    minDate: _startDate, // 시작 날짜 이후만 선택 가능
+                    maxDate: DateTime(2100),
+                    title: '종료 날짜 선택',
+                    primaryColor: const Color(0xFF5E4DAE),
+                  );
+
+                  if (picked != null) {
+                    setState(() {
+                      _endDate = picked;
+                    });
+                  }
+                },
               ),
             ),
           ],
         ),
-        SizedBox(height: 10),
-        InkWell(
-          onTap: () async {
-            try {
-              final DateTime? pickedDate = await showDatePicker(
-                context: context,
-                initialDate: _startDate,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2100),
-                builder: (context, child) {
-                  return Theme(
-                    data: ThemeData.light().copyWith(
-                      colorScheme: ColorScheme.light(
-                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
-                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
-                        surface: Colors.white, // 배경색
-                        onSurface: Colors.black, // 일반 텍스트 색상
-                      ),
-                      dialogBackgroundColor: Colors.white,
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (pickedDate != null) {
-                setState(() {
-                  _startDate = pickedDate;
-                  if (_endDate.isBefore(_startDate)) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('종료 날짜가 시작 날짜보다 이전입니다.')),
-                    );
-                    _endDate = _startDate;
-                  }
-                });
-              }
-            } catch (e) {
-              print('시작 날짜 선택 중 오류 발생: $e');
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
-              );
-            }
-          },
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-            decoration: BoxDecoration(
-              color: Colors.white, // 회색에서 흰색으로 변경
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _getFormattedDate(_startDate),
-                  style: TextStyle(fontSize: 16),
-                ),
-                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: 10),
-        Text('~', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
-        SizedBox(height: 10),
-        InkWell(
-          onTap: () async {
-            try {
-              final DateTime? pickedDate = await showDatePicker(
-                context: context,
-                initialDate: _endDate,
-                firstDate: _startDate, // 시작일보다 전의 날짜는 선택할 수 없도록
-                lastDate: DateTime(2100),
-                builder: (context, child) {
-                  return Theme(
-                    data: ThemeData.light().copyWith(
-                      colorScheme: ColorScheme.light(
-                        primary: Colors.blue, // 선택된 날짜 동그라미 색상
-                        onPrimary: Colors.white, // 선택된 날짜 텍스트 색상
-                        surface: Colors.white, // 배경색
-                        onSurface: Colors.black, // 일반 텍스트 색상
-                      ),
-                      dialogBackgroundColor: Colors.white,
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (pickedDate != null) {
-                setState(() {
-                  _endDate = pickedDate;
-                });
-              }
-            } catch (e) {
-              print('종료 날짜 선택 중 오류 발생: $e');
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
-              );
-            }
-          },
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
-            decoration: BoxDecoration(
-              color: Colors.white, // 회색에서 흰색으로 변경
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _getFormattedDate(_endDate),
-                  style: TextStyle(fontSize: 16),
-                ),
-                Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
+
+  Widget _buildDateBox(String label, DateTime date, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Text(
+              _getFormattedDate(date),
+              style: TextStyle(fontSize: 15),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<DateTime?> _pickDate(DateTime initialDate, DateTime firstDate, DateTime lastDate) async {
+    try {
+      return await showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: firstDate,
+        lastDate: lastDate,
+        builder: (context, child) {
+          return Theme(
+            data: ThemeData.light().copyWith(
+              colorScheme: ColorScheme.light(
+                primary: const Color(0xFF5E4DAE),
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: Colors.black,
+              ),
+              dialogBackgroundColor: Colors.white,
+            ),
+            child: child!,
+          );
+        },
+      );
+    } catch (e) {
+      print('날짜 선택 중 오류 발생: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('날짜 선택 중 오류가 발생했습니다.')),
+      );
+      return null;
+    }
+  }
+
 
   Widget _buildTimeSelector() {
     return Column(
@@ -1120,20 +1110,16 @@ class _EventDialogState extends State<EventDialog> {
               Expanded(
                 child: InkWell(
                   onTap: () async {
-                    final TimeOfDay? time = await showTimePicker(
+                    final TimeOfDay? pickedTime = await showCustomTimePicker(
                       context: context,
                       initialTime: _startTime,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-                          child: child!,
-                        );
-                      },
                     );
-                    if (time != null) {
+
+                    if (pickedTime != null) {
                       setState(() {
-                        _startTime = time;
-                        // 시작 시간이 종료 시간보다 늦다면 종료 시간을 1시간 뒤로 설정
+                        _startTime = pickedTime;
+
+                        // 예: 시작 시간이 종료 시간보다 늦으면 종료 시간을 1시간 뒤로
                         if (_isSameDay() && _isTimeAfter(_startTime, _endTime)) {
                           final int hour = (_startTime.hour + 1) % 24;
                           _endTime = TimeOfDay(hour: hour, minute: _startTime.minute);
@@ -1141,6 +1127,7 @@ class _EventDialogState extends State<EventDialog> {
                       });
                     }
                   },
+
                   child: Container(
                     padding: EdgeInsets.symmetric(vertical: 12, horizontal: 15),
                     decoration: BoxDecoration(
@@ -1167,19 +1154,14 @@ class _EventDialogState extends State<EventDialog> {
               Expanded(
                 child: InkWell(
                   onTap: () async {
-                    final TimeOfDay? time = await showTimePicker(
+                    final TimeOfDay? pickedTime = await showCustomTimePicker(
                       context: context,
                       initialTime: _endTime,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-                          child: child!,
-                        );
-                      },
                     );
-                    if (time != null) {
+
+                    if (pickedTime != null) {
                       setState(() {
-                        _endTime = time;
+                        _endTime = pickedTime;
                       });
                     }
                   },
@@ -1405,7 +1387,7 @@ class _EventDialogState extends State<EventDialog> {
                       return Theme(
                         data: ThemeData.light().copyWith(
                           colorScheme: ColorScheme.light(
-                            primary: Colors.blue,
+                            primary: const Color(0xFF5E4DAE),
                             onPrimary: Colors.white,
                             surface: Colors.white,
                             onSurface: Colors.black,
