@@ -332,17 +332,21 @@ class UserInsightsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: insights.aiPowered
-              ? [Colors.purple.shade50, Colors.pink.shade50]
-              : [Colors.blue.shade50, Colors.cyan.shade50],
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: insights.aiPowered ? Colors.purple.shade50 : Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-            color: insights.aiPowered ? Colors.purple.shade200 : Colors.blue.shade200
+            color: insights.aiPowered ? Colors.purple.shade100 : Colors.blue.shade100,
+            width: 1.5
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200,
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,18 +354,18 @@ class UserInsightsCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: insights.aiPowered ? Colors.purple.shade100 : Colors.blue.shade100,
-                  shape: BoxShape.circle,
+                  color: insights.aiPowered ? Colors.purple.shade50 : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
                   insights.aiPowered ? Icons.psychology : Icons.insights,
-                  color: insights.aiPowered ? Colors.purple.shade600 : Colors.blue.shade600,
-                  size: 20,
+                  color: insights.aiPowered ? Colors.purple.shade400 : Colors.blue.shade400,
+                  size: 22,
                 ),
               ),
-              SizedBox(width: 12),
+              SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,34 +377,28 @@ class UserInsightsCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.grey.shade800,
+                            color: Colors.grey.shade700,
                           ),
                         ),
                         if (insights.aiPowered) ...[
                           SizedBox(width: 8),
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'LIVE',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.green.shade100),
                             ),
                           ),
                         ],
                       ],
                     ),
+                    SizedBox(height: 4),
                     Text(
                       '목표 달성 확률: ${(insights.goalAchievementProbability * 100).toInt()}%',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: Colors.grey.shade500,
                       ),
                     ),
                   ],
@@ -409,39 +407,40 @@ class UserInsightsCard extends StatelessWidget {
             ],
           ),
 
-          // 나머지 UI 동일...
-          SizedBox(height: 12),
+          SizedBox(height: 16),
           if (insights.productiveHours.isNotEmpty) ...[
             Text(
               '⏰ 생산적인 시간대',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: Colors.grey.shade600,
               ),
             ),
-            SizedBox(height: 4),
+            SizedBox(height: 8),
             Wrap(
-              spacing: 8,
+              spacing: 10,
+              runSpacing: 6,
               children: insights.productiveHours.map((hour) {
                 return Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.green.shade100),
                   ),
                   child: Text(
                     '${hour.toString().padLeft(2, '0')}:00',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.green.shade700,
+                      color: Colors.green.shade600,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 );
               }).toList(),
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 16),
           ],
 
           if (insights.breakRecommendations.isNotEmpty) ...[
@@ -450,15 +449,23 @@ class UserInsightsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: Colors.grey.shade600,
               ),
             ),
-            SizedBox(height: 4),
-            Text(
-              insights.breakRecommendations.first,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade600,
+            SizedBox(height: 8),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.orange.shade100),
+              ),
+              child: Text(
+                insights.breakRecommendations.first,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                ),
               ),
             ),
           ],

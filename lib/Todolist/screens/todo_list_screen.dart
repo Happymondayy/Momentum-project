@@ -2460,322 +2460,43 @@ class TodoListScreenState extends State<TodoListScreen> {
     );
   }
 
+  // ✅ 기존 함수를 이렇게 간단하게 교체
   void showAddTaskDialog(BuildContext context) {
-    // ✅ 로컬 컨트롤러들을 새로 생성
-    final TextEditingController localTitleController = TextEditingController();
-    final TextEditingController localMemoController = TextEditingController();
-    final TextEditingController localLocationController = TextEditingController();
-    final TextEditingController repeatCustomDaysController = TextEditingController();
-
-    DateTime taskDate = selectedDate;
-    DateTime? dueDate;
-    TimeOfDay? startTime;
-    TimeOfDay? endTime;
-
-    bool isImportant = false;
-    bool isUrgent = false;
-    bool isRepeating = false;
-    String? repeatOption;
-    List<int> repeatDays = [];
-    int? repeatCustomDays;
-
-    int importanceLevel = 1;
-    int urgencyLevel = 1;
-    List<int> selectedReminders = [];
-
     showDialog(
       context: context,
       barrierColor: Colors.black54,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
-              backgroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24.0),
-              ),
-              child: Container(
-                width: MediaQuery.of(context).size.width,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 다이얼로그 헤더
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Color(0xFF5F6368)),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                          const Expanded(
-                            child: Text(
-                              '새 Todolist 추가',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF202124),
-                                letterSpacing: 0.15,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 48),
-                        ],
-                      ),
-                    ),
+      builder: (context) => AddTaskDialog(
+        initialDate: selectedDate,
+        taskDataService: _taskDataService,
+        notificationService: _notificationService,
+        onTaskAdded: (Todo_Task newTask) async {
+          // 알림 설정
+          if (newTask.isImportant) {
+            _scheduleNotificationsForTask(newTask);
+          }
 
-                    // 폼 영역
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // ✅ 로컬 컨트롤러 사용
-                              _buildTextField(
-                                localTitleController,  // ← 여기 변경
-                                '제목',
-                                '제목을 입력하세요 (필수)',
-                                    (value) {
-                                  if (value.isEmpty) {
-                                    _showSnackBar(context, '제목을 입력해주세요');
-                                  }
-                                },
-                                prefixIcon: Icon(Icons.title, color: Color(0xFF5F6368)),
-                              ),
-                              const SizedBox(height: 20),
+          // 태스크 추가
+          await _taskDataService.addTodoTask(newTask);
 
-                              _buildDatePicker(context, taskDate, (pickedDate) {
-                                setState(() {
-                                  taskDate = pickedDate;
-                                });
-                              }),
-                              const SizedBox(height: 20),
+          // 반복 태스크 생성
+          if (newTask.isRepeating) {
+            await _createRepeatingTasks(newTask);
+          }
 
-                              // 시간 설정 (선택사항)
-                              _buildOptionalTimeSelector(context, startTime, endTime, (start, end) {
-                                setState(() {
-                                  startTime = start;
-                                  endTime = end;
-                                });
-                              }),
-                              const SizedBox(height: 20),
+          // UI 업데이트
+          if (mounted) {
+            setState(() {
+              selectedDate = newTask.date;
+              calculateProgress();
+            });
 
-                              // 중요도 (세로 배치)
-                              _buildImportanceSelector(setState, importanceLevel, (level) {
-                                importanceLevel = level;
-                              }),
-                              const SizedBox(height: 20),
-
-                              // 긴급도 (중요도 아래)
-                              _buildUrgencySelector(setState, urgencyLevel, (level) {
-                                urgencyLevel = level;
-                              }),
-                              const SizedBox(height: 20),
-
-                              // 마감일 (긴급도 아래)
-                              _buildDueDatePicker(
-                                  context,
-                                  selectedDueDate,
-                                      (pickedDate) {
-                                    setState(() {
-                                      selectedDueDate = pickedDate;
-                                    });
-                                  }
-                              ),
-                              const SizedBox(height: 20),
-
-                              _buildSwitchRow('알림 설정', isImportant, (value) {
-                                setState(() {
-                                  isImportant = value;
-                                });
-                              }),
-
-                              // 알림 설정이 true일 때만 반복 시간 선택 보이기
-                              if (isImportant) ...[
-                                const SizedBox(height: 16),
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8.0),
-                                  child: Text('알림 반복 시간',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFF5F6368),
-                                      )
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8.0),
-                                  child: Wrap(
-                                    spacing: 10,
-                                    children: [5, 10, 15, 30, 60].map((minute) {
-                                      final isSelected = selectedReminders.contains(minute);
-                                      return ChoiceChip(
-                                        label: Text('$minute분 전'),
-                                        selected: isSelected,
-                                        onSelected: (selected) {
-                                          setState(() {
-                                            if (selected) {
-                                              selectedReminders.add(minute);
-                                            } else {
-                                              selectedReminders.remove(minute);
-                                            }
-                                          });
-                                        },
-                                        selectedColor: Color(0xFFD2C5E8),
-                                        backgroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(24),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              ],
-
-                              const SizedBox(height: 20),
-
-                              // 반복 설정 추가
-                              _buildRepeatSelector(setState, isRepeating, repeatOption, repeatDays, repeatCustomDays, repeatCustomDaysController, (repeating, option, days, customDays) {
-                                isRepeating = repeating;
-                                repeatOption = option;
-                                repeatDays = days;
-                                repeatCustomDays = customDays;
-                              }),
-
-                              const SizedBox(height: 20),
-
-                              // ✅ 로컬 컨트롤러 사용
-                              _buildTextField(
-                                localMemoController,  // ← 여기 변경
-                                '메모',
-                                '메모',
-                                null,
-                                maxLines: 3,
-                                prefixIcon: Icon(Icons.note, color: Color(0xFF5F6368)),
-                              ),
-                              const SizedBox(height: 20),
-
-                              // ✅ 로컬 컨트롤러 사용
-                              _buildTextField(
-                                localLocationController,  // ← 여기 변경
-                                '위치',
-                                '위치',
-                                null,
-                                prefixIcon: Icon(Icons.location_on, color: Color(0xFF5F6368)),
-                              ),
-                              const SizedBox(height: 30),
-
-                              Center(
-                                child: SizedBox(
-                                  width: 150,
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      // ✅ 로컬 컨트롤러 사용
-                                      if (localTitleController.text.isEmpty) {
-                                        _showSnackBar(context, '제목을 입력해주세요');
-                                        return;
-                                      }
-
-                                      String? formattedStart;
-                                      String? formattedEnd;
-
-                                      if (startTime != null) {
-                                        formattedStart = '${startTime!.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime!.hourOfPeriod.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}';
-                                      }
-
-                                      if (endTime != null) {
-                                        formattedEnd = '${endTime!.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime!.hourOfPeriod.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}';
-                                      }
-
-                                      final newTask = Todo_Task(
-                                        userId: _taskDataService.currentUserId ?? '',
-                                        title: localTitleController.text,  // ← 여기 변경
-                                        date: taskDate,
-                                        time: formattedStart,
-                                        endTime: formattedEnd,
-                                        isImportant: isImportant,
-                                        isUrgent: isUrgent,
-                                        memo: localMemoController.text,  // ← 여기 변경
-                                        location: localLocationController.text,  // ← 여기 변경
-                                        importance: importanceLevel,
-                                        urgency: urgencyLevel,
-                                        isCompleted: false,
-                                        color: _getFixedColorForTask(localTitleController.text),  // ← 여기 변경
-                                        dueDate: selectedDueDate,
-                                        reminderMinutesBefore: isImportant ? selectedReminders : [],
-                                        isRepeating: isRepeating,
-                                        repeatOption: repeatOption,
-                                        repeatDays: repeatDays.isNotEmpty ? repeatDays : null,
-                                        repeatCustomDays: repeatCustomDays,
-                                      );
-
-                                      if (isImportant) {
-                                        _scheduleNotificationsForTask(newTask);
-                                      }
-
-                                      _taskDataService.addTodoTask(newTask);
-
-                                      if (isRepeating) {
-                                        await _createRepeatingTasks(newTask);
-                                        _showSnackBar(context, '반복 일정이 생성되었습니다');
-                                      } else {
-                                        _showSnackBar(context, '일정이 저장되었습니다');
-                                      }
-
-                                      Navigator.of(context).pop();
-                                      setState(() {
-                                        selectedDate = taskDate;
-                                        calculateProgress();
-                                      });
-
-                                      if (widget.onTaskStatusChanged != null) {
-                                        widget.onTaskStatusChanged!();
-                                      }
-                                      _showSnackBar(context, '일정이 저장되었습니다');
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFF9575CD),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(24),
-                                      ),
-                                      elevation: 0,
-                                    ),
-                                    child: const Text('저장'),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    ).then((_) {
-      // ✅ 다이얼로그 닫힐 때 로컬 컨트롤러들 정리
-      localTitleController.dispose();
-      localMemoController.dispose();
-      localLocationController.dispose();
-      repeatCustomDaysController.dispose();
-      setState(() {});
-    });
+            if (widget.onTaskStatusChanged != null) {
+              widget.onTaskStatusChanged!();
+            }
+          }
+        },
+      ),
+    );
   }
 
 // 텍스트필드 위젯 개선
@@ -3173,7 +2894,636 @@ class TodoListScreenState extends State<TodoListScreen> {
   }
 }
 
-// TodoListScreenState 클래스 내부에 추가할 메서드들
+// ✅ 완전히 새로운 접근법: 별도의 StatefulWidget으로 다이얼로그 생성
+class AddTaskDialog extends StatefulWidget {
+  final DateTime initialDate;
+  final Function(Todo_Task) onTaskAdded;
+  final dynamic taskDataService;
+  final NotificationService notificationService;
+
+  const AddTaskDialog({
+    Key? key,
+    required this.initialDate,
+    required this.onTaskAdded,
+    required this.taskDataService,
+    required this.notificationService,
+  }) : super(key: key);
+
+  @override
+  _AddTaskDialogState createState() => _AddTaskDialogState();
+}
+
+class _AddTaskDialogState extends State<AddTaskDialog> {
+  late TextEditingController titleController;
+  late TextEditingController memoController;
+  late TextEditingController locationController;
+  late TextEditingController repeatCustomDaysController;
+
+  late DateTime taskDate;
+  DateTime? selectedDueDate;
+  TimeOfDay? startTime;
+  TimeOfDay? endTime;
+
+  bool isImportant = false;
+  bool isUrgent = false;
+  bool isRepeating = false;
+  String? repeatOption;
+  List<int> repeatDays = [];
+  int? repeatCustomDays;
+
+  int importanceLevel = 1;
+  int urgencyLevel = 1;
+  List<int> selectedReminders = [];
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController();
+    memoController = TextEditingController();
+    locationController = TextEditingController();
+    repeatCustomDaysController = TextEditingController();
+    taskDate = widget.initialDate;
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    memoController.dispose();
+    locationController.dispose();
+    repeatCustomDaysController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16.0),
+      backgroundColor: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24.0),
+      ),
+      child: Container(
+        width: MediaQuery.of(context).size.width,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 다이얼로그 헤더
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Colors.black12, width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Color(0xFF5F6368)),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '새 Todolist 추가',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF202124),
+                        letterSpacing: 0.15,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+
+            // 폼 영역
+            Flexible(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildTextField(
+                        titleController,
+                        '제목',
+                        '제목을 입력하세요 (필수)',
+                        prefixIcon: Icon(Icons.title, color: Color(0xFF5F6368)),
+                      ),
+                      const SizedBox(height: 20),
+
+                      _buildDatePicker(),
+                      const SizedBox(height: 20),
+
+                      _buildTimeSelector(),
+                      const SizedBox(height: 20),
+
+                      _buildImportanceSelector(),
+                      const SizedBox(height: 20),
+
+                      _buildUrgencySelector(),
+                      const SizedBox(height: 20),
+
+                      _buildDueDatePicker(),
+                      const SizedBox(height: 20),
+
+                      _buildNotificationSettings(),
+                      const SizedBox(height: 20),
+
+                      _buildRepeatSettings(),
+                      const SizedBox(height: 20),
+
+                      _buildTextField(
+                        memoController,
+                        '메모',
+                        '메모',
+                        maxLines: 3,
+                        prefixIcon: Icon(Icons.note, color: Color(0xFF5F6368)),
+                      ),
+                      const SizedBox(height: 20),
+
+                      _buildTextField(
+                        locationController,
+                        '위치',
+                        '위치',
+                        prefixIcon: Icon(Icons.location_on, color: Color(0xFF5F6368)),
+                      ),
+                      const SizedBox(height: 30),
+
+                      _buildSaveButton(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+      TextEditingController controller,
+      String label,
+      String hint, {
+        int maxLines = 1,
+        Widget? prefixIcon,
+      }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF5F6368),
+          ),
+        ),
+        SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Color(0xFF9AA0A6)),
+            prefixIcon: prefixIcon,
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFFDADCE0), width: 0.5),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Color(0xFF9575CD), width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDatePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('날짜', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: taskDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (picked != null) {
+                setState(() {
+                  taskDate = picked;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${taskDate.year}년 ${taskDate.month}월 ${taskDate.day}일',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const Icon(Icons.calendar_today, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeSelector() {
+    bool hasTime = startTime != null || endTime != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('시간 설정', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            Switch(
+              value: hasTime,
+              onChanged: (value) {
+                setState(() {
+                  if (value) {
+                    final now = TimeOfDay.now();
+                    startTime = now;
+                    endTime = TimeOfDay(hour: (now.hour + 1) % 24, minute: now.minute);
+                  } else {
+                    startTime = null;
+                    endTime = null;
+                  }
+                });
+              },
+              activeColor: Colors.purple.shade300,
+            ),
+          ],
+        ),
+        if (hasTime) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTimePicker(
+                  startTime ?? TimeOfDay.now(),
+                  '시작 시간',
+                      (time) => setState(() => startTime = time),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildTimePicker(
+                  endTime ?? TimeOfDay.now(),
+                  '종료 시간',
+                      (time) => setState(() => endTime = time),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTimePicker(TimeOfDay selectedTime, String label, Function(TimeOfDay) onTimePicked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final TimeOfDay? picked = await showTimePicker(
+                context: context,
+                initialTime: selectedTime,
+              );
+              if (picked != null) {
+                onTimePicked(picked);
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                '${selectedTime.period == DayPeriod.am ? 'AM' : 'PM'} ${selectedTime.hourOfPeriod.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImportanceSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('중요도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: List.generate(5, (index) {
+            final level = index + 1;
+            final isSelected = importanceLevel == level;
+            return GestureDetector(
+              onTap: () => setState(() => importanceLevel = level),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? _getImportanceColor(level) : Colors.transparent,
+                  border: Border.all(color: _getImportanceColor(level), width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    '$level',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : _getImportanceColor(level),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUrgencySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('긴급도', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: List.generate(5, (index) {
+            final level = index + 1;
+            final isSelected = urgencyLevel == level;
+            return GestureDetector(
+              onTap: () => setState(() => urgencyLevel = level),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? _getUrgencyColor(level) : Colors.transparent,
+                  border: Border.all(color: _getUrgencyColor(level), width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    '$level',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : _getUrgencyColor(level),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDueDatePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('마감일', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDueDate ?? DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (picked != null) {
+                setState(() {
+                  selectedDueDate = picked;
+                });
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Text(
+                selectedDueDate != null
+                    ? '${selectedDueDate!.year}년 ${selectedDueDate!.month}월 ${selectedDueDate!.day}일'
+                    : '날짜를 선택하세요',
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('알림 설정', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            Switch(
+              value: isImportant,
+              onChanged: (value) => setState(() => isImportant = value),
+              activeColor: Colors.purple.shade300,
+            ),
+          ],
+        ),
+        if (isImportant) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [5, 10, 15, 30, 60].map((minute) {
+              final isSelected = selectedReminders.contains(minute);
+              return ChoiceChip(
+                label: Text('$minute분 전'),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      selectedReminders.add(minute);
+                    } else {
+                      selectedReminders.remove(minute);
+                    }
+                  });
+                },
+                selectedColor: Color(0xFFD2C5E8),
+                backgroundColor: Colors.white,
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRepeatSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('반복 설정', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            Switch(
+              value: isRepeating,
+              onChanged: (value) => setState(() {
+                isRepeating = value;
+                if (value && repeatOption == null) {
+                  repeatOption = '매일';
+                }
+              }),
+              activeColor: Colors.purple.shade300,
+            ),
+          ],
+        ),
+        if (isRepeating) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: repeatOption,
+            decoration: InputDecoration(
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            items: ['매일', '매주', '매달', '매년'].map((option) {
+              return DropdownMenuItem(value: option, child: Text(option));
+            }).toList(),
+            onChanged: (value) => setState(() => repeatOption = value),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return Center(
+      child: SizedBox(
+        width: 150,
+        child: ElevatedButton(
+          onPressed: _saveTask,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFF9575CD),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            elevation: 0,
+          ),
+          child: const Text('저장'),
+        ),
+      ),
+    );
+  }
+
+  void _saveTask() async {
+    if (titleController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('제목을 입력해주세요')),
+      );
+      return;
+    }
+
+    String? formattedStart;
+    String? formattedEnd;
+
+    if (startTime != null) {
+      formattedStart = '${startTime!.period == DayPeriod.am ? 'AM' : 'PM'} ${startTime!.hourOfPeriod.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}';
+    }
+
+    if (endTime != null) {
+      formattedEnd = '${endTime!.period == DayPeriod.am ? 'AM' : 'PM'} ${endTime!.hourOfPeriod.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}';
+    }
+
+    final newTask = Todo_Task(
+      userId: widget.taskDataService.currentUserId ?? '',
+      title: titleController.text,
+      date: taskDate,
+      time: formattedStart,
+      endTime: formattedEnd,
+      isImportant: isImportant,
+      isUrgent: isUrgent,
+      memo: memoController.text,
+      location: locationController.text,
+      importance: importanceLevel,
+      urgency: urgencyLevel,
+      isCompleted: false,
+      color: _getFixedColorForTask(titleController.text),
+      dueDate: selectedDueDate,
+      reminderMinutesBefore: isImportant ? selectedReminders : [],
+      isRepeating: isRepeating,
+      repeatOption: repeatOption,
+      repeatDays: repeatDays.isNotEmpty ? repeatDays : null,
+      repeatCustomDays: repeatCustomDays,
+    );
+
+    // 다이얼로그 먼저 닫기
+    Navigator.of(context).pop();
+
+    // 태스크 추가
+    widget.onTaskAdded(newTask);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('일정이 저장되었습니다')),
+    );
+  }
+
+  Color _getFixedColorForTask(String title) {
+    final colors = [
+      Colors.purple.shade100,
+      Colors.green.shade100,
+      Colors.blue.shade100,
+      Colors.orange.shade100,
+      Colors.red.shade100,
+      Colors.teal.shade100,
+    ];
+    return colors[title.hashCode % colors.length];
+  }
+}
 
 // 중요도 색상 반환 함수 (1-5 레벨)
 Color _getImportanceColor(int importance) {
