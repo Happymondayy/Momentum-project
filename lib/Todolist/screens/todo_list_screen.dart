@@ -2459,8 +2459,14 @@ class TodoListScreenState extends State<TodoListScreen> {
       ],
     );
   }
-// 1. showAddTaskDialog 함수의 폼 부분
+
   void showAddTaskDialog(BuildContext context) {
+    // ✅ 로컬 컨트롤러들을 새로 생성
+    final TextEditingController localTitleController = TextEditingController();
+    final TextEditingController localMemoController = TextEditingController();
+    final TextEditingController localLocationController = TextEditingController();
+    final TextEditingController repeatCustomDaysController = TextEditingController();
+
     DateTime taskDate = selectedDate;
     DateTime? dueDate;
     TimeOfDay? startTime;
@@ -2476,8 +2482,6 @@ class TodoListScreenState extends State<TodoListScreen> {
     int importanceLevel = 1;
     int urgencyLevel = 1;
     List<int> selectedReminders = [];
-
-    final TextEditingController repeatCustomDaysController = TextEditingController();
 
     showDialog(
       context: context,
@@ -2535,8 +2539,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // ✅ 로컬 컨트롤러 사용
                               _buildTextField(
-                                titleController,
+                                localTitleController,  // ← 여기 변경
                                 '제목',
                                 '제목을 입력하세요 (필수)',
                                     (value) {
@@ -2649,8 +2654,9 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                               const SizedBox(height: 20),
 
+                              // ✅ 로컬 컨트롤러 사용
                               _buildTextField(
-                                memoController,
+                                localMemoController,  // ← 여기 변경
                                 '메모',
                                 '메모',
                                 null,
@@ -2659,8 +2665,9 @@ class TodoListScreenState extends State<TodoListScreen> {
                               ),
                               const SizedBox(height: 20),
 
+                              // ✅ 로컬 컨트롤러 사용
                               _buildTextField(
-                                locationController,
+                                localLocationController,  // ← 여기 변경
                                 '위치',
                                 '위치',
                                 null,
@@ -2673,7 +2680,8 @@ class TodoListScreenState extends State<TodoListScreen> {
                                   width: 150,
                                   child: ElevatedButton(
                                     onPressed: () async {
-                                      if (titleController.text.isEmpty) {
+                                      // ✅ 로컬 컨트롤러 사용
+                                      if (localTitleController.text.isEmpty) {
                                         _showSnackBar(context, '제목을 입력해주세요');
                                         return;
                                       }
@@ -2691,18 +2699,18 @@ class TodoListScreenState extends State<TodoListScreen> {
 
                                       final newTask = Todo_Task(
                                         userId: _taskDataService.currentUserId ?? '',
-                                        title: titleController.text,
+                                        title: localTitleController.text,  // ← 여기 변경
                                         date: taskDate,
                                         time: formattedStart,
                                         endTime: formattedEnd,
                                         isImportant: isImportant,
                                         isUrgent: isUrgent,
-                                        memo: memoController.text,
-                                        location: locationController.text,
+                                        memo: localMemoController.text,  // ← 여기 변경
+                                        location: localLocationController.text,  // ← 여기 변경
                                         importance: importanceLevel,
                                         urgency: urgencyLevel,
                                         isCompleted: false,
-                                        color: _getFixedColorForTask(titleController.text),
+                                        color: _getFixedColorForTask(localTitleController.text),  // ← 여기 변경
                                         dueDate: selectedDueDate,
                                         reminderMinutesBefore: isImportant ? selectedReminders : [],
                                         isRepeating: isRepeating,
@@ -2761,6 +2769,10 @@ class TodoListScreenState extends State<TodoListScreen> {
         );
       },
     ).then((_) {
+      // ✅ 다이얼로그 닫힐 때 로컬 컨트롤러들 정리
+      localTitleController.dispose();
+      localMemoController.dispose();
+      localLocationController.dispose();
       repeatCustomDaysController.dispose();
       setState(() {});
     });

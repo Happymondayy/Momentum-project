@@ -2304,7 +2304,7 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
     );
   }
 
-// 8. AI 추천 팁 다이얼로그 (흰색 배경 + 파스텔톤 + 둥글게 개선)
+  // 8. AI 추천 팁 다이얼로그 (흰색 배경 + 파스텔톤 + 둥글게 개선 + Overflow 수정)
   void _showAIRecommendationTipsDialog() {
     showDialog(
       context: context,
@@ -2314,6 +2314,9 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
         backgroundColor: Colors.white,
         elevation: 8,
         child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8, // 화면 높이의 80%로 제한
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(28),
@@ -2326,172 +2329,174 @@ class _DailyPlannerPageState extends State<DailyPlannerPage> {
               ),
             ],
           ),
-          child: Padding(
-            padding: EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 헤더 아이콘
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFFE1BEE7), // 라벤더 파스텔
-                        Color(0xFFF8BBD9), // 핑크 파스텔
+          child: SingleChildScrollView( // 스크롤 가능하게 만들기
+            child: Padding(
+              padding: EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 헤더 아이콘
+                  Container(
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFFE1BEE7), // 라벤더 파스텔
+                          Color(0xFFF8BBD9), // 핑크 파스텔
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withOpacity(0.15),
+                          blurRadius: 15,
+                          offset: Offset(0, 5),
+                        ),
                       ],
                     ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.purple.withOpacity(0.15),
-                        blurRadius: 15,
-                        offset: Offset(0, 5),
+                    child: Icon(
+                        Icons.psychology,
+                        color: Colors.white,
+                        size: 36
+                    ),
+                  ),
+                  SizedBox(height: 20),
+
+                  // 제목
+                  Text(
+                    '🎯 AI 맞춤 추천 완성!',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4A4A4A),
+                      letterSpacing: -0.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 8),
+
+                  // 부제목
+                  Text(
+                    '당신의 일정을 분석해서 관련 추천을 준비했어요',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF7A7A7A),
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 28),
+
+                  // 안내 사항들
+                  _buildPastelTipItem(
+                    icon: Icons.touch_app,
+                    title: '✓ 버튼으로 개별 선택',
+                    description: '마음에 드는 추천만 골라서 플래너에 추가하세요',
+                    color: Color(0xFFA8E6CF), // 민트 파스텔
+                  ),
+                  SizedBox(height: 18),
+
+                  _buildPastelTipItem(
+                    icon: Icons.select_all,
+                    title: '"모두 적용" 버튼',
+                    description: '모든 추천을 한번에 플래너에 추가할 수 있어요',
+                    color: Color(0xFFB8E0FF), // 스카이블루 파스텔
+                  ),
+                  SizedBox(height: 18),
+
+                  _buildPastelTipItem(
+                    icon: Icons.close,
+                    title: '✗ 버튼으로 거부',
+                    description: '원하지 않는 추천은 거부해서 AI가 학습하도록 도와주세요',
+                    color: Color(0xFFFFD3A5), // 피치 파스텔
+                  ),
+                  SizedBox(height: 28),
+
+                  // 버튼들
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: Color(0xFFE0E0E0),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              backgroundColor: Colors.white,
+                            ),
+                            child: Text(
+                              '나중에',
+                              style: TextStyle(
+                                color: Color(0xFF8A8A8A),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFFE1BEE7), // 라벤더 파스텔
+                                Color(0xFFD1C4E9), // 퍼플 파스텔
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0xFFE1BEE7).withOpacity(0.4),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                            icon: Icon(Icons.auto_fix_high, size: 20),
+                            label: Text(
+                              '추천 확인하기',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              elevation: 0,
+                              shadowColor: Colors.transparent,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  child: Icon(
-                      Icons.psychology,
-                      color: Colors.white,
-                      size: 36
-                  ),
-                ),
-                SizedBox(height: 20),
-
-                // 제목
-                Text(
-                  '🎯 AI 맞춤 추천 완성!',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF4A4A4A),
-                    letterSpacing: -0.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 8),
-
-                // 부제목
-                Text(
-                  '당신의 일정을 분석해서 관련 추천을 준비했어요',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF7A7A7A),
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 28),
-
-                // 안내 사항들
-                _buildPastelTipItem(
-                  icon: Icons.touch_app,
-                  title: '✓ 버튼으로 개별 선택',
-                  description: '마음에 드는 추천만 골라서 플래너에 추가하세요',
-                  color: Color(0xFFA8E6CF), // 민트 파스텔
-                ),
-                SizedBox(height: 18),
-
-                _buildPastelTipItem(
-                  icon: Icons.select_all,
-                  title: '"모두 적용" 버튼',
-                  description: '모든 추천을 한번에 플래너에 추가할 수 있어요',
-                  color: Color(0xFFB8E0FF), // 스카이블루 파스텔
-                ),
-                SizedBox(height: 18),
-
-                _buildPastelTipItem(
-                  icon: Icons.close,
-                  title: '✗ 버튼으로 거부',
-                  description: '원하지 않는 추천은 거부해서 AI가 학습하도록 도와주세요',
-                  color: Color(0xFFFFD3A5), // 피치 파스텔
-                ),
-                SizedBox(height: 28),
-
-                // 버튼들
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: Color(0xFFE0E0E0),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            backgroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            '나중에',
-                            style: TextStyle(
-                              color: Color(0xFF8A8A8A),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFFE1BEE7), // 라벤더 파스텔
-                              Color(0xFFD1C4E9), // 퍼플 파스텔
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0xFFE1BEE7).withOpacity(0.4),
-                              blurRadius: 12,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          icon: Icon(Icons.auto_fix_high, size: 20),
-                          label: Text(
-                            '추천 확인하기',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            elevation: 0,
-                            shadowColor: Colors.transparent,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
