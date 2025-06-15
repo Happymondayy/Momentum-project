@@ -378,7 +378,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         'userId': _currentUserId ?? '',
         'title': todo.title ?? '제목 없음',
         'date': todo.date.toIso8601String(),
-        'dueDate': todo.dueDate?.toIso8601String(), // 마감일 추가
+        'dueDate': todo.dueDate?.toIso8601String(), // 10마감일 추가
         'startTime': startTimeMap,
         'endTime': endTimeMap,
         'importance': todo.importance,
@@ -1463,7 +1463,7 @@ class _ExpandingFABState extends State<ExpandingFAB> with SingleTickerProviderSt
         // 메인 FAB
         FloatingActionButton(
           backgroundColor: isOpen ? Color(0xFFDF4848).withOpacity(0.8): Color(
-              0xFF6865DC).withOpacity(0.8), // 메인 버튼 배경색
+              0xFFB39DDB).withOpacity(0.8), // 메인 버튼 배경색
           onPressed: () {
             print('메인 버튼 눌림! isOpen: $isOpen');
             _toggle();

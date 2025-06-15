@@ -267,7 +267,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNav(initialIndex: 3, userId: userId),
+      bottomNavigationBar: BottomNav(initialIndex: 2, userId: userId),
     );
   }
 }
