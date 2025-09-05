@@ -99,7 +99,7 @@ AI 연동 및 모델 구축: Gemini API → TensorFlow(Colab) 기반 딥러닝 �
 📂 협업 & 문서
 - Google Docs: 공유 문서 작성  
 - Notion: 진행 상황 체크, 문제점 및 해결 방법 기록
-  자세한 문제/해결 기록은 밑의 링크에서 확인 가능합니다.
+  자세한 문제/해결 기록은 아래의 링크에서 확인 가능합니다.
   - https://www.notion.so/1bb5673b8f57806e994bd15ec085a9b3?      v=1bb5673b8f5780138db2000c6b34af94&source=copy_link
   - https://www.notion.so/1bb5673b8f5780e498bcc1811b0a0170?v=1bb5673b8f57801991c6000c548d306c&source=copy_link
 - Discord: 실시간 팀 소통 및 피드백  
