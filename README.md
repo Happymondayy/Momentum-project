@@ -99,6 +99,7 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 
 👩‍💻 팀원 기여
 |  팀원   | 담당 기능 |
+
 |  최윤서  | 프론트엔드 개발 및 AI : Flutter로 로그인/회원가입, 플래너/투두, 설정 화면 구현 및 AI 연동 및 모델 구축: Gemini API → TensorFlow(Colab) 기반 딥러닝 모델 직접 설계, 학습, 구축 |
 | 함지현 | Flutter로 캘린더 화면 구현 , 일기 화면 구현 |
 | 최지수 | Firebase 데이터 관리, Railway 서버 구축|
