@@ -62,8 +62,8 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 
 <img src="./planner2.png" alt="투두리스트2" width="250"/>
 
+📸 플래너 기능 시나리오
 
-플래너 기능 시나리오
 <img src="./flow.png" alt="플래너 기능 시나리오" width="300"/>
 
 
