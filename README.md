@@ -90,7 +90,11 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 🛠️ 기술 스택
 - Frontend: Flutter  
 - Backend: Firebase (인증 및 데이터 관리),Railway(서버)
-- AI/ML: TensorFlow (Colab), Gemini API(초기), Custom 딥러닝 모델(개선)  
+- AI/ML: TensorFlow (Colab), Gemini API(초기), Custom 딥러닝 모델(개선)
+
+📸 기술 스택 흐름도
+
+<img src="./stackflow.png" alt="기술스택흐름도" width="300"/>
 
 
 👩‍💻 팀원 기여
