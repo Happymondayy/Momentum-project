@@ -79,7 +79,7 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 
 📸 설정 UI/UX
 
-<img src="./settings.png" alt="설정 화면" width="250"/>
+<img src="./settings.png" alt="설정 화면" width="200"/>
 
 
 🛠️ 기술 스택
