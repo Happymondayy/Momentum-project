@@ -26,14 +26,16 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
  - 닉네임 변경,회원가입 및 회원 탈퇴 기능, 아이디 찾기 및 비밀번호 찾기 기능 구현 
 
   📸 로그인/회원가입 UI/UX
-  <img src="./login.png" alt="로그인/회원가입" width="150"/>
+  
+  <img src="./login.png" alt="로그인/회원가입" width="250"/>
   
 
  📅 캘린더
  - 캘린더 화면에서 일정 확인 및 추가, 삭제 , 변경 기능 구현
 
  📸 캘린더 UI/UX
- ![캘린더/플래너](./calendar.png)
+ 
+ <img src="./calendar.png" alt="캘린더/플래너" width="250"/>
 
 
 ✅ 투두리스트 (Todo-List) 및 플래너
@@ -55,8 +57,11 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 - 모델이 사용자의 빈 시간대를 분석해 맞춤형 일정 추천 제공
 
 📸 투두리스트 / 플래너 UI/UX
-![투두리스트](./planner.png)
-![투두리스트](./planner2.png)
+
+<img src="./planner.png" alt="투두리스트1" width="250"/>
+
+<img src="./planner2.png" alt="투두리스트2" width="250"/>
+
 
  📔 일기 작성
 - 사용자 개인 일기 작성 및 저장 , 삭제, 수정 기능 구현
@@ -64,7 +69,8 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 - 날짜별 일기 관리 기능
 
 📸 일기 UI/UX
-![일기 작성](./diary.png)
+
+<img src="./diary.png" alt="일기 작성" width="250"/>
 
 
 ⚙️ 설정
@@ -72,7 +78,8 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 - 앱 내 계정 정보 관리 화면
 
 📸 설정 UI/UX
-![설정 화면](./settings.png)
+
+<img src="./settings.png" alt="설정 화면" width="250"/>
 
 
 🛠️ 기술 스택
