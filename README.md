@@ -1,6 +1,6 @@
 📅 FocusMate - AI 기반 플래너 앱
 
-📖 프로젝트 개요
+📖 프로젝트 개요  
 Momentum 팀에서 개발한 FocusMate는 단순한 Todo-List를 넘어서,  
 AI가 사용자의 일정에 맞춰 자동으로 플래너를 생성해주는 생산성 앱입니다.  
 
@@ -27,7 +27,7 @@ AI 기능은 초기에는 Gemini API를 사용했고, 이후 직접 구축한 Te
 
   📸 로그인/회원가입 UI/UX
   ![로그인/회원가입](./screenshots/login_signup.png)
-
+  
 
  📅 캘린더
  - 캘린더 화면에서 일정 확인 및 추가, 삭제 , 변경 기능 구현
